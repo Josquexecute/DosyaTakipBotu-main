@@ -47,17 +47,19 @@ export async function saveAutoLaborExcel(input: AutoLaborSaveInput): Promise<Aut
   await fs.copyFile(filePath, backupPath);
 
   // 2) Onaylı satırların kategori tutarlarını sütunlara eşle.
+  // Mevcut H-N değerleri portalda rastgele doldurulmuş olabilir; çıktı satırında yalnızca onaylı karar kalsın
+  // diye seçilmeyen kategori sütunları da 0 yazılarak temizlenir.
   const columnByCategory = new Map<LaborCategory, string>(input.columns.map((c) => [c.category, c.column]));
   const writes: CategoryLaborWrite[] = [];
   let changedRows = 0;
   for (const row of input.rows) {
+    const hasDecision = Object.values(row.amounts).some((amount) => Number.isFinite(Number(amount)) && Number(amount) > 0);
+    if (!hasDecision) continue;
     let rowHasWrite = false;
-    for (const [category, amount] of Object.entries(row.amounts) as Array<[LaborCategory, number]>) {
-      const column = columnByCategory.get(category);
-      if (column && Number.isFinite(amount) && amount > 0) {
-        writes.push({ rowNumber: row.rowNumber, column, value: amount });
-        rowHasWrite = true;
-      }
+    for (const [category, column] of columnByCategory) {
+      const amount = row.amounts[category];
+      writes.push({ rowNumber: row.rowNumber, column, value: Number.isFinite(Number(amount)) && Number(amount) > 0 ? Number(amount) : 0 });
+      rowHasWrite = true;
     }
     if (rowHasWrite) changedRows += 1;
   }

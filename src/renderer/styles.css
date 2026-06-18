@@ -2466,7 +2466,7 @@ html.dark .case-virtual-row.selected {
 .auto-labor-table { display: grid; gap: 0; font-size: 12px; min-width: 720px; }
 .auto-labor-table > div {
   display: grid;
-  grid-template-columns: 44px minmax(150px, 1.6fr) 70px repeat(var(--cat-cols, 4), minmax(78px, 1fr)) 64px minmax(160px, 1.8fr);
+  grid-template-columns: 40px minmax(110px, 1fr) minmax(150px, 1.6fr) 78px minmax(90px, 0.9fr) repeat(var(--cat-cols, 4), minmax(74px, 1fr)) 60px 58px 48px minmax(150px, 1.7fr);
   gap: 6px;
   align-items: center;
   padding: 5px 6px;

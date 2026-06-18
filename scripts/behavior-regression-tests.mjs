@@ -207,6 +207,8 @@ assert(classifyByRules('Alternatör').categories[0] === 'Mekanik', 'classifyByRu
 const clFar = classifyByRules('Sağ Ön Far');
 assert(clFar.categories[0] === 'Elektrik' && clFar.needsReview === true, 'classifyByRules farı Elektrik + kontrol gerekli yapar', JSON.stringify(clFar));
 assert(classifyByRules('Ön Cam').categories[0] === 'Cam', 'classifyByRules camı Cam sınıflar', JSON.stringify(classifyByRules('Ön Cam')));
+assert(!classifyByRules('Sol Ön Çamurluk Davlumbazı').categories.includes('Cam'), 'classifyByRules çamurluk/davlumbazı cam sanmaz', JSON.stringify(classifyByRules('Sol Ön Çamurluk Davlumbazı')));
+assert(classifyByRules('Radyator Panjuru').categories[0] === 'Kaporta', 'classifyByRules radyatör panjurunu mekanik değil kaporta sınıflar', JSON.stringify(classifyByRules('Radyator Panjuru')));
 assert(classifyByRules('Sürücü Koltuğu').categories[0] === 'Döşeme/Kilit', 'classifyByRules koltuğu Döşeme/Kilit sınıflar', JSON.stringify(classifyByRules('Sürücü Koltuğu')));
 const clUnknown = classifyByRules('Zxqw Bilinmeyen Parça');
 assert(clUnknown.confidence === 'Düşük' && clUnknown.needsReview === true && clUnknown.categories.length > 0, 'classifyByRules bilinmeyen parçayı doldurur ama kontrol gerekli işaretler', JSON.stringify(clUnknown));
@@ -226,7 +228,7 @@ const aiTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'hb-ai-labor-'));
 const aiHeaders = ['Parça', 'Kod', 'Parça Tutarı', 'Kaporta', 'Boya', 'Mekanik', 'Elektrik', 'Cam', 'Döşeme/Kilit', 'Onarım'];
 const aiRows = [
   ['Ön Tampon', 'TMP-1', 3000, '', '', '', '', '', '', ''],
-  ['Alternatör', 'ALT-9', 1500, '', '', '', '', '', '', ''],
+  ['Alternatör', 'ALT-9', 1500, 999, '', '', '', 888, '', ''],
   ['Ön Cam', 'CAM-2', 2000, '', '', '', '', '', '', '']
 ];
 const aiInput = path.join(aiTmp, 'ai-input.xlsx');
@@ -237,18 +239,55 @@ const pvTampon = aiPreview.rows.find((r) => r.partName === 'Ön Tampon');
 assert(pvTampon && pvTampon.amounts.Kaporta > 0 && pvTampon.amounts.Boya > 0, 'önizleme tamponu Kaporta+Boya doldurur', JSON.stringify(pvTampon?.amounts));
 const pvAlt = aiPreview.rows.find((r) => r.partName === 'Alternatör');
 assert(pvAlt && pvAlt.amounts.Mekanik > 0 && !pvAlt.amounts.Cam, 'önizleme alternatöre Mekanik yazar, Cam yazmaz', JSON.stringify(pvAlt?.amounts));
+assert(pvAlt && pvAlt.changed === true, 'önizleme seçilmeyen eski H-N değerlerini temizlenecek değişiklik sayar', JSON.stringify({ oldByColumn: pvAlt?.oldByColumn, amounts: pvAlt?.amounts }));
 
 const aiOutput = path.join(aiTmp, 'ai-output.xlsx');
 const aiSave = await saveAutoLaborExcel({ filePath: aiInput, outputPath: aiOutput, rows: aiPreview.rows.map((r) => ({ rowNumber: r.rowNumber, amounts: r.amounts })), columns: aiPreview.columns });
 assert(aiSave.writtenCells > 0 && aiSave.changedRows >= 2, 'saveAutoLaborExcel onaylı tutarları yazar', JSON.stringify(aiSave));
 const kaportaCol = aiPreview.columns.find((c) => c.category === 'Kaporta').column;
+const mekanikCol = aiPreview.columns.find((c) => c.category === 'Mekanik').column;
+const camCol = aiPreview.columns.find((c) => c.category === 'Cam').column;
 const outWb = await loadWorkbook(aiOutput);
 const writtenCell = outWb.sheet.cells.find((c) => c.ref === `${kaportaCol}${pvTampon.rowNumber}`);
 assert(writtenCell && Number(writtenCell.numeric) === pvTampon.amounts.Kaporta, 'çıktı Excel Kaporta sütununa doğru tutarı yazdı', JSON.stringify({ written: writtenCell?.numeric, beklenen: pvTampon.amounts.Kaporta }));
+const altMekanikCell = outWb.sheet.cells.find((c) => c.ref === `${mekanikCol}${pvAlt.rowNumber}`);
+const altKaportaCell = outWb.sheet.cells.find((c) => c.ref === `${kaportaCol}${pvAlt.rowNumber}`);
+const altCamCell = outWb.sheet.cells.find((c) => c.ref === `${camCol}${pvAlt.rowNumber}`);
+assert(altMekanikCell && Number(altMekanikCell.numeric) === pvAlt.amounts.Mekanik, 'çıktı Excel mekanik satıra Mekanik tutarı yazar', JSON.stringify({ written: altMekanikCell?.numeric, beklenen: pvAlt.amounts.Mekanik }));
+assert(altKaportaCell && Number(altKaportaCell.numeric) === 0 && altCamCell && Number(altCamCell.numeric) === 0, 'çıktı Excel mekanik satırdaki eski yanlış Kaporta/Cam değerlerini temizler', JSON.stringify({ kaporta: altKaportaCell?.numeric, cam: altCamCell?.numeric }));
 const origWb = await loadWorkbook(aiInput);
 const origCell = origWb.sheet.cells.find((c) => c.ref === `${kaportaCol}${pvTampon.rowNumber}`);
 assert(!origCell || origCell.numeric === null, 'orijinal Excel değiştirilmedi (Kaporta hücresi hâlâ boş)', JSON.stringify(origCell ?? null));
 assert(await fs.stat(aiSave.backupPath).then(() => true).catch(() => false), 'orijinalin yedeği oluşturuldu', aiSave.backupPath);
+
+// v0.4.11 fixture: GERÇEK portal Excel (Liste.xlsx) ile kolon eşleme doğrulaması.
+const portalFixture = path.join(process.cwd(), 'scripts', 'fixtures', 'liste-portal.xlsx');
+const fixtureStatBefore = await fs.stat(portalFixture);
+const portal = await buildAutoLaborPreview(portalFixture, []);
+assert(portal.partNameColumn === 'C', 'portal: parça adı A değil C sütunundan okunur', `partNameColumn=${portal.partNameColumn}`);
+assert(portal.partNameColumn !== 'A', 'portal: A sütunu (sıra no) parça adı olarak kullanılmaz', `partNameColumn=${portal.partNameColumn}`);
+assert(portal.groupColumn === 'B', 'portal: B sütunu destekleyici grup olarak kullanılır', `groupColumn=${portal.groupColumn}`);
+assert(portal.partCodeColumn === 'D', 'portal: D sütunu parça kodu olarak kullanılır', `partCodeColumn=${portal.partCodeColumn}`);
+assert(portal.rows.every((r) => r.source !== 'learned'), 'portal: mevcut H-N değerleri otomatik öğrenme kaynağı olmaz', JSON.stringify(portal.rows.slice(0, 5).map((r) => ({ rowNumber: r.rowNumber, source: r.source }))));
+const colOf = (cat) => portal.columns.find((c) => c.category === cat)?.column;
+assert(colOf('Kaporta') === 'H' && colOf('Mekanik') === 'I' && colOf('Elektrik') === 'J' && colOf('Döşeme/Kilit') === 'K' && colOf('Cam') === 'L' && colOf('Boya') === 'M' && colOf('Onarım') === 'N', 'portal: H..N işçilik kategori sütunları doğru eşlenir', JSON.stringify(portal.columns.map((c) => `${c.column}:${c.category}`)));
+const firstRow = portal.rows[0];
+assert(firstRow && !/^\d+$/.test(firstRow.partName) && firstRow.partName.length > 2, 'portal: ilk satır parça adı sıra numarası değil gerçek açıklama', JSON.stringify(firstRow?.partName));
+const findRow = (needle) => portal.rows.find((r) => r.partName.toUpperCase().includes(needle));
+const dinamo = findRow('DINAMO') ?? findRow('SARJ');
+assert(dinamo && dinamo.categories.includes('Mekanik') && !dinamo.categories.includes('Cam'), 'portal: şarj dinamosu Mekanik (cam değil)', JSON.stringify(dinamo));
+const far = findRow('FAR');
+assert(far && far.categories[0] === 'Elektrik' && !far.categories.includes('Kaporta'), 'portal: far Elektrik olarak sınıflanır (gelişigüzel kaporta yazılmaz)', JSON.stringify(far));
+assert(far && far.needsReview === true, 'portal: far (dış elektrik) kontrol gerekli işaretlenir', JSON.stringify(far));
+const koltuk = findRow('KOLTUK');
+assert(koltuk && koltuk.categories.includes('Döşeme/Kilit'), 'portal: koltuk Döşeme/Kilit sınıflanır', JSON.stringify(koltuk));
+const travers = findRow('TRAVERS');
+assert(travers && travers.categories.includes('Kaporta'), 'portal: travers Kaporta sınıflanır', JSON.stringify(travers));
+// Düşük güvenli satır yine doldurulur ama Kontrol gerekli işaretlenir; hiçbir satır boş kalmaz.
+assert(portal.rows.every((r) => r.categories.length > 0), 'portal: her satıra işçilik kararı verilir (boş kalmaz)', `bos=${portal.rows.filter((r) => r.categories.length === 0).length}`);
+// Önizleme dosyaya YAZMAZ; orijinal fixture değişmez (H-N mevcut değerleri otomatik öğrenilmez/yazılmaz).
+const fixtureStatAfter = await fs.stat(portalFixture);
+assert(fixtureStatAfter.size === fixtureStatBefore.size && fixtureStatAfter.mtimeMs === fixtureStatBefore.mtimeMs, 'portal: önizleme orijinal Excel dosyasını değiştirmez', 'fixture değişti');
 
 const proportional = distributeAmounts([100, 200, 300], 1200);
 assert(JSON.stringify(proportional) === JSON.stringify([200, 400, 600]), 'distributeAmounts oranlı dağıtım yapar', JSON.stringify(proportional));

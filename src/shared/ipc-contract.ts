@@ -125,6 +125,8 @@ export interface LaborAutoSaveArgs {
   rows: Array<{ rowNumber: number; amounts: Partial<Record<AutoLaborCategory, number>> }>;
   columns: AutoLaborColumnInfo[];
   allowFormulaReplacement?: boolean;
+  /** Önizlemede kontrol gerekli işaretlenen satır sayısı; kayıt raporunda kullanıcıya geri verilir. */
+  needsReviewRows?: number;
   /** Kullanıcının elle düzelttiği satırlar — öğrenen sözlüğe kaydedilir. */
   corrections?: Array<{ alias: string; partCode?: string; categories: AutoLaborCategory[]; amounts?: Partial<Record<AutoLaborCategory, number>>; amountLogic?: string }>;
 }

@@ -66,7 +66,8 @@ function detectCategoryColumns(headerCells: SheetCell[]): AutoLaborColumnInfo[] 
       out.push({ column: cell.column, category, header: cell.value.trim() || category });
     }
   }
-  return out;
+  // Önizleme ve Excel düzeniyle uyum için sütun harfine göre sırala (H, I, J, …).
+  return out.sort((a, b) => (a.column.length - b.column.length) || a.column.localeCompare(b.column));
 }
 
 export async function buildAutoLaborPreview(filePath: string, learned: readonly LaborLearningEntry[] = []): Promise<AutoLaborPreview> {
@@ -89,9 +90,34 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
   if (columns.length === 0) {
     warnings.push('İşçilik kategori sütunları (Kaporta/Boya/Mekanik/Elektrik/Cam/Döşeme-Kilit/Onarım) başlıktan tespit edilemedi. Excel başlık satırı kontrol edilmeli.');
   }
-  const partNameColumn = findColumnByKeywords(headerCells, /(PARCA|ACIKLAMA|MALZEME)/, /(KOD|TUTAR|BEDEL|FIYAT)/) || 'A';
+  // Portal Excel düzeni: A=#/sıra (parça adı DEĞİL), B=DVN Grubu (destekleyici), C=İşçilik/açıklama (asıl parça),
+  // D=Parça Kodu, F/G=bedel, H..N=kategori. Parça adı ÖNCE C/açıklama sütunundan okunur; A asla parça adı sayılmaz.
+  const CATEGORY_WORDS = /(KAPORTA|BOYA|MEKANIK|ELEKTRIK|\bCAM\b|DOSEME|KILIT|ONARIM)/;
+  const groupColumn = findColumnByKeywords(headerCells, /(DVN|GRUP|GRUBU)/, /KOD/);
   const partCodeColumn = findColumnByKeywords(headerCells, /KOD/);
-  const partAmountColumn = findColumnByKeywords(headerCells, /(PARCA TUTAR|BEDEL|FIYAT|TUTAR)/, /(ISCILIK|KAPORTA|BOYA|MEKANIK|ELEKTRIK|CAM|DOSEME|ONARIM)/);
+  const partAmountColumn = findColumnByKeywords(headerCells, /(SAHIPLENME|PARCA TUTAR|PARCA ORIJINAL|BEDEL|FIYAT|TUTAR)/, new RegExp(`(ISCILIK|${CATEGORY_WORDS.source.slice(1, -1)})`));
+  const reserved = new Set([groupColumn, partCodeColumn, partAmountColumn, ...columns.map((c) => c.column)].filter(Boolean));
+  // 1) Açıklama/İşçilik/Parça Adı başlığı (asıl parça açıklaması), kod/bedel/grup/kategori dışlanır.
+  const partExclude = new RegExp(`(KOD|TUTAR|BEDEL|FIYAT|TOPLAM|SAHIPLENME|ORIJINAL|DVN|GRUP|GRUBU|\\bKDV\\b|ISK|${CATEGORY_WORDS.source.slice(1, -1)})`);
+  let partNameColumn = '';
+  for (const cell of headerCells) {
+    const v = normalizeSearch(cell.value);
+    if (!v || reserved.has(cell.column)) continue;
+    if (/(ACIKLAMA|ISCILIK|PARCA ADI|MALZEME|ISLEM ACIKLAMASI|PARCA)/.test(v) && !partExclude.test(v)) { partNameColumn = cell.column; break; }
+  }
+  // 2) Bulunamazsa: sıra/numara (#) ve rezerve sütunlar HARİÇ ilk metin başlıklı sütun (A'ya asla düşme).
+  if (!partNameColumn) {
+    const numericHeader = /^(#|NO|SIRA|S\.?N\.?|SR|SATIR)$/;
+    for (const cell of headerCells) {
+      const v = normalizeSearch(cell.value);
+      if (!v || reserved.has(cell.column) || numericHeader.test(v) || partExclude.test(v)) continue;
+      partNameColumn = cell.column; break;
+    }
+  }
+  if (!partNameColumn) {
+    partNameColumn = groupColumn || 'C';
+    warnings.push('Parça açıklama sütunu kesin belirlenemedi; en olası açıklama sütunu kullanıldı. Sınıflandırmayı önizlemede kontrol edin.');
+  }
 
   const categoryByColumn = new Map(columns.map((c) => [c.column, c.category] as const));
   const cellAt = (row: SheetCell[], column: string): SheetCell | undefined => row.find((c) => c.column === column);
@@ -106,14 +132,16 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
   for (const rowNumber of dataRowNumbers) {
     const cells = rows.get(rowNumber) ?? [];
     const partName = (cellAt(cells, partNameColumn)?.value ?? '').trim();
+    const group = groupColumn ? (cellAt(cells, groupColumn)?.value ?? '').trim() : '';
     const partCode = partCodeColumn ? (cellAt(cells, partCodeColumn)?.value ?? '').trim() : '';
     const amountCell = partAmountColumn ? cellAt(cells, partAmountColumn) : undefined;
     const partAmount = amountCell ? (amountCell.numeric ?? parseMoney(amountCell.value)) : null;
     const rowText = normalizeSearch(cells.map((c) => c.value).join(' '));
     if (!partName) continue;
-    if (/^(GENEL )?(ARA )?TOPLAM/.test(normalizeSearch(partName)) || /TOPLAM/.test(normalizeSearch(partName))) continue;
+    if (/TOPLAM/.test(normalizeSearch(partName))) continue;
 
-    const decision = classifyLaborRow(partName, partCode, '', learned);
+    // Asıl parça açıklaması (C) BİRİNCİL; grup (B) destekleyici bağlam olarak sınıflandırmaya katılır.
+    const decision = classifyLaborRow(partName, partCode, group, learned);
     const oldByColumn: Record<string, number | null> = {};
     let changed = false;
     let hasFormula = false;
@@ -123,13 +151,13 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
       const cell = cellAt(cells, col.column);
       const oldVal = cell ? (cell.numeric ?? parseMoney(cell.value)) : null;
       oldByColumn[col.column] = oldVal;
-      const newVal = decision.categories.includes(col.category) ? (decision.amounts[col.category] ?? 0) : null;
-      if (newVal && newVal > 0) {
+      if (cell?.hasFormula) hasFormula = true;
+      const newVal = decision.categories.includes(col.category) ? (decision.amounts[col.category] ?? 0) : 0;
+      if (newVal > 0) {
         amounts[col.category] = newVal;
         totalsByCategory[col.category] = (totalsByCategory[col.category] ?? 0) + newVal;
-        if ((oldVal ?? 0) !== newVal) changed = true;
-        if (cell?.hasFormula) hasFormula = true;
       }
+      if ((oldVal ?? 0) !== newVal) changed = true;
     }
 
     // Kategori seçildi ama o kategori için sütun yoksa uyarı (yine de karar veriliyor).
@@ -145,6 +173,7 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
     previewRows.push({
       rowNumber,
       partName,
+      group,
       partCode,
       partAmount,
       categories: decision.categories,
@@ -177,6 +206,7 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
     sheetName: workbook.sheet.name,
     columns,
     partNameColumn,
+    groupColumn,
     partCodeColumn,
     partAmountColumn,
     rows: previewRows,

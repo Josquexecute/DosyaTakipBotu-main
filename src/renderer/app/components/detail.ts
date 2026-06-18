@@ -303,7 +303,7 @@ function renderAutoLaborPreview(state: UiState, preview: AutoLaborPreview): stri
     .filter((t) => t.total > 0)
     .map((t) => `<span class="status-summary-chip"><b>${formatMoney(t.total)}</b> ${escapeHtml(t.col.category)}</span>`)
     .join('');
-  const header = `<div><b>Satır</b><b>Parça</b><b>Kod</b>${preview.columns.map((c) => `<b title="${escapeHtml(c.category)} sütunu">${escapeHtml(c.column)}·${escapeHtml(c.category)}</b>`).join('')}<b>Güven</b><b>Gerekçe</b></div>`;
+  const header = `<div><b>Satır</b><b>Grup (B)</b><b>Parça (C)</b><b>Kod (D)</b><b>İşçilik</b>${preview.columns.map((c) => `<b title="${escapeHtml(c.category)} sütunu">${escapeHtml(c.column)}·${escapeHtml(c.category)}</b>`).join('')}<b>Güven</b><b>Kontrol</b><b>Onay</b><b>Gerekçe</b></div>`;
   const rows = preview.rows.map((row) => renderAutoLaborRow(state, preview, row)).join('');
   return `<div class="auto-labor-preview">
     <div class="status-summary">
@@ -316,7 +316,7 @@ function renderAutoLaborPreview(state: UiState, preview: AutoLaborPreview): stri
     ${preview.columns.length === 0 ? `<div class="app-alert error">${icon('warning')}<span>İşçilik kategori sütunları (Kaporta/Boya/… ) Excel başlığından bulunamadı; bu dosyaya AI yazamaz. Manuel dağıtıcıyı kullanın.</span></div>` : ''}
     ${preview.warnings.length ? `<div class="app-alert warning">${icon('info')}<span>${escapeHtml(preview.warnings.join(' • '))}</span></div>` : ''}
     ${preview.formulaCellsFound > 0 ? `<label class="switch"><input type="checkbox" data-auto-labor-toggle="formula" ${state.autoLaborAllowFormula ? 'checked' : ''}/> ${preview.formulaCellsFound} hedef hücrede formül var; sabit tutara çevrilmesini onaylıyorum</label>` : ''}
-    <div class="labor-grid-hint">${icon('details')}<span>"Yeni" kutularını elle düzeltebilirsiniz. Düzelttiğiniz satırlar kaydederken öğrenilir ve sonraki Excel'lerde önce kullanılır. Boş bırakılan/0 yazılan hücreye yazılmaz.</span></div>
+    <div class="labor-grid-hint">${icon('details')}<span>"Yeni" kutularını elle düzeltebilirsiniz. Elle düzeltilen satırlar ve Onay kutusu işaretlenen satırlar kaydederken öğrenilir. Seçilmeyen H-N kategorileri çıktı dosyasında 0 olur.</span></div>
     <div class="table-wrap"><div class="auto-labor-table" style="--cat-cols:${preview.columns.length}">${header}${rows}</div></div>
     <div class="auto-labor-footer">
       <button class="primary" data-action="auto-labor-save" ${state.autoLaborSaving || preview.columns.length === 0 ? 'disabled' : ''}>${icon('check')}<span>${state.autoLaborSaving ? 'Kaydediliyor…' : 'Onayla ve Kaydet'}</span></button>
@@ -336,10 +336,14 @@ function renderAutoLaborRow(state: UiState, preview: AutoLaborPreview, row: Auto
   }).join('');
   return `<div class="${row.needsReview ? 'needs-review' : ''}${row.changed ? ' changed' : ''}">
     <span class="mono-cell">#${row.rowNumber}</span>
+    <span><small>${escapeHtml(row.group || '—')}</small></span>
     <span title="${escapeHtml(row.categories.join(', '))}">${escapeHtml(row.partName)}${row.needsReview ? ' <small class="part-warn">⚠ kontrol</small>' : ''}</span>
     <span><small>${escapeHtml(row.partCode || '—')}</small></span>
+    <span><small>${escapeHtml(row.categories.join(', '))}</small></span>
     ${cells}
     <span><span class="status-chip ${CONFIDENCE_TONE[row.confidence] ?? ''}">${escapeHtml(row.confidence)}</span></span>
+    <span><small>${row.needsReview ? 'Evet' : 'Hayır'}</small></span>
+    <span><input type="checkbox" data-auto-labor-approve="${row.rowNumber}" ${state.autoLaborApprovedRows[row.rowNumber] ? 'checked' : ''} aria-label="Satır ${row.rowNumber} kararını öğren" /></span>
     <span class="auto-labor-reason"><small>${escapeHtml(row.reason)}</small></span>
   </div>`;
 }

@@ -33,7 +33,7 @@ const KEYWORD_RULES: Array<{ category: LaborCategory; phrases: string[] }> = [
   { category: 'Döşeme/Kilit', phrases: ['emniyet kemeri', 'kemer tokasi', 'hava yastigi', 'airbag', 'tavan dosemesi', 'koltuk', 'doseme', 'torpido', 'ic trim', 'kapi kolu', 'kapi acma', 'kilit', 'kilit karsiligi', 'guneslik', 'paspas', 'bagaj dosemesi'] },
   { category: 'Elektrik', phrases: ['far', 'stop', 'sinyal', 'sensor', 'kamera', 'radar', 'beyin', 'ecu', 'modul', 'sigorta', 'tesisat', 'kablo', 'soket', 'korna', 'buji', 'bobin', 'role', 'anten', 'ekran', 'multimedya', 'hoparlor', 'xenon', 'led', 'ampul', 'sis far', 'plaka lambasi'] },
   { category: 'Mekanik', phrases: ['motor', 'sanziman', 'sarsiman', 'radyator', 'turbo', 'intercooler', 'dinamo', 'alternator', 'kompresor', 'klima kompresoru', 'egzoz', 'katalizator', 'aks', 'porya', 'salincak', 'rotil', 'rot', 'amortisor', 'suspansiyon', 'mafsal', 'debriyaj', 'fren', 'kaliper', 'balata', 'fren diski', 'mars', 'triger', 'kasnak', 'takoz', 'fan', 'su pompasi', 'devirdaim', 'karter', 'diferansiyel', 'sanziman askisi', 'direksiyon kutusu', 'rot mili', 'rot basi', 'jant', 'lastik', 'bilya', 'rulman'] },
-  { category: 'Kaporta', phrases: ['tampon', 'kaput', 'camurluk', 'davlumbaz', 'kapi', 'on panel', 'arka panel', 'panel', 'marspiyel', 'travers', 'sac', 'sase', 'sasi', 'besik', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'izgara', 'panjur', 'spoiler', 'spoyler', 'tampon demiri', 'braket', 'destek', 'havuz', 'taban saci', 'orta direk'] }
+  { category: 'Kaporta', phrases: ['radyator panjuru', 'radyator izgarasi', 'tampon', 'kaput', 'camurluk', 'davlumbaz', 'kapi', 'on panel', 'arka panel', 'panel', 'marspiyel', 'travers', 'sac', 'sase', 'sasi', 'besik', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'izgara', 'panjur', 'spoiler', 'spoyler', 'tampon demiri', 'braket', 'destek', 'havuz', 'taban saci', 'orta direk'] }
 ];
 
 /** Boya gerektiren (boyanacak) dış gövde parçaları — Kaporta ile birlikte Boya eklenir. */
@@ -58,20 +58,30 @@ export function roundTo250(amount: number): number {
   return Math.round(amount / 250) * 250;
 }
 
+function wordMatchesToken(word: string, token: string): boolean {
+  if (word === token) return true;
+  // "CAM" tek başına cam işidir; CAMURLUK/DAVLUMBAZ gibi kaporta kelimeleri cam sayılmamalı.
+  if (token === 'CAM') return /^(CAM|CAMI|CAMA|CAMIN|CAMINI|CAMDA|CAMDAN|CAMLAR|CAMLARI)$/.test(word);
+  // Türkçe çekim ekleri: "tampon"→"tamponu", "koltuk"→"koltuğu" (yumuşama). Önek/gövde eşleşmesi.
+  if (token.length >= 4 && word.startsWith(token)) return true;
+  if (token.length >= 5 && word.startsWith(token.slice(0, -1))) return true;
+  return false;
+}
+
 function phraseScore(normalized: string, phrase: string): number {
   const p = normalizeSearch(phrase);
   if (!p) return 0;
-  // Kelime sınırı duyarlı: tek kelimeyi token/gövde olarak, çok kelimeyi alt-dizi olarak ara.
   const tokens = p.split(' ').filter(Boolean);
-  if (tokens.length > 1) {
-    return normalized.includes(p) ? p.length + tokens.length * 8 : 0;
-  }
   const words = normalized.split(' ').filter(Boolean);
+  if (tokens.length > 1) {
+    for (let index = 0; index <= words.length - tokens.length; index += 1) {
+      const matches = tokens.every((token, offset) => wordMatchesToken(words[index + offset] ?? '', token));
+      if (matches) return p.length + tokens.length * 8;
+    }
+    return 0;
+  }
   for (const word of words) {
-    if (word === p) return p.length + 4;
-    // Türkçe çekim ekleri: "tampon"→"tamponu", "koltuk"→"koltuğu" (yumuşama). Önek/gövde eşleşmesi.
-    if (p.length >= 4 && word.startsWith(p)) return p.length;
-    if (p.length >= 5 && word.startsWith(p.slice(0, -1))) return p.length - 1;
+    if (wordMatchesToken(word, p)) return word === p ? p.length + 4 : p.length;
   }
   return 0;
 }

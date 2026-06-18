@@ -599,7 +599,7 @@ export interface CategoryLaborWrite {
   rowNumber: number;
   /** Hedef sütun harfi (ör. "H"). */
   column: string;
-  /** Yazılacak tam sayı tutar (kuruşsuz). */
+  /** Yazılacak tam sayı tutar (kuruşsuz). 0, eski H-N değerini temizlemek için geçerlidir. */
   value: number;
 }
 
@@ -630,7 +630,7 @@ export async function writeCategoryLaborExcel(
   const workbook = await loadWorkbook(absolutePath);
   const cellByRef = new Map(workbook.sheet.cells.map((cell) => [cell.ref, cell] as const));
   const cleanWrites = writes
-    .filter((w) => Number.isInteger(w.rowNumber) && w.rowNumber > 1 && /^[A-Z]+$/i.test(w.column) && Number.isFinite(w.value) && w.value > 0)
+    .filter((w) => Number.isInteger(w.rowNumber) && w.rowNumber > 1 && /^[A-Z]+$/i.test(w.column) && Number.isFinite(w.value) && w.value >= 0)
     .map((w) => ({ rowNumber: w.rowNumber, column: w.column.toUpperCase(), value: Math.max(0, Math.round(w.value)) }));
 
   const formulaCells = cleanWrites.filter((w) => cellByRef.get(`${w.column}${w.rowNumber}`)?.hasFormula === true);

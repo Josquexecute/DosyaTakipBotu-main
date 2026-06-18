@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.4.11';
+export const APP_VERSION = '0.4.12';
 export const APP_NAME = 'HasarBotu / Baran Ekspertiz';
 export const COMPANY_NAME = 'Baran Global Ekspertiz';
 export const DEFAULT_PCLOUD_ROOT = 'P:\\BARAN GLOBAL EKSPERTİZ\\2026';

@@ -452,6 +452,8 @@ export type AutoLaborSource = 'learned' | 'rules' | 'price-list' | 'fallback';
 export interface AutoLaborRowPreview {
   rowNumber: number;
   partName: string;
+  /** Destekleyici grup bilgisi (portal "DVN Grubu" / B sütunu). */
+  group: string;
   partCode: string;
   partAmount: number | null;
   categories: AutoLaborCategory[];
@@ -483,6 +485,8 @@ export interface AutoLaborPreview {
   /** Kategori → sütun eşlemesi (başlıktan tespit edilen H..N kolonları). */
   columns: AutoLaborColumnInfo[];
   partNameColumn: string;
+  /** Destekleyici grup sütunu (portal "DVN Grubu" / B). */
+  groupColumn: string;
   partCodeColumn: string;
   partAmountColumn: string;
   rows: AutoLaborRowPreview[];

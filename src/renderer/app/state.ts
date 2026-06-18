@@ -26,9 +26,10 @@ export interface UiState {
   rootSetupRequired: boolean;
   laborExcelPreview: ExcelLaborPreview | null;
   laborExcelResult: ExcelLaborDistributeResult | null;
-  /** v0.4.11 AI İşçilik Dağıtıcı: önizleme, kullanıcı düzeltmeleri (satır→kategori→tutar), kayıt sonucu. */
+  /** v0.4.11 AI İşçilik Dağıtıcı: önizleme, kullanıcı düzeltmeleri (satır→kategori→tutar), satır onayları, kayıt sonucu. */
   autoLaborPreview: AutoLaborPreview | null;
   autoLaborEdits: Record<number, Record<string, number>>;
+  autoLaborApprovedRows: Record<number, boolean>;
   autoLaborSaving: boolean;
   autoLaborResult: AutoLaborSaveResult | null;
   autoLaborAllowFormula: boolean;
@@ -116,6 +117,7 @@ export const state: UiState = {
   laborExcelResult: null,
   autoLaborPreview: null,
   autoLaborEdits: {},
+  autoLaborApprovedRows: {},
   autoLaborSaving: false,
   autoLaborResult: null,
   autoLaborAllowFormula: false,

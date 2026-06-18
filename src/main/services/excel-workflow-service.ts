@@ -132,7 +132,7 @@ export class ExcelWorkflowService {
       learnedCount += 1;
     }
 
-    const needsReviewRows = 0; // önizlemede işaretlenir; kayıt sonrası rapor changedRows + learnedCount üzerinden verilir.
+    const needsReviewRows = Number.isFinite(Number(args.needsReviewRows)) ? Math.max(0, Math.round(Number(args.needsReviewRows))) : 0;
     return {
       outputPath: writerResult.outputPath,
       backupPath: writerResult.backupPath,

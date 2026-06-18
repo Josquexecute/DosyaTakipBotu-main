@@ -196,7 +196,7 @@ function restoreFocusedControl(snapshot: FocusSnapshot | null): void {
 
 function stableSelectorFor(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): string | null {
   if (element.id) return `#${cssEscape(element.id)}`;
-  for (const attr of ['field', 'checklist', 'todoComplete', 'todoTitle', 'todoPriority', 'todoAssigned', 'todoDue', 'noteText', 'setting', 'settingInterval', 'userRename', 'listFilter', 'laborAmount', 'autoLaborAmount', 'partCanonical', 'statusFilter', 'statusSort', 'statusResponsible', 'statusToggle']) {
+  for (const attr of ['field', 'checklist', 'todoComplete', 'todoTitle', 'todoPriority', 'todoAssigned', 'todoDue', 'noteText', 'setting', 'settingInterval', 'userRename', 'listFilter', 'laborAmount', 'autoLaborAmount', 'autoLaborApprove', 'partCanonical', 'statusFilter', 'statusSort', 'statusResponsible', 'statusToggle']) {
     const value = element.dataset[attr];
     if (value !== undefined) return `[data-${camelToKebab(attr)}="${cssEscape(value)}"]`;
   }
@@ -317,6 +317,11 @@ function wireEvents(): void {
     }
     if (target instanceof HTMLInputElement && target.dataset.autoLaborToggle === 'formula') {
       state.autoLaborAllowFormula = target.checked;
+      return;
+    }
+    if (target instanceof HTMLInputElement && target.dataset.autoLaborApprove !== undefined) {
+      const rowNumber = Number(target.dataset.autoLaborApprove);
+      if (Number.isInteger(rowNumber)) state.autoLaborApprovedRows[rowNumber] = target.checked;
       return;
     }
     // v0.4.6: Kaydırılabilir parça öneri listesi (select) → ilgili "Gerçek Ad" input'unu doldurur.
@@ -479,7 +484,7 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'reset-labor-overrides': state.laborRowOverrides = {}; render(); break;
     case 'auto-labor-preview': await autoLaborPreviewAction(); break;
     case 'auto-labor-save': await autoLaborSaveAction(); break;
-    case 'auto-labor-clear': state.autoLaborPreview = null; state.autoLaborEdits = {}; state.autoLaborResult = null; state.autoLaborAllowFormula = false; render(); break;
+    case 'auto-labor-clear': state.autoLaborPreview = null; state.autoLaborEdits = {}; state.autoLaborApprovedRows = {}; state.autoLaborResult = null; state.autoLaborAllowFormula = false; render(); break;
     case 'analyze-parts-photo': await analyzePartsPhotoAction(); break;
     case 'clear-parts-analysis': state.partsAnalysis = null; render(); break;
     case 'learn-part-term': await learnPartTermAction(Number(element?.dataset.partIndex ?? -1)); break;
@@ -929,6 +934,7 @@ async function autoLaborPreviewAction(): Promise<void> {
   }
   state.autoLaborPreview = result.data;
   state.autoLaborEdits = {};
+  state.autoLaborApprovedRows = {};
   state.autoLaborResult = null;
   state.autoLaborAllowFormula = false;
   const s = result.data.summary;
@@ -945,6 +951,8 @@ async function autoLaborSaveAction(): Promise<void> {
   const corrections: NonNullable<Parameters<typeof window.hasarbotu.autoLaborSave>[0]['corrections']> = [];
   for (const row of preview.rows) {
     const edits = state.autoLaborEdits[row.rowNumber];
+    const approved = state.autoLaborApprovedRows[row.rowNumber] === true;
+    const hasEdits = !!edits && Object.keys(edits).length > 0;
     const amounts: Partial<Record<AutoLaborCategory, number>> = {};
     for (const [cat, value] of Object.entries(row.amounts)) {
       if (typeof value === 'number' && value > 0) amounts[cat as AutoLaborCategory] = value;
@@ -957,13 +965,13 @@ async function autoLaborSaveAction(): Promise<void> {
       }
     }
     if (Object.keys(amounts).length > 0) rows.push({ rowNumber: row.rowNumber, amounts });
-    if (edits && Object.keys(edits).length > 0) {
+    if ((approved || hasEdits) && Object.keys(amounts).length > 0) {
       corrections.push({
         alias: row.partName,
         ...(row.partCode ? { partCode: row.partCode } : {}),
         categories: Object.keys(amounts) as AutoLaborCategory[],
         amounts,
-        amountLogic: 'kullanıcı düzeltmesi (AI dağıtıcı)'
+        amountLogic: hasEdits ? 'kullanıcı düzeltmesi (AI dağıtıcı)' : 'kullanıcı onayı (AI dağıtıcı)'
       });
     }
   }
@@ -975,6 +983,7 @@ async function autoLaborSaveAction(): Promise<void> {
     rows,
     columns: preview.columns,
     allowFormulaReplacement: state.autoLaborAllowFormula,
+    needsReviewRows: preview.rows.filter((row) => row.needsReview).length,
     corrections
   });
   state.autoLaborSaving = false;

@@ -1,7 +1,7 @@
 {
   "name": "hasarbotu-baran-ekspertiz",
-  "version": "0.4.11",
-  "description": "Baran Global Ekspertiz için Türkçe hasar dosyası takip ve ekspertiz asistanı uygulaması (Electron). v0.4.11: AI destekli, öğrenen ve önizlemeli İşçilik Dağıtıcı — Excel'i seç, tüm satırlar kural+öğrenme+fiyat listesiyle otomatik H..N işçilik sütunlarına dağıtılsın, önizle/düzelt/onayla; orijinal korunur, yedek alınır.",
+  "version": "0.4.12",
+  "description": "Baran Global Ekspertiz için Türkçe hasar dosyası takip ve ekspertiz asistanı uygulaması (Electron). v0.4.12: AI İşçilik Dağıtıcı gerçek portal Excel kolon yapısına göre düzeltildi — parça adı A (sıra no) değil C (İşçilik açıklaması) sütunundan okunur; B grup destekleyici, D kod; H..N kategori eşleme; mevcut H-N değerleri otomatik öğrenilmez.",
   "main": "dist-electron/main/main.js",
   "author": "Baran Global Ekspertiz",
   "license": "UNLICENSED",

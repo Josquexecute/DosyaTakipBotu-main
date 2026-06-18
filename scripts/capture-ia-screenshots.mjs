@@ -124,7 +124,7 @@ const cases = [
 
 const settings = { rootPath: 'D:\\BARAN_GLOBAL_EKSPERTIZ\\2026', rootPathConfirmed: true, theme: 'light', zoom: 1, activeUser: 'Ömer Faruk İşleyen', activeComputer: 'TEST-PC', users: ['Ömer Faruk İşleyen', 'Mehmet K.', 'Ayşe D.'], scanIntervals: { fullYearLightMs: 600000 } };
 const dashboard = { totalCases: cases.length, openCases: 3, closedCases: 1, missingDocuments: 2, missingPhotos: 2, unsupportedPhotos: 1, portalPending: 2, overdueFollowUps: 1, rucuPotential: 1, heavyDamageEnabled: 0, openTasks: 4, overdueTasks: 1, todayTasks: 2, weekTasks: 4, conflicts: 1, lastScanAt: now, rootAvailable: true };
-const deployment = { activeComputer: 'TEST-PC', appVersion: '0.4.11', expectedVersion: '0.4.11', isOutdated: false, versionCheckAvailable: false, warnings: ['Ofis hedef sürüm dosyası bulunamadı. Aktif kök yerel klasör olmalıdır.'], checkedAt: now, canWriteClientStatus: true, clients: [{ computer: 'TEST-PC', appVersion: '0.4.11', user: 'Ömer Faruk İşleyen', recordedAt: now }] };
+const deployment = { activeComputer: 'TEST-PC', appVersion: '0.4.12', expectedVersion: '0.4.12', isOutdated: false, versionCheckAvailable: false, warnings: ['Ofis hedef sürüm dosyası bulunamadı. Aktif kök yerel klasör olmalıdır.'], checkedAt: now, canWriteClientStatus: true, clients: [{ computer: 'TEST-PC', appVersion: '0.4.12', user: 'Ömer Faruk İşleyen', recordedAt: now }] };
 
 function folderBrowseMock(folderPath) {
   const r = settings.rootPath;
