@@ -1,0 +1,47 @@
+name: Sürekli Kontrol
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-kontrol:
+    name: Windows 10/11 uyumluluk kontrolü
+    runs-on: windows-2022
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v6.0.3
+
+      - name: Node.js 22 kur
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: "22"
+
+      - name: Sürüm bilgilerini yazdır
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+
+      - name: Bağımlılıkları kur
+        shell: pwsh
+        run: |
+          npm.cmd ci --ignore-scripts --include=dev --no-audit --no-fund
+
+      - name: Electron Windows binary düzeltmesini çalıştır
+        shell: pwsh
+        run: |
+          npm.cmd run fix:electron
+          npm.cmd run check:electron
+
+      - name: Proje kontrollerini çalıştır
+        shell: pwsh
+        run: |
+          npm.cmd run ci

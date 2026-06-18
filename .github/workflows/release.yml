@@ -1,0 +1,181 @@
+name: Release için Windows EXE üret
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Build edilecek release tag adı. Örnek: v0.2.2"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows-exe:
+    name: Windows kurulum ve taşınabilir EXE üret
+    runs-on: windows-2022
+
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+    steps:
+      - name: Release tag kaynak kodunu al
+        uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+      - name: Node.js 22 kur
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: "22"
+
+      - name: Sürüm bilgilerini yazdır
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+          gh --version
+
+      - name: Tag ile package.json sürümünü karşılaştır
+        shell: pwsh
+        run: |
+          $tag = "${env:RELEASE_TAG}"
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            throw "Release tag adı alınamadı."
+          }
+
+          $packageVersion = node -p "require('./package.json').version"
+          $expectedTag = "v$packageVersion"
+
+          if ($tag -ne $expectedTag) {
+            throw "Release tag/package.json sürüm uyuşmazlığı. Tag: $tag / Beklenen: $expectedTag"
+          }
+
+          Write-Host "Sürüm doğrulandı: $tag"
+
+      - name: Bağımlılıkları kur
+        shell: pwsh
+        run: |
+          npm.cmd cache verify
+          npm.cmd ci --ignore-scripts --include=dev --no-audit --no-fund
+
+      - name: Electron Windows binary düzeltmesini çalıştır
+        shell: pwsh
+        run: |
+          if (!(Test-Path ".\scripts\fix-electron-win.ps1")) {
+            throw "scripts/fix-electron-win.ps1 bulunamadı."
+          }
+
+          npm.cmd run fix:electron
+          npm.cmd run check:electron
+
+          if (!(Test-Path ".\node_modules\electron\dist\electron.exe")) {
+            throw "Electron Windows binary bulunamadı: node_modules\electron\dist\electron.exe"
+          }
+
+          if (!(Test-Path ".\node_modules\electron\path.txt")) {
+            throw "Electron path.txt bulunamadı: node_modules\electron\path.txt"
+          }
+
+          $pathText = [System.IO.File]::ReadAllText(".\node_modules\electron\path.txt")
+          if ($pathText -ne "electron.exe") {
+            throw "Electron path.txt içeriği hatalı veya satır sonu içeriyor."
+          }
+
+      - name: Doğrulama ve build
+        shell: pwsh
+        run: |
+          npm.cmd run ci
+
+      - name: Windows EXE paketlerini üret
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          DEBUG: "electron-builder"
+          npm_config_ignore_scripts: "false"
+        run: |
+          if (Test-Path ".\release") {
+            Remove-Item ".\release" -Recurse -Force
+          }
+
+          npm.cmd run dist:win
+
+      - name: SHA-256 ve release notlarını üret
+        shell: pwsh
+        run: |
+          npm.cmd run release:hash -- -NoPause
+          npm.cmd run release:notes -- -NoPause
+
+      - name: Release dry-run artifact kontrolü
+        shell: pwsh
+        run: |
+          npm.cmd run release:dry-run -- --skip-ci
+
+      - name: Çıktıları listele
+        shell: pwsh
+        run: |
+          if (!(Test-Path ".\release")) {
+            throw "release klasörü oluşmadı."
+          }
+
+          Get-ChildItem ".\release" -Recurse
+
+      - name: EXE çıktılarını workflow artifact olarak sakla
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: HasarBotu-Windows-EXE
+          path: |
+            release/HasarBotu-Baran-Ekspertiz-Kurulum-*.exe
+            release/HasarBotu-Baran-Ekspertiz-Tasinabilir-*.exe
+            release/RELEASE_HASHES_SHA256.txt
+            release/RELEASE_HASHES_SHA256.json
+            release/RELEASE_NOTES_v*.md
+          if-no-files-found: error
+
+      - name: EXE dosyalarını GitHub Release içine yükle
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${env:RELEASE_TAG}"
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            throw "Release tag adı alınamadı."
+          }
+
+          $installer = @(Get-ChildItem ".\release" -File -Filter "HasarBotu-Baran-Ekspertiz-Kurulum-*.exe")
+          $portable = @(Get-ChildItem ".\release" -File -Filter "HasarBotu-Baran-Ekspertiz-Tasinabilir-*.exe")
+          $assets = @()
+          $assets += $installer
+          $assets += $portable
+
+          if ($installer.Count -ne 1) {
+            throw "Release için 1 kurulum EXE çıktısı bekleniyor. Bulunan: $($installer.Count)"
+          }
+
+          if ($portable.Count -ne 1) {
+            throw "Release için 1 taşınabilir EXE çıktısı bekleniyor. Bulunan: $($portable.Count)"
+          }
+
+          if ($assets.Count -ne 2) {
+            throw "Release için tam 2 kullanıcı EXE çıktısı bekleniyor: Kurulum ve Taşınabilir. Bulunan: $($assets.Count)"
+          }
+
+          $hashTxt = @(Get-ChildItem ".\release" -File -Filter "RELEASE_HASHES_SHA256.txt")
+          $hashJson = @(Get-ChildItem ".\release" -File -Filter "RELEASE_HASHES_SHA256.json")
+          $notes = @(Get-ChildItem ".\release" -File -Filter "RELEASE_NOTES_v*.md")
+          if ($hashTxt.Count -ne 1 -or $hashJson.Count -ne 1 -or $notes.Count -ne 1) {
+            throw "Release hash/not dosyaları eksik. TXT=$($hashTxt.Count) JSON=$($hashJson.Count) NOTES=$($notes.Count)"
+          }
+          $assets += $hashTxt
+          $assets += $hashJson
+          $assets += $notes
+
+          foreach ($asset in $assets) {
+            Write-Host "Release asset yükleniyor: $($asset.FullName)"
+            gh release upload $tag $asset.FullName --clobber
+          }

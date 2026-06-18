@@ -1,0 +1,165 @@
+import type {
+  ApiResult,
+  AppSettings,
+  CaseIndexItem,
+  CaseListExportResult,
+  CaseListExportRow,
+  ConflictResolutionArgs,
+  ConflictTrackingCopyInfo,
+  DashboardSummary,
+  DebugHealthReport,
+  DeploymentStatus,
+  PartsPhotoAnalysis,
+  ExcelLaborDistributeResult,
+  ExcelLaborPreview,
+  FolderBrowseResult,
+  ScanReport,
+  ThumbnailResult,
+  TrackingFile,
+  TrackingWriteResult
+} from './types';
+import type { UserPartTerm } from './parca-sozlugu';
+
+export type { ApiResult };
+
+export const IPC_INVOKE_CHANNELS = {
+  settingsGet: 'settings:get',
+  settingsSave: 'settings:save',
+  settingsChooseRoot: 'settings:choose-root',
+  dashboardGet: 'dashboard:get',
+  casesList: 'cases:list',
+  casesGet: 'cases:get',
+  casesRefreshOne: 'cases:refresh-one',
+  folderList: 'folder:list',
+  scanStart: 'scan:start',
+  scanCancel: 'scan:cancel',
+  photoGetThumbnail: 'photo:get-thumbnail',
+  laborChooseExcel: 'labor:choose-excel',
+  laborInspectExcel: 'labor:inspect-excel',
+  laborDistributeExcel: 'labor:distribute-excel',
+  partsAnalyzePhoto: 'parts:analyze-photo',
+  partsGetUserTerms: 'parts:get-user-terms',
+  partsLearnTerm: 'parts:learn-term',
+  partsExportLaborExcel: 'parts:export-labor-excel',
+  casesExportExcel: 'cases:export-excel',
+  trackingUpdateChecklist: 'tracking:update-checklist',
+  trackingAddTodo: 'tracking:add-todo',
+  trackingUpdateTodo: 'tracking:update-todo',
+  trackingDeleteTodo: 'tracking:delete-todo',
+  trackingAddNote: 'tracking:add-note',
+  trackingUpdateNote: 'tracking:update-note',
+  trackingDeleteNote: 'tracking:delete-note',
+  trackingUpdateField: 'tracking:update-field',
+  trackingResolveConflict: 'tracking:resolve-conflict',
+  trackingInspectConflictCopy: 'tracking:inspect-conflict-copy',
+  trackingAcceptDiskBaseline: 'tracking:accept-disk-baseline',
+  systemOpenFolder: 'system:open-folder',
+  healthGet: 'health:get',
+  deploymentGetStatus: 'deployment:get-status',
+  deploymentRegisterClient: 'deployment:register-client'
+} as const;
+
+export const IPC_SEND_CHANNEL = {
+  scanFinished: 'scan:finished',
+  caseUpdated: 'case:updated',
+  menuCommand: 'menu:command'
+} as const;
+
+export const IPC_SEND_CHANNELS = Object.values(IPC_SEND_CHANNEL);
+
+export type IpcInvokeChannel = typeof IPC_INVOKE_CHANNELS[keyof typeof IPC_INVOKE_CHANNELS];
+export type IpcSendChannel = typeof IPC_SEND_CHANNEL[keyof typeof IPC_SEND_CHANNEL];
+
+export interface TrackingMutationArgsBase {
+  folderPath: string;
+  expectedRevision: number;
+  expectedWriteId?: string;
+  allowClosedMutation?: boolean;
+}
+
+export interface LaborInspectExcelArgs {
+  filePath: string;
+  targetTotal?: number;
+  targetColumn?: string;
+  usePriceList?: boolean;
+}
+
+export interface LaborDistributeExcelArgs {
+  filePath: string;
+  targetTotal: number;
+  targetColumn?: string;
+  allowRiskyColumn?: boolean;
+  allowFormulaReplacement?: boolean;
+  allowEqualDistribution?: boolean;
+  usePriceList?: boolean;
+  /** Kullanıcının uygulama içi tabloda elle değiştirdiği satır tutarları. */
+  overrides?: Array<{ rowNumber: number; amount: number }>;
+}
+
+export interface PartsLearnTermArgs {
+  alias: string;
+  canonical: string;
+  category?: string;
+  laborPart?: string;
+}
+
+export interface PartsExportLaborArgs {
+  rows: Array<{ description: string; partAmount: number; laborAmount: number }>;
+}
+
+/** v0.4.7: Parça fotoğrafı okumada aktif dosya bağlamı — yanlış plakalı fotoğrafı engellemek için. */
+export interface PartsAnalyzePhotoArgs {
+  activePlate?: string;
+  activeFolderPath?: string;
+}
+
+export interface CaseListExportExcelArgs {
+  rows: CaseListExportRow[];
+}
+
+export type TrackingUpdateChecklistArgs = TrackingMutationArgsBase & { key: string; completed: boolean };
+export type TrackingAddTodoArgs = TrackingMutationArgsBase & { id?: string; title: string; priority: string; assignedTo: string; dueDate: string };
+export type TrackingUpdateTodoArgs = TrackingMutationArgsBase & { id: string; completed?: boolean; title?: string; priority?: string; assignedTo?: string; dueDate?: string };
+export type TrackingDeleteTodoArgs = TrackingMutationArgsBase & { id: string };
+export type TrackingAddNoteArgs = TrackingMutationArgsBase & { id?: string; text: string };
+export type TrackingUpdateNoteArgs = TrackingMutationArgsBase & { id: string; text: string };
+export type TrackingDeleteNoteArgs = TrackingMutationArgsBase & { id: string };
+export type TrackingUpdateFieldArgs = TrackingMutationArgsBase & { path: string; value: unknown };
+
+export interface HasarbotuApi {
+  getSettings<T = AppSettings>(): Promise<ApiResult<T>>;
+  saveSettings<T = AppSettings>(settings: AppSettings): Promise<ApiResult<T>>;
+  chooseRoot<T = AppSettings>(): Promise<ApiResult<T>>;
+  getDashboard<T = DashboardSummary>(): Promise<ApiResult<T>>;
+  listCases<T = CaseIndexItem[]>(): Promise<ApiResult<T>>;
+  getCase<T = CaseIndexItem | null>(folderPath: string): Promise<ApiResult<T>>;
+  refreshCase<T = CaseIndexItem>(folderPath: string): Promise<ApiResult<T>>;
+  listFolders<T = FolderBrowseResult>(folderPath?: string): Promise<ApiResult<T>>;
+  scanNow<T = ScanReport>(): Promise<ApiResult<T>>;
+  cancelScan<T = boolean>(): Promise<ApiResult<T>>;
+  getPhotoThumbnail<T = ThumbnailResult>(filePath: string): Promise<ApiResult<T>>;
+  chooseLaborExcel<T = ExcelLaborPreview | null>(): Promise<ApiResult<T>>;
+  inspectLaborExcel<T = ExcelLaborPreview>(args: LaborInspectExcelArgs): Promise<ApiResult<T>>;
+  distributeLaborExcel<T = ExcelLaborDistributeResult>(args: LaborDistributeExcelArgs): Promise<ApiResult<T>>;
+  analyzePartsPhoto<T = PartsPhotoAnalysis>(args?: PartsAnalyzePhotoArgs): Promise<ApiResult<T>>;
+  getPartUserTerms<T = UserPartTerm[]>(): Promise<ApiResult<T>>;
+  learnPartTerm<T = UserPartTerm[]>(args: PartsLearnTermArgs): Promise<ApiResult<T>>;
+  exportPartsLaborExcel<T = CaseListExportResult>(args: PartsExportLaborArgs): Promise<ApiResult<T>>;
+  exportCaseListExcel<T = CaseListExportResult>(args: CaseListExportExcelArgs): Promise<ApiResult<T>>;
+  updateChecklist<T = TrackingWriteResult>(args: TrackingUpdateChecklistArgs): Promise<ApiResult<T>>;
+  addTodo<T = TrackingWriteResult>(args: TrackingAddTodoArgs): Promise<ApiResult<T>>;
+  updateTodo<T = TrackingWriteResult>(args: TrackingUpdateTodoArgs): Promise<ApiResult<T>>;
+  deleteTodo<T = TrackingWriteResult>(args: TrackingDeleteTodoArgs): Promise<ApiResult<T>>;
+  addNote<T = TrackingWriteResult>(args: TrackingAddNoteArgs): Promise<ApiResult<T>>;
+  updateNote<T = TrackingWriteResult>(args: TrackingUpdateNoteArgs): Promise<ApiResult<T>>;
+  deleteNote<T = TrackingWriteResult>(args: TrackingDeleteNoteArgs): Promise<ApiResult<T>>;
+  resolveConflict<T = TrackingWriteResult>(args: ConflictResolutionArgs): Promise<ApiResult<T>>;
+  inspectConflictCopy<T = ConflictTrackingCopyInfo>(folderPath: string): Promise<ApiResult<T>>;
+  acceptDiskBaseline<T = { ok: boolean; tracking: TrackingFile }>(folderPath: string): Promise<ApiResult<T>>;
+  updateField<T = TrackingWriteResult>(args: TrackingUpdateFieldArgs): Promise<ApiResult<T>>;
+  openFolder<T = boolean>(folderPath: string): Promise<ApiResult<T>>;
+  getHealth<T = DebugHealthReport>(): Promise<ApiResult<T>>;
+  getDeploymentStatus<T = DeploymentStatus>(): Promise<ApiResult<T>>;
+  registerDeploymentClient<T = DeploymentStatus>(): Promise<ApiResult<T>>;
+  on(channel: string, callback: (payload: unknown) => void): () => void;
+}

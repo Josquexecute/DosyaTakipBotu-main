@@ -1,0 +1,104 @@
+{
+  "name": "hasarbotu-baran-ekspertiz",
+  "version": "0.4.10",
+  "description": "Baran Global Ekspertiz için Türkçe hasar dosyası takip ve ekspertiz asistanı uygulaması (Electron). v0.4.10: Fotoğraf seçimi artık plaka + dosya klasörü kimliği ile doğrulanıyor; aynı plaka ama farklı dosya/föy klasöründen seçim de hard-block edilir. Saha stabilite kontrolü yapıldı.",
+  "main": "dist-electron/main/main.js",
+  "author": "Baran Global Ekspertiz",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload/preload.js --sourcemap",
+    "build:renderer": "tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
+    "build": "npm run clean && npm run typecheck && npm run build:main && npm run build:preload && npm run build:renderer",
+    "start": "node scripts/check-electron-binary.mjs && npm run build && electron .",
+    "verify": "node scripts/verify-project.mjs",
+    "smoke": "node scripts/smoke-features.mjs",
+    "fixtures": "node scripts/generate-test-fixtures.mjs",
+    "fix:electron": "powershell -ExecutionPolicy Bypass -File scripts/fix-electron-win.ps1",
+    "install:ocr": "powershell -ExecutionPolicy Bypass -File scripts/install-ocr-windows.ps1",
+    "install:windows": "powershell -ExecutionPolicy Bypass -File scripts/install-windows.ps1",
+    "check:electron": "node scripts/check-electron-binary.mjs",
+    "compat:windows": "node scripts/windows-compat-check.mjs",
+    "audit:turkish": "node scripts/turkish-ui-audit.mjs",
+    "ci": "npm run verify && npm run smoke && npm run feature:audit && npm run audit:turkish && npm run audit:ipc-fields && npm run audit:ipc-contract && npm run compat:windows && npm run typecheck && npm run build && npm run audit:preload-bundle && npm run audit:renderer-stability && npm run audit:daily-work && npm run audit:field-pilot-v2 && npm run test:behavior && node scripts/final-office-audit.mjs",
+    "dist:win": "npm run check:electron && npm run build && electron-builder --win --x64 --publish never",
+    "feature:audit": "node scripts/feature-audit.mjs",
+    "final:audit": "npm run build && node scripts/final-office-audit.mjs",
+    "pilot:windows": "powershell -ExecutionPolicy Bypass -File scripts/pilot-windows-check.ps1",
+    "pilot:copy-month": "powershell -ExecutionPolicy Bypass -File scripts/pilot-copy-month.ps1",
+    "pilot:collect": "powershell -ExecutionPolicy Bypass -File scripts/pilot-collect-diagnostics.ps1",
+    "live:preflight": "powershell -ExecutionPolicy Bypass -File scripts/live-preflight.ps1",
+    "live:backup-tracking": "powershell -ExecutionPolicy Bypass -File scripts/live-backup-tracking.ps1",
+    "audit:ipc-fields": "node scripts/ipc-field-audit.mjs",
+    "audit:ipc-contract": "node scripts/ipc-contract-audit.mjs",
+    "audit:preload-bundle": "node scripts/preload-bundle-audit.mjs",
+    "audit:renderer-stability": "node scripts/renderer-stability-audit.mjs",
+    "audit:daily-work": "node scripts/daily-work-audit.mjs",
+    "audit:field-pilot-v2": "node scripts/field-pilot-v2-audit.mjs",
+    "audit:ui-layout": "node scripts/ui-layout-audit.mjs",
+    "live:version-check": "powershell -ExecutionPolicy Bypass -File scripts/check-office-versions.ps1",
+    "release:hash": "node scripts/release-hash.mjs",
+    "release:notes": "node scripts/release-notes.mjs",
+    "test:behavior": "node scripts/behavior-regression-tests.mjs",
+    "release:candidate-check": "node scripts/production-candidate-check.mjs",
+    "release:dry-run": "node scripts/release-dry-run.mjs",
+    "release:hash:ps": "powershell -ExecutionPolicy Bypass -File scripts/release-hash.ps1",
+    "release:notes:ps": "powershell -ExecutionPolicy Bypass -File scripts/release-notes.ps1",
+    "release:candidate-check:ps": "powershell -ExecutionPolicy Bypass -File scripts/production-candidate-check.ps1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "electron": "41.7.1",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.8.3"
+  },
+  "build": {
+    "appId": "tr.baranekspertiz.hasarbotu",
+    "productName": "HasarBotu - Baran Ekspertiz",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist-ui/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "HasarBotu-Baran-Ekspertiz-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HasarBotu - Baran Ekspertiz",
+      "artifactName": "HasarBotu-Baran-Ekspertiz-Kurulum-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "HasarBotu-Baran-Ekspertiz-Tasinabilir-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "pdf2json": "^4.0.3"
+  }
+}
