@@ -1,7 +1,7 @@
 {
   "name": "hasarbotu-baran-ekspertiz",
-  "version": "0.4.10",
-  "description": "Baran Global Ekspertiz için Türkçe hasar dosyası takip ve ekspertiz asistanı uygulaması (Electron). v0.4.10: Fotoğraf seçimi artık plaka + dosya klasörü kimliği ile doğrulanıyor; aynı plaka ama farklı dosya/föy klasöründen seçim de hard-block edilir. Saha stabilite kontrolü yapıldı.",
+  "version": "0.4.11",
+  "description": "Baran Global Ekspertiz için Türkçe hasar dosyası takip ve ekspertiz asistanı uygulaması (Electron). v0.4.11: AI destekli, öğrenen ve önizlemeli İşçilik Dağıtıcı — Excel'i seç, tüm satırlar kural+öğrenme+fiyat listesiyle otomatik H..N işçilik sütunlarına dağıtılsın, önizle/düzelt/onayla; orijinal korunur, yedek alınır.",
   "main": "dist-electron/main/main.js",
   "author": "Baran Global Ekspertiz",
   "license": "UNLICENSED",

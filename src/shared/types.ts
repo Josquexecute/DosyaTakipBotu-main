@@ -435,6 +435,71 @@ export interface PartsPhotoAnalysis {
   warnings: string[];
 }
 
+/** v0.4.11: AI destekli İşçilik Dağıtıcı — tip tanımları (LaborCategory/LaborConfidence labor-rules'tan). */
+export interface AutoLaborColumnInfo {
+  /** Sütun harfi (ör. "H"). */
+  column: string;
+  /** Bu sütunun karşılık geldiği işçilik kategorisi. */
+  category: AutoLaborCategory;
+  /** Excel başlığındaki metin. */
+  header: string;
+}
+
+export type AutoLaborCategory = 'Kaporta' | 'Boya' | 'Mekanik' | 'Elektrik' | 'Cam' | 'Döşeme/Kilit' | 'Onarım';
+export type AutoLaborConfidence = 'Yüksek' | 'Orta' | 'Düşük';
+export type AutoLaborSource = 'learned' | 'rules' | 'price-list' | 'fallback';
+
+export interface AutoLaborRowPreview {
+  rowNumber: number;
+  partName: string;
+  partCode: string;
+  partAmount: number | null;
+  categories: AutoLaborCategory[];
+  amounts: Partial<Record<AutoLaborCategory, number>>;
+  /** Hedef kategori sütunlarındaki mevcut (eski) değerler (sütun harfi → değer). */
+  oldByColumn: Record<string, number | null>;
+  confidence: AutoLaborConfidence;
+  needsReview: boolean;
+  reason: string;
+  source: AutoLaborSource;
+  /** Hedef hücrelerden herhangi birinde formül var mı. */
+  hasFormula: boolean;
+  /** Bu satırda mevcut değer değişecek mi (eski≠yeni). */
+  changed: boolean;
+}
+
+export interface AutoLaborSummary {
+  processed: number;
+  highConfidence: number;
+  needsReview: number;
+  changedRows: number;
+  totalsByCategory: Partial<Record<AutoLaborCategory, number>>;
+}
+
+export interface AutoLaborPreview {
+  filePath: string;
+  fileName: string;
+  sheetName: string;
+  /** Kategori → sütun eşlemesi (başlıktan tespit edilen H..N kolonları). */
+  columns: AutoLaborColumnInfo[];
+  partNameColumn: string;
+  partCodeColumn: string;
+  partAmountColumn: string;
+  rows: AutoLaborRowPreview[];
+  summary: AutoLaborSummary;
+  warnings: string[];
+  formulaCellsFound: number;
+}
+
+export interface AutoLaborSaveResult {
+  outputPath: string;
+  backupPath: string;
+  changedRows: number;
+  needsReviewRows: number;
+  learnedCount: number;
+  writtenCells: number;
+}
+
 export interface ScanReport {
   startedAt: string;
   finishedAt: string;

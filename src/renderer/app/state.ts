@@ -1,4 +1,4 @@
-import type { AppSettings, CaseIndexItem, DashboardSummary, ExcelLaborDistributeResult, ExcelLaborPreview, FolderBrowseResult, PartsPhotoAnalysis, ScanReport, TrackingFile, DeploymentStatus } from '../../shared/types';
+import type { AppSettings, AutoLaborPreview, AutoLaborSaveResult, CaseIndexItem, DashboardSummary, ExcelLaborDistributeResult, ExcelLaborPreview, FolderBrowseResult, PartsPhotoAnalysis, ScanReport, TrackingFile, DeploymentStatus } from '../../shared/types';
 import type { UserPartTerm } from '../../shared/parca-sozlugu';
 
 export interface UiState {
@@ -26,6 +26,12 @@ export interface UiState {
   rootSetupRequired: boolean;
   laborExcelPreview: ExcelLaborPreview | null;
   laborExcelResult: ExcelLaborDistributeResult | null;
+  /** v0.4.11 AI İşçilik Dağıtıcı: önizleme, kullanıcı düzeltmeleri (satır→kategori→tutar), kayıt sonucu. */
+  autoLaborPreview: AutoLaborPreview | null;
+  autoLaborEdits: Record<number, Record<string, number>>;
+  autoLaborSaving: boolean;
+  autoLaborResult: AutoLaborSaveResult | null;
+  autoLaborAllowFormula: boolean;
   /** İşçilik tablosunda kullanıcının elle değiştirdiği satır tutarları (satır no → tutar). */
   laborRowOverrides: Record<number, number>;
   /** AI ile okunan parça listesi fotoğrafı analizi. */
@@ -108,6 +114,11 @@ export const state: UiState = {
   rootSetupRequired: false,
   laborExcelPreview: null,
   laborExcelResult: null,
+  autoLaborPreview: null,
+  autoLaborEdits: {},
+  autoLaborSaving: false,
+  autoLaborResult: null,
+  autoLaborAllowFormula: false,
   laborRowOverrides: {},
   partsAnalysis: null,
   partsAnalyzing: false,

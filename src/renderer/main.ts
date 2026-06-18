@@ -1,6 +1,9 @@
 import type {
   ApiResult,
   AppSettings,
+  AutoLaborCategory,
+  AutoLaborPreview,
+  AutoLaborSaveResult,
   CaseIndexItem,
   CaseListExportResult,
   CaseListExportRow,
@@ -193,7 +196,7 @@ function restoreFocusedControl(snapshot: FocusSnapshot | null): void {
 
 function stableSelectorFor(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): string | null {
   if (element.id) return `#${cssEscape(element.id)}`;
-  for (const attr of ['field', 'checklist', 'todoComplete', 'todoTitle', 'todoPriority', 'todoAssigned', 'todoDue', 'noteText', 'setting', 'settingInterval', 'userRename', 'listFilter', 'laborAmount', 'partCanonical', 'statusFilter', 'statusSort', 'statusResponsible', 'statusToggle']) {
+  for (const attr of ['field', 'checklist', 'todoComplete', 'todoTitle', 'todoPriority', 'todoAssigned', 'todoDue', 'noteText', 'setting', 'settingInterval', 'userRename', 'listFilter', 'laborAmount', 'autoLaborAmount', 'partCanonical', 'statusFilter', 'statusSort', 'statusResponsible', 'statusToggle']) {
     const value = element.dataset[attr];
     if (value !== undefined) return `[data-${camelToKebab(attr)}="${cssEscape(value)}"]`;
   }
@@ -271,6 +274,10 @@ function wireEvents(): void {
       updateLaborOverride(target);
       return;
     }
+    if (target instanceof HTMLInputElement && target.dataset.autoLaborAmount !== undefined) {
+      updateAutoLaborEdit(target);
+      return;
+    }
     if (target.dataset.listFilter === 'responsible') {
       state.responsibleFilter = target.value || 'all';
       state.caseListScrollTop = 0;
@@ -306,6 +313,10 @@ function wireEvents(): void {
     }
     if (target.id === 'labor-target-column' || target.id === 'labor-use-price-list') {
       void refreshLaborExcelPreview();
+      return;
+    }
+    if (target instanceof HTMLInputElement && target.dataset.autoLaborToggle === 'formula') {
+      state.autoLaborAllowFormula = target.checked;
       return;
     }
     // v0.4.6: Kaydırılabilir parça öneri listesi (select) → ilgili "Gerçek Ad" input'unu doldurur.
@@ -466,6 +477,9 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'choose-labor-excel': await chooseLaborExcel(); break;
     case 'distribute-labor-excel': await distributeLaborExcel(); break;
     case 'reset-labor-overrides': state.laborRowOverrides = {}; render(); break;
+    case 'auto-labor-preview': await autoLaborPreviewAction(); break;
+    case 'auto-labor-save': await autoLaborSaveAction(); break;
+    case 'auto-labor-clear': state.autoLaborPreview = null; state.autoLaborEdits = {}; state.autoLaborResult = null; state.autoLaborAllowFormula = false; render(); break;
     case 'analyze-parts-photo': await analyzePartsPhotoAction(); break;
     case 'clear-parts-analysis': state.partsAnalysis = null; render(); break;
     case 'learn-part-term': await learnPartTermAction(Number(element?.dataset.partIndex ?? -1)); break;
@@ -886,6 +900,92 @@ function updateLaborOverride(input: HTMLInputElement): void {
     state.laborRowOverrides[rowNumber] = Math.round(amount * 100) / 100;
   }
   updateLaborLiveTotal();
+}
+
+// v0.4.11 AI İşçilik Dağıtıcı — kullanıcının önizlemede elle düzelttiği tutarı kaydeder (re-render yok, focus korunur).
+function updateAutoLaborEdit(input: HTMLInputElement): void {
+  const rowNumber = Number(input.dataset.row);
+  const category = input.dataset.cat ?? '';
+  if (!Number.isInteger(rowNumber) || !category) return;
+  const raw = input.value.trim();
+  const edits = state.autoLaborEdits[rowNumber] ?? {};
+  if (raw === '') {
+    edits[category] = 0; // boş → yazma (0)
+  } else {
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount < 0) return;
+    edits[category] = Math.round(amount);
+  }
+  state.autoLaborEdits[rowNumber] = edits;
+}
+
+async function autoLaborPreviewAction(): Promise<void> {
+  if (state.autoLaborSaving) return;
+  setToast('Excel seçiliyor ve tüm satırlar analiz ediliyor…', 'info');
+  const result = await window.hasarbotu.autoLaborPreview<AutoLaborPreview>();
+  if (!result.ok) {
+    if (!/iptal/i.test(result.error.message)) reportOperationError(result.error.message);
+    return;
+  }
+  state.autoLaborPreview = result.data;
+  state.autoLaborEdits = {};
+  state.autoLaborResult = null;
+  state.autoLaborAllowFormula = false;
+  const s = result.data.summary;
+  setToast(`AI dağıtım hazır: ${s.processed} satır işlendi • ${s.highConfidence} yüksek güven • ${s.needsReview} kontrol gerekli.`, 'success');
+  render();
+}
+
+async function autoLaborSaveAction(): Promise<void> {
+  const preview = state.autoLaborPreview;
+  if (!preview || state.autoLaborSaving) return;
+  if (preview.columns.length === 0) { reportOperationError('İşçilik kategori sütunları bulunamadı; bu Excel için AI yazamaz.'); return; }
+  const validCategories = new Set<AutoLaborCategory>(preview.columns.map((c) => c.category));
+  const rows: Array<{ rowNumber: number; amounts: Partial<Record<AutoLaborCategory, number>> }> = [];
+  const corrections: NonNullable<Parameters<typeof window.hasarbotu.autoLaborSave>[0]['corrections']> = [];
+  for (const row of preview.rows) {
+    const edits = state.autoLaborEdits[row.rowNumber];
+    const amounts: Partial<Record<AutoLaborCategory, number>> = {};
+    for (const [cat, value] of Object.entries(row.amounts)) {
+      if (typeof value === 'number' && value > 0) amounts[cat as AutoLaborCategory] = value;
+    }
+    if (edits) {
+      for (const [cat, value] of Object.entries(edits)) {
+        if (!validCategories.has(cat as AutoLaborCategory)) continue;
+        if (value > 0) amounts[cat as AutoLaborCategory] = Math.round(value);
+        else delete amounts[cat as AutoLaborCategory];
+      }
+    }
+    if (Object.keys(amounts).length > 0) rows.push({ rowNumber: row.rowNumber, amounts });
+    if (edits && Object.keys(edits).length > 0) {
+      corrections.push({
+        alias: row.partName,
+        ...(row.partCode ? { partCode: row.partCode } : {}),
+        categories: Object.keys(amounts) as AutoLaborCategory[],
+        amounts,
+        amountLogic: 'kullanıcı düzeltmesi (AI dağıtıcı)'
+      });
+    }
+  }
+  if (rows.length === 0) { reportOperationError('Yazılacak işçilik tutarı bulunamadı.'); return; }
+  state.autoLaborSaving = true;
+  render();
+  const result = await window.hasarbotu.autoLaborSave<AutoLaborSaveResult>({
+    filePath: preview.filePath,
+    rows,
+    columns: preview.columns,
+    allowFormulaReplacement: state.autoLaborAllowFormula,
+    corrections
+  });
+  state.autoLaborSaving = false;
+  if (!result.ok) {
+    if (!/iptal/i.test(result.error.message)) reportOperationError(result.error.message);
+    render();
+    return;
+  }
+  state.autoLaborResult = result.data;
+  setToast(`AI işçilik kaydedildi: ${result.data.changedRows} satır • ${result.data.learnedCount} öğrenildi • yedek alındı.`, 'success');
+  render();
 }
 
 function updateLaborLiveTotal(): void {

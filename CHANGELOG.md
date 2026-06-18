@@ -2,6 +2,17 @@
 
 Tüm önemli değişiklikler bu dosyada tutulur. Sürümleme [SemVer](https://semver.org/lang/tr/) yaklaşımına yakındır.
 
+## [0.4.11] — 2026-06-18
+
+### Eklendi — AI destekli, öğrenen ve önizlemeli İşçilik Dağıtıcı
+- **Portal Excel İşçilik Dağıtıcı'ya yeni "AI Otomatik İşçilik Dağıtıcı" akışı eklendi** (eski manuel/kolon-seçmeli akış geriye dönük korundu). Kullanıcı Excel'i seçer; sistem **tüm satırları analiz edip** parça adına/koduna göre **H..N işçilik kategori sütunlarını (Kaporta/Boya/Mekanik/Elektrik/Cam/Döşeme-Kilit/Onarım) otomatik doldurur**, **kaydetmeden önce önizleme** gösterir; kullanıcı düzeltip onaylar.
+  - Her satıra **işçilik kararı + güven seviyesi (Yüksek/Orta/Düşük) + açıklanabilir gerekçe**; emin olunmayan satır boş kalmaz, en mantıklı işçilik yazılır ve **"Kontrol gerekli"** işaretlenir.
+  - **Önizleme:** satır no, parça, kod, eski→yeni H..N değerleri (elle düzeltilebilir), kategori, güven, kontrol bayrağı, gerekçe + özet rapor (işlenen/yüksek güven/kontrol gerekli/değişen satır + kategori bazında toplamlar).
+  - **Öğrenme:** kullanıcının elle düzelttiği kararlar `labor-learning.json`'a kaydedilir; sonraki Excel'lerde aynı/benzer parça (fuzzy eşleştirme) geldiğinde **kuraldan ÖNCE** kullanılır.
+  - **Güvenlik:** kaydetmeden Excel'e yazılmaz; **kaydetmeden önce orijinalin yedeği alınır**; çıktı ayrı dosyaya yazılır (orijinal korunur); **hücre stilleri korunur**, tutarlar **kuruşsuz ve 250 TL katı**; **formül ezme yalnızca açık onayla**.
+  - **Sınıflandırma kuralları + dağıtım kısıtları:** motor satırına cam, cam parçasına mekanik, elektrik parçasına kaporta/boya yazılmaz (far/stop dış parçalarda "Kontrol gerekli"); kaporta + boya birlikte dağıtılabilir. Çevrimdışı; yerel kural motoru + öğrenen sözlük + fiyat listesi (internet gerekmez).
+- **Yeni modüller (Excel AI mantığı tek dosyaya yığılmadan):** `src/shared/labor-rules.ts`, `src/shared/labor-learning-dictionary.ts`, `src/main/services/labor-classifier-service.ts`, `src/main/services/labor-preview-service.ts`, `src/main/services/labor-excel-writer.ts`. IPC: `labor:auto-preview`, `labor:auto-save`. 19 yeni davranış testi (kurallar, sınıflandırma, öğrenme, yuvarlama, uçtan uca önizleme + güvenli yazma + yedek + orijinal korunur).
+
 ## [0.4.10] — 2026-06-18
 
 ### Güvenlik / Engelleme (güçlendirme)

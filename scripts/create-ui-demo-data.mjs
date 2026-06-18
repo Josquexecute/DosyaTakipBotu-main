@@ -136,13 +136,13 @@ const officeFolder = path.join(normalRoot, '_HASARBOTU_OFFICE');
 await fs.mkdir(officeFolder, { recursive: true });
 await writeJson(path.join(officeFolder, 'office-version.json'), {
   schemaVersion: 1,
-  expectedVersion: '0.4.10',
+  expectedVersion: '0.4.11',
   updatedAt: new Date().toISOString(),
   updatedBy: 'UI-DEMO',
   clients: {
     'UI-DEMO-PC': {
       computer: 'UI-DEMO-PC',
-      appVersion: '0.4.10',
+      appVersion: '0.4.11',
       user: 'Demo Raportor',
       rootPath: normalRoot,
       recordedAt: new Date().toISOString()

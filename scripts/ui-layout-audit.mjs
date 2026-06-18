@@ -261,14 +261,14 @@ const dashboard = {
 // güncel-olmayan ama "hedef sürüm" uyarısı taşıyan bir durum kullanılır.
 const deployment = {
   activeComputer: 'TEST-PC',
-  appVersion: '0.4.10',
-  expectedVersion: '0.4.10',
+  appVersion: '0.4.11',
+  expectedVersion: '0.4.11',
   isOutdated: false,
   versionCheckAvailable: false,
   warnings: ['Ofis hedef sürüm dosyası bulunamadı. Sürüm kontrolü için bu PC kaydedilmeli.'],
   checkedAt: now,
   canWriteClientStatus: true,
-  clients: [{ computer: 'TEST-PC', appVersion: '0.4.10', user: 'Ömer Faruk İşleyen', recordedAt: now }]
+  clients: [{ computer: 'TEST-PC', appVersion: '0.4.11', user: 'Ömer Faruk İşleyen', recordedAt: now }]
 };
 
 function folderBrowseMock(folderPath) {

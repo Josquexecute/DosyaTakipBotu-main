@@ -18,6 +18,12 @@ import { parsePartsResponse } from '../dist-electron/main/import/parts-list-anal
 import { normalizePartName } from '../dist-electron/shared/parca-sozlugu.js';
 import { evaluatePlateMatch, looksLikePlate } from '../dist-electron/shared/plate-match.js';
 import { resolvePlateFromPath, resolveCaseFolderFromPath, assertSelectedPhotoMatchesCase } from '../dist-electron/main/services/case-asset-guard.js';
+import { classifyByRules, applyDistributionConstraints, roundTo250 } from '../dist-electron/shared/labor-rules.js';
+import { lookupLearned, recordLearned, laborNameSimilarity } from '../dist-electron/shared/labor-learning-dictionary.js';
+import { classifyLaborRow } from '../dist-electron/main/services/labor-classifier-service.js';
+import { buildAutoLaborPreview } from '../dist-electron/main/services/labor-preview-service.js';
+import { saveAutoLaborExcel } from '../dist-electron/main/services/labor-excel-writer.js';
+import { buildGenericLaborWorkbook, loadWorkbook } from '../dist-electron/main/import/excel-importer.js';
 
 const checks = [];
 function ok(name) { checks.push({ name, ok: true }); console.log(`TAMAM - ${name}`); }
@@ -191,6 +197,58 @@ assert(samePlateDiffFolderError && samePlateDiffFolderError.code === 'PHOTO_PLAT
 let blockedSubfolder = false;
 try { assertSelectedPhotoMatchesCase({ activePlate: '34 BOP 660', activeFolderPath: activeFolder, selectedFilePath: path.join(activeFolder, 'EVRAK', 'e.jpg') }); } catch { blockedSubfolder = true; }
 assert(!blockedSubfolder, 'assertSelectedPhotoMatchesCase aktif dosyanın alt klasöründeki fotoğrafı engellemez', `blocked=${blockedSubfolder}`);
+
+// === v0.4.11: AI destekli İşçilik Dağıtıcı ===
+assert(roundTo250(2400) === 2500 && roundTo250(2625) === 2750 && roundTo250(0) === 0, 'roundTo250 tutarı 250 katına yuvarlar (kuruşsuz)', `${roundTo250(2400)}/${roundTo250(2625)}/${roundTo250(0)}`);
+
+const clTampon = classifyByRules('Ön Tampon');
+assert(clTampon.categories.includes('Kaporta') && clTampon.categories.includes('Boya'), 'classifyByRules tamponu Kaporta+Boya sınıflar', JSON.stringify(clTampon.categories));
+assert(classifyByRules('Alternatör').categories[0] === 'Mekanik', 'classifyByRules alternatörü Mekanik sınıflar', JSON.stringify(classifyByRules('Alternatör')));
+const clFar = classifyByRules('Sağ Ön Far');
+assert(clFar.categories[0] === 'Elektrik' && clFar.needsReview === true, 'classifyByRules farı Elektrik + kontrol gerekli yapar', JSON.stringify(clFar));
+assert(classifyByRules('Ön Cam').categories[0] === 'Cam', 'classifyByRules camı Cam sınıflar', JSON.stringify(classifyByRules('Ön Cam')));
+assert(classifyByRules('Sürücü Koltuğu').categories[0] === 'Döşeme/Kilit', 'classifyByRules koltuğu Döşeme/Kilit sınıflar', JSON.stringify(classifyByRules('Sürücü Koltuğu')));
+const clUnknown = classifyByRules('Zxqw Bilinmeyen Parça');
+assert(clUnknown.confidence === 'Düşük' && clUnknown.needsReview === true && clUnknown.categories.length > 0, 'classifyByRules bilinmeyen parçayı doldurur ama kontrol gerekli işaretler', JSON.stringify(clUnknown));
+const constrained = applyDistributionConstraints(['Mekanik', 'Cam'], 'MOTOR');
+assert(!constrained.categories.includes('Cam'), 'applyDistributionConstraints motor satırından cam işçiliğini çıkarır', JSON.stringify(constrained));
+
+// Öğrenen sözlük kuraldan önceliklidir.
+const learnedEntries = recordLearned([], { alias: 'Ön Tampon', categories: ['Mekanik'] });
+const learnedDecision = classifyLaborRow('Ön Tampon', '', '', learnedEntries);
+assert(learnedDecision.source === 'learned' && learnedDecision.categories[0] === 'Mekanik', 'classifyLaborRow öğrenilen kararı kuralın önüne alır', JSON.stringify(learnedDecision));
+const lk = lookupLearned(learnedEntries, 'Ön Tampon');
+assert(lk && lk.matchType === 'exact', 'lookupLearned tam eşleşmeyi bulur', JSON.stringify(lk));
+assert(laborNameSimilarity('ön tampon', 'on tampon orjinal') > 0.3, 'laborNameSimilarity benzer adları yakalar', String(laborNameSimilarity('ön tampon', 'on tampon orjinal')));
+
+// Uçtan uca: kategori-kolonlu Excel önizleme + güvenli çoklu-kolon yazma + orijinal korunur + yedek.
+const aiTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'hb-ai-labor-'));
+const aiHeaders = ['Parça', 'Kod', 'Parça Tutarı', 'Kaporta', 'Boya', 'Mekanik', 'Elektrik', 'Cam', 'Döşeme/Kilit', 'Onarım'];
+const aiRows = [
+  ['Ön Tampon', 'TMP-1', 3000, '', '', '', '', '', '', ''],
+  ['Alternatör', 'ALT-9', 1500, '', '', '', '', '', '', ''],
+  ['Ön Cam', 'CAM-2', 2000, '', '', '', '', '', '', '']
+];
+const aiInput = path.join(aiTmp, 'ai-input.xlsx');
+await fs.writeFile(aiInput, buildGenericLaborWorkbook(aiHeaders, aiRows));
+const aiPreview = await buildAutoLaborPreview(aiInput, []);
+assert(aiPreview.columns.length === 7, 'buildAutoLaborPreview 7 işçilik kategori sütununu başlıktan tespit eder', JSON.stringify(aiPreview.columns.map((c) => c.category)));
+const pvTampon = aiPreview.rows.find((r) => r.partName === 'Ön Tampon');
+assert(pvTampon && pvTampon.amounts.Kaporta > 0 && pvTampon.amounts.Boya > 0, 'önizleme tamponu Kaporta+Boya doldurur', JSON.stringify(pvTampon?.amounts));
+const pvAlt = aiPreview.rows.find((r) => r.partName === 'Alternatör');
+assert(pvAlt && pvAlt.amounts.Mekanik > 0 && !pvAlt.amounts.Cam, 'önizleme alternatöre Mekanik yazar, Cam yazmaz', JSON.stringify(pvAlt?.amounts));
+
+const aiOutput = path.join(aiTmp, 'ai-output.xlsx');
+const aiSave = await saveAutoLaborExcel({ filePath: aiInput, outputPath: aiOutput, rows: aiPreview.rows.map((r) => ({ rowNumber: r.rowNumber, amounts: r.amounts })), columns: aiPreview.columns });
+assert(aiSave.writtenCells > 0 && aiSave.changedRows >= 2, 'saveAutoLaborExcel onaylı tutarları yazar', JSON.stringify(aiSave));
+const kaportaCol = aiPreview.columns.find((c) => c.category === 'Kaporta').column;
+const outWb = await loadWorkbook(aiOutput);
+const writtenCell = outWb.sheet.cells.find((c) => c.ref === `${kaportaCol}${pvTampon.rowNumber}`);
+assert(writtenCell && Number(writtenCell.numeric) === pvTampon.amounts.Kaporta, 'çıktı Excel Kaporta sütununa doğru tutarı yazdı', JSON.stringify({ written: writtenCell?.numeric, beklenen: pvTampon.amounts.Kaporta }));
+const origWb = await loadWorkbook(aiInput);
+const origCell = origWb.sheet.cells.find((c) => c.ref === `${kaportaCol}${pvTampon.rowNumber}`);
+assert(!origCell || origCell.numeric === null, 'orijinal Excel değiştirilmedi (Kaporta hücresi hâlâ boş)', JSON.stringify(origCell ?? null));
+assert(await fs.stat(aiSave.backupPath).then(() => true).catch(() => false), 'orijinalin yedeği oluşturuldu', aiSave.backupPath);
 
 const proportional = distributeAmounts([100, 200, 300], 1200);
 assert(JSON.stringify(proportional) === JSON.stringify([200, 400, 600]), 'distributeAmounts oranlı dağıtım yapar', JSON.stringify(proportional));

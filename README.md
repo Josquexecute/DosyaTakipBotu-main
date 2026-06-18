@@ -2,9 +2,9 @@
 
 Türkçe, masaüstü (Electron) **hasar dosyası takip ve ekspertiz asistanı** uygulaması. Sigorta hasar dosyalarını klasör yapısı üzerinden tarar; evrak/fotoğraf kontrolü, işçilik/parça hesabı, portal kontrol listesi, rücu/KTT/ağır hasar takibi ve çok bilgisayarlı (pCloud) çakışma yönetimi sağlar.
 
-**v0.4.10** ile gelen yenilik: tüm dosyaların **sayfalı Durum Panosu** (50 dosya/sayfa). Ayrıca **AI destekli parça listesi fotoğrafı okuma** — servislerin el yazısıyla gönderdiği karışık parça listelerini okuyup usta dilini gerçek parça adına çeviren, zamanla öğrenen bir asistan.
+**v0.4.5** ile gelen yenilik: tüm dosyaların **sayfalı Durum Panosu** (50 dosya/sayfa). Ayrıca **AI destekli parça listesi fotoğrafı okuma** — servislerin el yazısıyla gönderdiği karışık parça listelerini okuyup usta dilini gerçek parça adına çeviren, zamanla öğrenen bir asistan.
 
-> Sürüm: **0.4.10** · Lisans: UNLICENSED (özel/şirket içi) · Platform: Windows (x64)
+> Sürüm: **0.4.5** · Lisans: UNLICENSED (özel/şirket içi) · Platform: Windows (x64)
 
 ---
 

@@ -77,7 +77,7 @@ interface ZipEntry {
   data: Buffer;
 }
 
-interface SheetCell {
+export interface SheetCell {
   ref: string;
   column: string;
   row: number;
@@ -86,7 +86,7 @@ interface SheetCell {
   hasFormula: boolean;
 }
 
-interface ParsedSheet {
+export interface ParsedSheet {
   xml: string;
   name: string;
   path: string;
@@ -281,7 +281,7 @@ function laborPreviewFromPlan(absolutePath: string, plan: CandidatePlan): ExcelL
   return preview;
 }
 
-async function loadWorkbook(filePath: string): Promise<{ entries: ZipEntry[]; sheet: ParsedSheet }> {
+export async function loadWorkbook(filePath: string): Promise<{ entries: ZipEntry[]; sheet: ParsedSheet }> {
   const stat = await fs.stat(filePath);
   if (stat.size > MAX_XLSX_BYTES) throw new Error(`Excel dosyasi guvenli okuma sinirini asti: ${Math.round(stat.size / 1024 / 1024)} MB.`);
   const entries = readZipEntries(await fs.readFile(filePath));
@@ -593,6 +593,74 @@ function insertCellXmlInColumnOrder(rowBody: string, amountColumn: string, rowNu
 function buildAmountCellXml(cellRef: string, attrs: string, value: string): string {
   const style = getXmlAttribute(attrs, 's');
   return `<c r="${cellRef}"${style ? ` s="${escapeXml(style)}"` : ''}><v>${value}</v></c>`;
+}
+
+export interface CategoryLaborWrite {
+  rowNumber: number;
+  /** Hedef sütun harfi (ör. "H"). */
+  column: string;
+  /** Yazılacak tam sayı tutar (kuruşsuz). */
+  value: number;
+}
+
+export interface CategoryLaborWriteResult {
+  outputPath: string;
+  writtenCells: number;
+  formulaCellsReplaced: number;
+}
+
+/**
+ * v0.4.11: AI İşçilik Dağıtıcı için ÇOKLU KOLON güvenli yazıcı.
+ * - Orijinal dosya korunur (çıktı ayrı dosyaya yazılır = yedek).
+ * - Hücre stili (s) korunur; tutarlar tam sayı (kuruşsuz) yazılır.
+ * - Hedef hücrelerde formül varsa ve allowFormulaReplacement değilse hata fırlatır (formül ezilmez).
+ */
+export async function writeCategoryLaborExcel(
+  filePath: string,
+  outputPath: string,
+  writes: CategoryLaborWrite[],
+  options: { allowFormulaReplacement?: boolean } = {}
+): Promise<CategoryLaborWriteResult> {
+  const absolutePath = path.resolve(filePath);
+  const absoluteOutput = path.resolve(outputPath);
+  assertXlsxPath(absolutePath);
+  if (path.extname(absoluteOutput).toLowerCase() !== '.xlsx') throw new Error('Çıktı dosyası .xlsx olmalıdır.');
+  if (samePath(absolutePath, absoluteOutput)) throw new Error('Çıktı dosyası girdi Excel dosyasıyla aynı olamaz. Orijinal dosya korunmalıdır.');
+
+  const workbook = await loadWorkbook(absolutePath);
+  const cellByRef = new Map(workbook.sheet.cells.map((cell) => [cell.ref, cell] as const));
+  const cleanWrites = writes
+    .filter((w) => Number.isInteger(w.rowNumber) && w.rowNumber > 1 && /^[A-Z]+$/i.test(w.column) && Number.isFinite(w.value) && w.value > 0)
+    .map((w) => ({ rowNumber: w.rowNumber, column: w.column.toUpperCase(), value: Math.max(0, Math.round(w.value)) }));
+
+  const formulaCells = cleanWrites.filter((w) => cellByRef.get(`${w.column}${w.rowNumber}`)?.hasFormula === true);
+  if (formulaCells.length > 0 && !options.allowFormulaReplacement) {
+    throw new Error(`${formulaCells.length} hedef hücrede formül var. Formüller sabit tutara çevrilecekse kullanıcı açık onay kutusunu işaretlemelidir.`);
+  }
+
+  let nextXml = workbook.sheet.xml;
+  for (const w of cleanWrites) {
+    const cellRef = `${w.column}${w.rowNumber}`;
+    const value = String(w.value);
+    const existingCellRegex = new RegExp(`<c\\b(?=[^>]*\\br="${escapeRegExp(cellRef)}")([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/c>)`);
+    if (existingCellRegex.test(nextXml)) {
+      nextXml = nextXml.replace(existingCellRegex, (_m: string, attrs: string) => buildAmountCellXml(cellRef, attrs, value));
+      continue;
+    }
+    const rowRegex = new RegExp(`(<row\\b(?=[^>]*\\br="${w.rowNumber}")[^>]*>)([\\s\\S]*?)(<\\/row>)`);
+    if (rowRegex.test(nextXml)) {
+      nextXml = nextXml.replace(rowRegex, (_match, open: string, body: string, close: string) => `${open}${insertCellXmlInColumnOrder(body, w.column, w.rowNumber, buildAmountCellXml(cellRef, '', value))}${close}`);
+    }
+  }
+
+  const entries = workbook.entries.map((entry) => {
+    if (entry.name === workbook.sheet.path) return { ...entry, data: Buffer.from(nextXml, 'utf-8'), method: 8 };
+    if (entry.name === 'xl/workbook.xml') return { ...entry, data: Buffer.from(ensureFullCalcOnLoad(entry.data.toString('utf-8')), 'utf-8'), method: 8 };
+    return entry;
+  });
+  await fs.mkdir(path.dirname(absoluteOutput), { recursive: true });
+  await fs.writeFile(absoluteOutput, writeZip(entries));
+  return { outputPath: absoluteOutput, writtenCells: cleanWrites.length, formulaCellsReplaced: formulaCells.length };
 }
 
 function parseSheetCells(xml: string, sharedStrings: string[]): SheetCell[] {
@@ -910,6 +978,31 @@ export function buildMinimalLaborWorkbook(rows: Array<{ description: string; amo
     zipEntry('xl/workbook.xml', `${XML_DECLARATION}<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="İşçilik" sheetId="1" r:id="rId1"/></sheets></workbook>`),
     zipEntry('xl/_rels/workbook.xml.rels', `${XML_DECLARATION}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`),
     zipEntry('xl/worksheets/sheet1.xml', `${XML_DECLARATION}<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`)
+  ];
+  return writeZip(entries);
+}
+
+/** v0.4.11: Başlık satırı + veri satırlarından genel bir xlsx üretir (test ve AI dağıtıcı senaryoları için). */
+export function buildGenericLaborWorkbook(headers: string[], dataRows: Array<Array<string | number | null>>): Buffer {
+  const colLetter = (index: number): string => {
+    let n = index + 1;
+    let s = '';
+    while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+    return s;
+  };
+  const cellXml = (col: string, rowNum: number, value: string | number | null): string => {
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'number' && Number.isFinite(value)) return `<c r="${col}${rowNum}"><v>${value}</v></c>`;
+    return `<c r="${col}${rowNum}" t="inlineStr"><is><t>${escapeXml(String(value))}</t></is></c>`;
+  };
+  const headerRow = `<row r="1">${headers.map((h, i) => cellXml(colLetter(i), 1, h)).join('')}</row>`;
+  const bodyRows = dataRows.map((row, ri) => `<row r="${ri + 2}">${row.map((v, ci) => cellXml(colLetter(ci), ri + 2, v)).join('')}</row>`).join('');
+  const entries: ZipEntry[] = [
+    zipEntry('[Content_Types].xml', `${XML_DECLARATION}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`),
+    zipEntry('_rels/.rels', `${XML_DECLARATION}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`),
+    zipEntry('xl/workbook.xml', `${XML_DECLARATION}<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Portal" sheetId="1" r:id="rId1"/></sheets></workbook>`),
+    zipEntry('xl/_rels/workbook.xml.rels', `${XML_DECLARATION}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`),
+    zipEntry('xl/worksheets/sheet1.xml', `${XML_DECLARATION}<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${headerRow}${bodyRows}</sheetData></worksheet>`)
   ];
   return writeZip(entries);
 }

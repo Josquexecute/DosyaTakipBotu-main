@@ -1,6 +1,10 @@
 import type {
   ApiResult,
   AppSettings,
+  AutoLaborCategory,
+  AutoLaborColumnInfo,
+  AutoLaborPreview,
+  AutoLaborSaveResult,
   CaseIndexItem,
   CaseListExportResult,
   CaseListExportRow,
@@ -41,6 +45,8 @@ export const IPC_INVOKE_CHANNELS = {
   partsGetUserTerms: 'parts:get-user-terms',
   partsLearnTerm: 'parts:learn-term',
   partsExportLaborExcel: 'parts:export-labor-excel',
+  laborAutoPreview: 'labor:auto-preview',
+  laborAutoSave: 'labor:auto-save',
   casesExportExcel: 'cases:export-excel',
   trackingUpdateChecklist: 'tracking:update-checklist',
   trackingAddTodo: 'tracking:add-todo',
@@ -113,6 +119,16 @@ export interface PartsAnalyzePhotoArgs {
   activeFolderPath?: string;
 }
 
+/** v0.4.11: AI İşçilik Dağıtıcı — kaydetme argümanları. */
+export interface LaborAutoSaveArgs {
+  filePath: string;
+  rows: Array<{ rowNumber: number; amounts: Partial<Record<AutoLaborCategory, number>> }>;
+  columns: AutoLaborColumnInfo[];
+  allowFormulaReplacement?: boolean;
+  /** Kullanıcının elle düzelttiği satırlar — öğrenen sözlüğe kaydedilir. */
+  corrections?: Array<{ alias: string; partCode?: string; categories: AutoLaborCategory[]; amounts?: Partial<Record<AutoLaborCategory, number>>; amountLogic?: string }>;
+}
+
 export interface CaseListExportExcelArgs {
   rows: CaseListExportRow[];
 }
@@ -142,6 +158,8 @@ export interface HasarbotuApi {
   inspectLaborExcel<T = ExcelLaborPreview>(args: LaborInspectExcelArgs): Promise<ApiResult<T>>;
   distributeLaborExcel<T = ExcelLaborDistributeResult>(args: LaborDistributeExcelArgs): Promise<ApiResult<T>>;
   analyzePartsPhoto<T = PartsPhotoAnalysis>(args?: PartsAnalyzePhotoArgs): Promise<ApiResult<T>>;
+  autoLaborPreview<T = AutoLaborPreview>(): Promise<ApiResult<T>>;
+  autoLaborSave<T = AutoLaborSaveResult>(args: LaborAutoSaveArgs): Promise<ApiResult<T>>;
   getPartUserTerms<T = UserPartTerm[]>(): Promise<ApiResult<T>>;
   learnPartTerm<T = UserPartTerm[]>(args: PartsLearnTermArgs): Promise<ApiResult<T>>;
   exportPartsLaborExcel<T = CaseListExportResult>(args: PartsExportLaborArgs): Promise<ApiResult<T>>;

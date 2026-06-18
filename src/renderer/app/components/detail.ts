@@ -1,4 +1,4 @@
-import type { CaseIndexItem, CaseTrackingIssue, ChecklistItem, ExcelLaborPreview, ExcelLaborRowPreview, NoteItem, PartsPhotoAnalysis, PhotoPreview, TodoItem } from '../../../shared/types';
+import type { AutoLaborPreview, AutoLaborRowPreview, AutoLaborSaveResult, CaseIndexItem, CaseTrackingIssue, ChecklistItem, ExcelLaborPreview, ExcelLaborRowPreview, NoteItem, PartsPhotoAnalysis, PhotoPreview, TodoItem } from '../../../shared/types';
 import type { UiState, DetailTab } from '../state';
 import { selectedCase } from '../state';
 import { CLAIM_TYPES, DOSYA_DURUMLARI, PRIORITIES, WORKFLOW_STATUSES } from '../../../shared/workflow';
@@ -266,7 +266,81 @@ function renderLabor(item: CaseIndexItem, state: UiState): string {
       </div>` : '<p class="muted">Henüz Excel seçilmedi.</p>'}
       ${result ? `<div class="app-alert success">${icon('check')}<span>Dağıtılmış Excel kaydedildi: ${escapeHtml(result.outputPath)} • Toplam: ${formatMoney(result.distributedTotal)} • Doğrulanan: ${formatMoney(result.verifiedExistingTotal)}</span></div>` : ''}
     </div>
+    ${renderAutoLaborCard(state)}
     ${renderIsNotlari()}
+  </div>`;
+}
+
+/** v0.4.11: AI Otomatik İşçilik Dağıtıcı kartı (önizleme + elle düzeltme + onayla-kaydet). */
+function renderAutoLaborCard(state: UiState): string {
+  const preview = state.autoLaborPreview;
+  const result = state.autoLaborResult;
+  return `<div class="info-card wide auto-labor-card">
+    <h3>${icon('ai')} AI Otomatik İşçilik Dağıtıcı <button class="info-button" title="Excel'i seçin; sistem TÜM satırları analiz edip H..N işçilik sütunlarını öğrenen sözlük + kural + fiyat listesiyle otomatik doldurur. Kaydetmeden önce önizleme gösterilir; orijinal korunur ve yedeği alınır.">i</button></h3>
+    <p class="muted">Kolon kolon seçmeden: Excel'i seç → tüm satırlar otomatik dolsun → önizlemede düzelt → onayla, kaydet. Eski manuel dağıtım yukarıda durmaya devam ediyor.</p>
+    <div class="auto-labor-actions">
+      <button class="primary" data-action="auto-labor-preview" ${state.autoLaborSaving ? 'disabled' : ''}>${icon('excel')}<span>Excel Seç ve Otomatik Doldur (Önizleme)</span></button>
+      ${preview ? `<button class="secondary compact" data-action="auto-labor-clear">Temizle</button>` : ''}
+    </div>
+    ${preview ? renderAutoLaborPreview(state, preview) : '<p class="muted">Henüz AI dağıtım yapılmadı.</p>'}
+    ${result ? `<div class="app-alert success">${icon('check')}<span><b>Kaydedildi.</b> Çıktı: ${escapeHtml(result.outputPath)} • Yedek: ${escapeHtml(result.backupPath)} • Değişen satır: ${result.changedRows} • Kontrol gerekli: ${result.needsReviewRows} • Öğrenilen: ${result.learnedCount} • Yazılan hücre: ${result.writtenCells}</span></div>` : ''}
+  </div>`;
+}
+
+const CONFIDENCE_TONE: Record<string, string> = { 'Yüksek': 'ok', 'Orta': 'warning', 'Düşük': 'error' };
+
+function autoLaborFinalAmount(state: UiState, row: AutoLaborRowPreview, category: string): number | '' {
+  const edit = state.autoLaborEdits[row.rowNumber]?.[category];
+  if (edit !== undefined) return edit;
+  const amt = row.amounts[category as keyof typeof row.amounts];
+  return typeof amt === 'number' && amt > 0 ? amt : '';
+}
+
+function renderAutoLaborPreview(state: UiState, preview: AutoLaborPreview): string {
+  const s = preview.summary;
+  const totals = preview.columns
+    .map((col) => ({ col, total: s.totalsByCategory[col.category] ?? 0 }))
+    .filter((t) => t.total > 0)
+    .map((t) => `<span class="status-summary-chip"><b>${formatMoney(t.total)}</b> ${escapeHtml(t.col.category)}</span>`)
+    .join('');
+  const header = `<div><b>Satır</b><b>Parça</b><b>Kod</b>${preview.columns.map((c) => `<b title="${escapeHtml(c.category)} sütunu">${escapeHtml(c.column)}·${escapeHtml(c.category)}</b>`).join('')}<b>Güven</b><b>Gerekçe</b></div>`;
+  const rows = preview.rows.map((row) => renderAutoLaborRow(state, preview, row)).join('');
+  return `<div class="auto-labor-preview">
+    <div class="status-summary">
+      <span class="status-summary-total"><b>${s.processed}</b> satır işlendi</span>
+      <span class="status-summary-chip"><b>${s.highConfidence}</b> yüksek güven</span>
+      <span class="status-summary-chip"><b>${s.needsReview}</b> kontrol gerekli</span>
+      <span class="status-summary-chip"><b>${s.changedRows}</b> değişen</span>
+      ${totals}
+    </div>
+    ${preview.columns.length === 0 ? `<div class="app-alert error">${icon('warning')}<span>İşçilik kategori sütunları (Kaporta/Boya/… ) Excel başlığından bulunamadı; bu dosyaya AI yazamaz. Manuel dağıtıcıyı kullanın.</span></div>` : ''}
+    ${preview.warnings.length ? `<div class="app-alert warning">${icon('info')}<span>${escapeHtml(preview.warnings.join(' • '))}</span></div>` : ''}
+    ${preview.formulaCellsFound > 0 ? `<label class="switch"><input type="checkbox" data-auto-labor-toggle="formula" ${state.autoLaborAllowFormula ? 'checked' : ''}/> ${preview.formulaCellsFound} hedef hücrede formül var; sabit tutara çevrilmesini onaylıyorum</label>` : ''}
+    <div class="labor-grid-hint">${icon('details')}<span>"Yeni" kutularını elle düzeltebilirsiniz. Düzelttiğiniz satırlar kaydederken öğrenilir ve sonraki Excel'lerde önce kullanılır. Boş bırakılan/0 yazılan hücreye yazılmaz.</span></div>
+    <div class="table-wrap"><div class="auto-labor-table" style="--cat-cols:${preview.columns.length}">${header}${rows}</div></div>
+    <div class="auto-labor-footer">
+      <button class="primary" data-action="auto-labor-save" ${state.autoLaborSaving || preview.columns.length === 0 ? 'disabled' : ''}>${icon('check')}<span>${state.autoLaborSaving ? 'Kaydediliyor…' : 'Onayla ve Kaydet'}</span></button>
+      <span class="muted">Kaydetmeden Excel'e yazılmaz; orijinalin yedeği alınır.</span>
+    </div>
+  </div>`;
+}
+
+function renderAutoLaborRow(state: UiState, preview: AutoLaborPreview, row: AutoLaborRowPreview): string {
+  const cells = preview.columns.map((col) => {
+    const oldVal = row.oldByColumn[col.column];
+    const finalVal = autoLaborFinalAmount(state, row, col.category);
+    return `<span class="auto-labor-cell">
+      <small class="old">${oldVal != null && oldVal > 0 ? formatMoney(oldVal) : '—'}</small>
+      <input type="number" min="0" step="250" data-auto-labor-amount="${row.rowNumber}:${escapeHtml(col.category)}" data-row="${row.rowNumber}" data-cat="${escapeHtml(col.category)}" value="${finalVal === '' ? '' : finalVal}" aria-label="Satır ${row.rowNumber} ${escapeHtml(col.category)} yeni tutar" />
+    </span>`;
+  }).join('');
+  return `<div class="${row.needsReview ? 'needs-review' : ''}${row.changed ? ' changed' : ''}">
+    <span class="mono-cell">#${row.rowNumber}</span>
+    <span title="${escapeHtml(row.categories.join(', '))}">${escapeHtml(row.partName)}${row.needsReview ? ' <small class="part-warn">⚠ kontrol</small>' : ''}</span>
+    <span><small>${escapeHtml(row.partCode || '—')}</small></span>
+    ${cells}
+    <span><span class="status-chip ${CONFIDENCE_TONE[row.confidence] ?? ''}">${escapeHtml(row.confidence)}</span></span>
+    <span class="auto-labor-reason"><small>${escapeHtml(row.reason)}</small></span>
   </div>`;
 }
 

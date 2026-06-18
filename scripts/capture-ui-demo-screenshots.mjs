@@ -128,15 +128,15 @@ async function scanDataset(label, rootPath) {
     selectedPlate: selected?.plate ?? '',
     deploymentStatus: {
       activeComputer: 'UI-DEMO-PC',
-      appVersion: '0.4.10',
-      expectedVersion: '0.4.10',
+      appVersion: '0.4.11',
+      expectedVersion: '0.4.11',
       isOutdated: false,
       warnings: [],
       checkedAt: new Date().toISOString(),
       canWriteClientStatus: true,
       rootPath,
       clients: [
-        { computer: 'UI-DEMO-PC', appVersion: '0.4.10', user: 'Demo Raportor', rootPath, recordedAt: new Date().toISOString() }
+        { computer: 'UI-DEMO-PC', appVersion: '0.4.11', user: 'Demo Raportor', rootPath, recordedAt: new Date().toISOString() }
       ]
     }
   };
@@ -206,7 +206,7 @@ contextBridge.exposeInMainWorld('hasarbotu', {
   cancelScan: () => ok(true),
   openFolder: () => ok(true),
   refreshCase: (folderPath) => ok(findCase(folderPath)),
-  getHealth: () => ok({ appVersion: '0.4.10', electronVersion: process.versions.electron, rootPath: currentDataset().rootPath, cacheRoot: 'UI-DEMO', logsDir: 'UI-DEMO', recentLogs: [] }),
+  getHealth: () => ok({ appVersion: '0.4.11', electronVersion: process.versions.electron, rootPath: currentDataset().rootPath, cacheRoot: 'UI-DEMO', logsDir: 'UI-DEMO', recentLogs: [] }),
   updateChecklist: (args) => ok(writeResultFor(args.folderPath)),
   updateField: (args) => ok(writeResultFor(args.folderPath)),
   addTodo: (args) => ok(writeResultFor(args.folderPath)),

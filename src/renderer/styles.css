@@ -2459,6 +2459,33 @@ html.dark .case-virtual-row.selected {
   background: color-mix(in srgb, var(--warning, #b26a00) 10%, transparent);
 }
 
+/* v0.4.11: AI Otomatik İşçilik Dağıtıcı. */
+.auto-labor-card { margin-top: var(--space-md); }
+.auto-labor-actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; align-items: center; margin-bottom: var(--space-sm); }
+.auto-labor-preview { display: grid; gap: var(--space-sm); }
+.auto-labor-table { display: grid; gap: 0; font-size: 12px; min-width: 720px; }
+.auto-labor-table > div {
+  display: grid;
+  grid-template-columns: 44px minmax(150px, 1.6fr) 70px repeat(var(--cat-cols, 4), minmax(78px, 1fr)) 64px minmax(160px, 1.8fr);
+  gap: 6px;
+  align-items: center;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--outline-variant);
+}
+.auto-labor-table > div:first-child { position: sticky; top: 0; background: var(--surface-variant); font-weight: 800; z-index: 1; }
+.auto-labor-table > div.needs-review { background: color-mix(in srgb, var(--warning, #b26a00) 9%, transparent); }
+.auto-labor-table > div.changed { box-shadow: inset 3px 0 0 var(--primary); }
+.auto-labor-cell { display: grid; gap: 2px; }
+.auto-labor-cell .old { color: var(--on-surface-variant); font-size: 10px; }
+.auto-labor-cell input {
+  width: 100%; min-width: 0; padding: 2px 4px; font-size: 12px;
+  border: 1px solid var(--outline-variant); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--on-surface);
+}
+.auto-labor-cell input:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+.auto-labor-reason { color: var(--on-surface-variant); line-height: 1.35; }
+.auto-labor-footer { display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap; }
+
 /* v0.4.6: İşçilik Dağıtıcı öğrenen sözlük ipucu. */
 .labor-learn-hint {
   margin: 6px 0 0;

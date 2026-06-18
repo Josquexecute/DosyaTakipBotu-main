@@ -180,7 +180,7 @@ if ($status -eq 'GEÇTİ') {
 if (-not $officeExpectedVersion) {
   [void]$report.AppendLine('## Ofis Sürüm Kontrolü')
   [void]$report.AppendLine('')
-  [void]$report.AppendLine('Ofis hedef sürüm kaydı bulunamadı. Aktif kök yerel klasör olmalıdır (pCloud yalnızca manuel yedek/arşiv). Örnek: `npm run live:version-check -- -RootPath "D:\BARAN_GLOBAL_EKSPERTIZ\2026" -ExpectedVersion 0.4.10 -SetExpected -RegisterThisPC` komutu çalıştırılmalıdır.')
+  [void]$report.AppendLine('Ofis hedef sürüm kaydı bulunamadı. Aktif kök yerel klasör olmalıdır (pCloud yalnızca manuel yedek/arşiv). Örnek: `npm run live:version-check -- -RootPath "D:\BARAN_GLOBAL_EKSPERTIZ\2026" -ExpectedVersion 0.4.11 -SetExpected -RegisterThisPC` komutu çalıştırılmalıdır.')
   [void]$report.AppendLine('')
 } elseif ($officeClients.Count -eq 0) {
   [void]$report.AppendLine('## Ofis Sürüm Kontrolü')

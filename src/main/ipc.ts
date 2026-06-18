@@ -2,6 +2,8 @@ import { BrowserWindow, ipcMain, shell } from 'electron';
 import type {
   ApiResult,
   AppSettings,
+  AutoLaborPreview,
+  AutoLaborSaveResult,
   CaseListExportRow,
   ConflictResolutionArgs,
   DebugHealthReport,
@@ -17,6 +19,7 @@ import type {
   CaseListExportExcelArgs,
   LaborDistributeExcelArgs,
   LaborInspectExcelArgs,
+  LaborAutoSaveArgs,
   PartsAnalyzePhotoArgs,
   PartsExportLaborArgs,
   PartsLearnTermArgs,
@@ -89,6 +92,8 @@ export class IpcController {
     ipcMain.handle(IPC.laborInspectExcel, (_event, args: LaborInspectExcelArgs) => this.safe((): Promise<ExcelLaborPreview> => this.excel.inspectExcel(args)));
     ipcMain.handle(IPC.laborDistributeExcel, (_event, args: LaborDistributeExcelArgs) => this.safe((): Promise<ExcelLaborDistributeResult> => this.excel.distributeExcel(args)));
     ipcMain.handle(IPC.partsAnalyzePhoto, (_event, args?: PartsAnalyzePhotoArgs) => this.safe((): Promise<PartsPhotoAnalysis> => this.excel.analyzePartsPhoto(args)));
+    ipcMain.handle(IPC.laborAutoPreview, () => this.safe((): Promise<AutoLaborPreview> => this.excel.autoLaborPreview()));
+    ipcMain.handle(IPC.laborAutoSave, (_event, args: LaborAutoSaveArgs) => this.safe((): Promise<AutoLaborSaveResult> => this.excel.autoLaborSave(args)));
     ipcMain.handle(IPC.partsGetUserTerms, () => this.safe(() => this.excel.getUserPartTerms()));
     ipcMain.handle(IPC.partsLearnTerm, (_event, args: PartsLearnTermArgs) => this.safe(() => this.excel.learnPartTerm(args)));
     ipcMain.handle(IPC.partsExportLaborExcel, (_event, args: PartsExportLaborArgs) => this.safe(() => this.excel.exportPartsLaborExcel(args)));

@@ -8,6 +8,8 @@ import { readJsonFileOrNull } from '../storage/json-io';
 import { normalizePathForCompare } from '../../shared/path-normalization';
 import { normalizeSearch } from '../../shared/turkish';
 import type { UserPartTerm } from '../../shared/parca-sozlugu';
+import { recordLearned, type LaborCorrection, type LaborLearningEntry } from '../../shared/labor-learning-dictionary';
+import { LABOR_CATEGORIES, type LaborCategory } from '../../shared/labor-rules';
 import { atomicWriteJson } from '../storage/atomic-write';
 
 export class LocalCacheStore {
@@ -203,6 +205,54 @@ export class LocalCacheStore {
     };
     const merged = [next, ...existing.filter((entry) => normalizeSearch(entry.alias) !== aliasKey)].slice(0, 2000);
     await this.writeUserPartTerms(merged);
+    return merged;
+  }
+
+  laborLearningPath(): string { return path.join(this.cacheRoot, 'labor-learning.json'); }
+
+  /** Öğrenen işçilik eşleştirme sözlüğünü okur (AI destekli İşçilik Dağıtıcı için). */
+  async readLaborLearning(): Promise<LaborLearningEntry[]> {
+    await this.ensure();
+    const saved = await readJsonFileOrNull<unknown>(this.laborLearningPath()).catch(() => null);
+    if (!Array.isArray(saved)) return [];
+    const valid = new Set<LaborCategory>(LABOR_CATEGORIES);
+    const out: LaborLearningEntry[] = [];
+    for (const item of saved) {
+      if (!item || typeof item !== 'object') continue;
+      const r = item as Record<string, unknown>;
+      const normalizedName = typeof r.normalizedName === 'string' ? r.normalizedName.trim() : '';
+      const alias = typeof r.alias === 'string' ? r.alias.trim() : normalizedName;
+      const categories = Array.isArray(r.categories) ? r.categories.filter((c): c is LaborCategory => typeof c === 'string' && valid.has(c as LaborCategory)) : [];
+      if (!normalizedName || categories.length === 0) continue;
+      const amounts: Partial<Record<LaborCategory, number>> = {};
+      if (r.amounts && typeof r.amounts === 'object') {
+        for (const [k, v] of Object.entries(r.amounts as Record<string, unknown>)) {
+          if (valid.has(k as LaborCategory) && Number.isFinite(Number(v))) amounts[k as LaborCategory] = Number(v);
+        }
+      }
+      out.push({
+        alias,
+        normalizedName,
+        ...(typeof r.partCode === 'string' && r.partCode ? { partCode: r.partCode } : {}),
+        categories,
+        ...(Object.keys(amounts).length ? { amounts } : {}),
+        ...(typeof r.amountLogic === 'string' && r.amountLogic ? { amountLogic: r.amountLogic } : {}),
+        updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : new Date().toISOString()
+      });
+    }
+    return out;
+  }
+
+  async writeLaborLearning(entries: LaborLearningEntry[]): Promise<void> {
+    await this.ensure();
+    await atomicWriteJson(this.laborLearningPath(), entries, { allowLocalCacheReplace: true, label: 'Öğrenen işçilik sözlüğü' });
+  }
+
+  /** Bir işçilik düzeltmesini öğrenen sözlüğe ekler/günceller ve güncel sözlüğü döndürür. */
+  async addLaborLearning(correction: LaborCorrection): Promise<LaborLearningEntry[]> {
+    const existing = await this.readLaborLearning();
+    const merged = recordLearned(existing, correction);
+    await this.writeLaborLearning(merged);
     return merged;
   }
 

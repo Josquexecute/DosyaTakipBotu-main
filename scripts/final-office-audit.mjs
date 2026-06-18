@@ -19,7 +19,7 @@ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-office-audit-'))
 const appData = path.join(root, 'appdata');
 const yearRoot = path.join(root, 'pCloud Drive (P)', 'BARAN GLOBAL EKSPERTİZ', '2026');
 const pkg = JSON.parse(await fs.readFile('package.json', 'utf-8'));
-assert(pkg.version === '0.4.10', 'Paket sürümü v0.4.10 olarak sabitlendi', `version=${pkg.version}`);
+assert(pkg.version === '0.4.11', 'Paket sürümü v0.4.11 olarak sabitlendi', `version=${pkg.version}`);
 assert(APP_VERSION === pkg.version, 'APP_VERSION package.json ile uyumlu', `APP_VERSION=${APP_VERSION}, package=${pkg.version}`);
 assert(Boolean(pkg.scripts?.['live:version-check']) && Boolean(pkg.scripts?.['release:hash']) && Boolean(pkg.scripts?.['release:notes']), 'v0.3.14 Windows rollout scriptleri package.json içinde mevcut', JSON.stringify(pkg.scripts));
 assert(Boolean(pkg.scripts?.['test:behavior']) && String(pkg.scripts?.ci || '').includes('test:behavior'), 'v0.3.18 davranış regresyon testleri CI zincirine bağlı', JSON.stringify(pkg.scripts));

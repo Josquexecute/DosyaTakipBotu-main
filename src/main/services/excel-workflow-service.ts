@@ -3,17 +3,21 @@ import type { OpenDialogOptions } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type {
+  AutoLaborPreview,
+  AutoLaborSaveResult,
   CaseListExportResult,
   CaseListExportRow,
   ExcelLaborDistributeResult,
   ExcelLaborPreview,
   PartsPhotoAnalysis
 } from '../../shared/types';
-import type { PartsAnalyzePhotoArgs } from '../../shared/ipc-contract';
+import type { LaborAutoSaveArgs, PartsAnalyzePhotoArgs } from '../../shared/ipc-contract';
 import type { UserPartTerm } from '../../shared/parca-sozlugu';
 import { buildMultiMoneyLaborWorkbook, distributeLaborExcel, inspectLaborExcel } from '../import/excel-importer';
 import { analyzePartsPhoto } from '../import/parts-list-analyzer';
 import { assertSelectedPhotoMatchesCase } from './case-asset-guard';
+import { buildAutoLaborPreview } from './labor-preview-service';
+import { saveAutoLaborExcel } from './labor-excel-writer';
 import { exportCaseListToExcel } from '../import/case-list-exporter';
 import type { IpcDomainContext } from './ipc-domain-services';
 
@@ -59,6 +63,84 @@ export class ExcelWorkflowService {
     const excelPath = path.resolve(result.filePaths[0]);
     this.context.state.approvedExcelFiles.add(excelPath);
     return inspectLaborExcel(excelPath);
+  }
+
+  /**
+   * v0.4.11 AI İşçilik Dağıtıcı — adım 1: Excel seç, TÜM satırları analiz et, H..N işçilik sütunlarını
+   * öğrenen sözlük + kural + fiyat listesiyle otomatik doldur, ÖNİZLEME döndür (dosyaya YAZMAZ).
+   */
+  async autoLaborPreview(): Promise<AutoLaborPreview> {
+    const settings = await this.context.getSettings();
+    const window = this.context.mainWindowProvider();
+    const dialogOptions: OpenDialogOptions = {
+      title: 'AI İşçilik Dağıtıcı — Excel dosyasını seçin',
+      defaultPath: settings.rootPath,
+      properties: ['openFile'],
+      filters: [{ name: 'Excel dosyası', extensions: ['xlsx'] }]
+    };
+    const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions);
+    if (result.canceled || !result.filePaths[0]) throw new Error('Excel seçimi iptal edildi.');
+    const excelPath = path.resolve(result.filePaths[0]);
+    this.context.state.approvedExcelFiles.add(excelPath);
+    const learned = await this.context.cache.readLaborLearning();
+    return buildAutoLaborPreview(excelPath, learned);
+  }
+
+  /**
+   * v0.4.11 AI İşçilik Dağıtıcı — adım 2: KULLANICI ONAYINDAN SONRA kaydet. Önce orijinalin yedeğini alır,
+   * onaylı/düzeltilmiş tutarları H..N sütunlarına yazar (yeni dosyaya), kullanıcı düzeltmelerini öğrenir.
+   */
+  async autoLaborSave(args: LaborAutoSaveArgs): Promise<AutoLaborSaveResult> {
+    const excelPath = path.resolve(String(args?.filePath || ''));
+    if (!this.context.state.approvedExcelFiles.has(excelPath)) throw new Error('Excel dosyası önce uygulama içinden (AI önizleme ile) seçilmelidir.');
+    if (!Array.isArray(args.rows) || args.rows.length === 0) throw new Error('Yazılacak işçilik satırı bulunamadı.');
+    if (!Array.isArray(args.columns) || args.columns.length === 0) throw new Error('İşçilik kategori sütunları belirlenemedi; bu Excel için AI dağıtım yapılamıyor.');
+
+    const window = this.context.mainWindowProvider();
+    const defaultName = `${path.basename(excelPath, path.extname(excelPath))}-AI-iscilik.xlsx`;
+    const saveOptions = {
+      title: 'AI işçilik dağıtılmış Excel dosyasını kaydet',
+      defaultPath: path.join(path.dirname(excelPath), defaultName),
+      filters: [{ name: 'Excel dosyası', extensions: ['xlsx'] }]
+    };
+    const saved = window ? await dialog.showSaveDialog(window, saveOptions) : await dialog.showSaveDialog(saveOptions);
+    if (saved.canceled || !saved.filePath) throw new Error('Excel kaydetme işlemi iptal edildi.');
+    const outputPath = path.resolve(saved.filePath.endsWith('.xlsx') ? saved.filePath : `${saved.filePath}.xlsx`);
+
+    const writerResult = await saveAutoLaborExcel({
+      filePath: excelPath,
+      outputPath,
+      rows: args.rows.map((r) => ({ rowNumber: Number(r.rowNumber), amounts: r.amounts })),
+      columns: args.columns,
+      ...(args.allowFormulaReplacement ? { allowFormulaReplacement: true } : {})
+    });
+    this.context.state.approvedExcelFiles.add(writerResult.outputPath);
+
+    // Kullanıcı düzeltmelerini öğren (kuraldan öncelikli olacak şekilde kalıcı sözlüğe yaz).
+    let learnedCount = 0;
+    for (const correction of args.corrections ?? []) {
+      const alias = String(correction?.alias || '').trim();
+      const categories = Array.isArray(correction?.categories) ? correction.categories : [];
+      if (!alias || categories.length === 0) continue;
+      await this.context.cache.addLaborLearning({
+        alias,
+        ...(correction.partCode ? { partCode: String(correction.partCode) } : {}),
+        categories,
+        ...(correction.amounts ? { amounts: correction.amounts } : {}),
+        amountLogic: correction.amountLogic ? String(correction.amountLogic) : 'kullanıcı düzeltmesi'
+      });
+      learnedCount += 1;
+    }
+
+    const needsReviewRows = 0; // önizlemede işaretlenir; kayıt sonrası rapor changedRows + learnedCount üzerinden verilir.
+    return {
+      outputPath: writerResult.outputPath,
+      backupPath: writerResult.backupPath,
+      changedRows: writerResult.changedRows,
+      needsReviewRows,
+      learnedCount,
+      writtenCells: writerResult.writtenCells
+    };
   }
 
   async inspectExcel(args: { filePath: string; targetTotal?: number; targetColumn?: string; usePriceList?: boolean }): Promise<ExcelLaborPreview> {
