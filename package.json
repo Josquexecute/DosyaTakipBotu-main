@@ -28,6 +28,7 @@
     "dist:win": "npm run check:electron && npm run build && electron-builder --win --x64 --publish never",
     "feature:audit": "node scripts/feature-audit.mjs",
     "final:audit": "npm run build && node scripts/final-office-audit.mjs",
+    "final-office-audit": "node scripts/final-office-audit.mjs",
     "pilot:windows": "powershell -ExecutionPolicy Bypass -File scripts/pilot-windows-check.ps1",
     "pilot:copy-month": "powershell -ExecutionPolicy Bypass -File scripts/pilot-copy-month.ps1",
     "pilot:collect": "powershell -ExecutionPolicy Bypass -File scripts/pilot-collect-diagnostics.ps1",

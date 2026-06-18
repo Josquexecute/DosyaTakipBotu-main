@@ -127,7 +127,8 @@ export class ExcelWorkflowService {
         ...(correction.partCode ? { partCode: String(correction.partCode) } : {}),
         categories,
         ...(correction.amounts ? { amounts: correction.amounts } : {}),
-        amountLogic: correction.amountLogic ? String(correction.amountLogic) : 'kullanıcı düzeltmesi'
+        amountLogic: correction.amountLogic ? String(correction.amountLogic) : 'kullanıcı düzeltmesi',
+        ...(correction.reason ? { reason: String(correction.reason) } : {})
       });
       learnedCount += 1;
     }

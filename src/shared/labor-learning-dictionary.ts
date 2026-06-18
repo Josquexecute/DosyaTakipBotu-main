@@ -19,6 +19,8 @@ export interface LaborLearningEntry {
   amounts?: Partial<Record<LaborCategory, number>>;
   /** Tutar mantığı açıklaması (ör. "kullanıcı düzeltmesi", "fiyat listesi"). */
   amountLogic?: string;
+  /** Kullanıcının onayladığı/düzelttiği kararın kısa gerekçesi. */
+  reason?: string;
   /** ISO tarih. */
   updatedAt: string;
 }
@@ -86,6 +88,7 @@ export interface LaborCorrection {
   categories: LaborCategory[];
   amounts?: Partial<Record<LaborCategory, number>>;
   amountLogic?: string;
+  reason?: string;
 }
 
 /** Bir düzeltmeyi sözlüğe ekler/günceller (normalize ad + parça kodu ile tekilleştirir). */
@@ -100,8 +103,22 @@ export function recordLearned(entries: readonly LaborLearningEntry[], correction
     categories: correction.categories.slice(0, 7),
     ...(correction.amounts ? { amounts: correction.amounts } : {}),
     ...(correction.amountLogic ? { amountLogic: correction.amountLogic.slice(0, 120) } : {}),
+    ...(correction.reason ? { reason: correction.reason.slice(0, 240) } : {}),
     updatedAt: now
   };
   const rest = entries.filter((e) => !(e.normalizedName === normalizedName && (e.partCode ?? '') === partCode));
   return [entry, ...rest].slice(0, 2000);
+}
+
+export interface LaborLearningDeleteCriteria {
+  alias: string;
+  partCode?: string;
+}
+
+/** Yanlış öğrenmeyi kaldırmak için saf altyapı; UI/IPC gerektiğinde bunun üstüne bağlanır. */
+export function deleteLearned(entries: readonly LaborLearningEntry[], criteria: LaborLearningDeleteCriteria): LaborLearningEntry[] {
+  const normalizedName = normalizeLaborKey(criteria.alias);
+  if (!normalizedName) return [...entries];
+  const partCode = criteria.partCode ? normalizeLaborKey(criteria.partCode) : '';
+  return entries.filter((entry) => !(entry.normalizedName === normalizedName && (!partCode || (entry.partCode ?? '') === partCode)));
 }

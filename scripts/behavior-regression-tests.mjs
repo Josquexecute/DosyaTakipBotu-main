@@ -19,7 +19,7 @@ import { normalizePartName } from '../dist-electron/shared/parca-sozlugu.js';
 import { evaluatePlateMatch, looksLikePlate } from '../dist-electron/shared/plate-match.js';
 import { resolvePlateFromPath, resolveCaseFolderFromPath, assertSelectedPhotoMatchesCase } from '../dist-electron/main/services/case-asset-guard.js';
 import { classifyByRules, applyDistributionConstraints, roundTo250 } from '../dist-electron/shared/labor-rules.js';
-import { lookupLearned, recordLearned, laborNameSimilarity } from '../dist-electron/shared/labor-learning-dictionary.js';
+import { deleteLearned, lookupLearned, recordLearned, laborNameSimilarity } from '../dist-electron/shared/labor-learning-dictionary.js';
 import { classifyLaborRow } from '../dist-electron/main/services/labor-classifier-service.js';
 import { buildAutoLaborPreview } from '../dist-electron/main/services/labor-preview-service.js';
 import { saveAutoLaborExcel } from '../dist-electron/main/services/labor-excel-writer.js';
@@ -209,6 +209,16 @@ assert(clFar.categories[0] === 'Elektrik' && clFar.needsReview === true, 'classi
 assert(classifyByRules('Ön Cam').categories[0] === 'Cam', 'classifyByRules camı Cam sınıflar', JSON.stringify(classifyByRules('Ön Cam')));
 assert(!classifyByRules('Sol Ön Çamurluk Davlumbazı').categories.includes('Cam'), 'classifyByRules çamurluk/davlumbazı cam sanmaz', JSON.stringify(classifyByRules('Sol Ön Çamurluk Davlumbazı')));
 assert(classifyByRules('Radyator Panjuru').categories[0] === 'Kaporta', 'classifyByRules radyatör panjurunu mekanik değil kaporta sınıflar', JSON.stringify(classifyByRules('Radyator Panjuru')));
+const clMotorTesisat = classifyByRules('MOTOR ELEKTRİK TESİSATI');
+assert(clMotorTesisat.categories[0] === 'Elektrik', 'classifyByRules motor elektrik tesisatını Elektrik sınıflar', JSON.stringify(clMotorTesisat));
+const clMotorKaputu = classifyByRules('MOTOR KAPUTU');
+assert(clMotorKaputu.categories.includes('Kaporta') && clMotorKaputu.categories.includes('Boya') && !clMotorKaputu.categories.includes('Mekanik'), 'classifyByRules motor kaputunu Kaporta+Boya sınıflar', JSON.stringify(clMotorKaputu));
+assert(classifyByRules('SOL GÜNDÜZ SÜRÜŞ FARI').categories[0] === 'Elektrik', 'classifyByRules gündüz sürüş farını Elektrik sınıflar', JSON.stringify(classifyByRules('SOL GÜNDÜZ SÜRÜŞ FARI')));
+assert(classifyByRules('YAĞ POMPASI').categories[0] === 'Mekanik', 'classifyByRules yağ pompasını Mekanik sınıflar', JSON.stringify(classifyByRules('YAĞ POMPASI')));
+assert(classifyByRules('EGR VALFİ').categories[0] === 'Mekanik', 'classifyByRules EGR valfini Mekanik sınıflar', JSON.stringify(classifyByRules('EGR VALFİ')));
+assert(classifyByRules('KOMPLE HAVA FİLTRESİ').categories[0] === 'Mekanik', 'classifyByRules hava filtresini Mekanik sınıflar', JSON.stringify(classifyByRules('KOMPLE HAVA FİLTRESİ')));
+const clDavlumbaz = classifyByRules('ÇAMURLUK DAVLUMBAZI');
+assert(clDavlumbaz.categories[0] === 'Kaporta' && !clDavlumbaz.categories.includes('Boya') && clDavlumbaz.needsReview === true, 'classifyByRules çamurluk davlumbazını Kaporta + kontrol gerekli yapar', JSON.stringify(clDavlumbaz));
 assert(classifyByRules('Sürücü Koltuğu').categories[0] === 'Döşeme/Kilit', 'classifyByRules koltuğu Döşeme/Kilit sınıflar', JSON.stringify(classifyByRules('Sürücü Koltuğu')));
 const clUnknown = classifyByRules('Zxqw Bilinmeyen Parça');
 assert(clUnknown.confidence === 'Düşük' && clUnknown.needsReview === true && clUnknown.categories.length > 0, 'classifyByRules bilinmeyen parçayı doldurur ama kontrol gerekli işaretler', JSON.stringify(clUnknown));
@@ -222,6 +232,9 @@ assert(learnedDecision.source === 'learned' && learnedDecision.categories[0] ===
 const lk = lookupLearned(learnedEntries, 'Ön Tampon');
 assert(lk && lk.matchType === 'exact', 'lookupLearned tam eşleşmeyi bulur', JSON.stringify(lk));
 assert(laborNameSimilarity('ön tampon', 'on tampon orjinal') > 0.3, 'laborNameSimilarity benzer adları yakalar', String(laborNameSimilarity('ön tampon', 'on tampon orjinal')));
+const learnedWithReason = recordLearned([], { alias: 'Sigorta Kutusu', partCode: 'ELK-1', categories: ['Elektrik'], reason: 'Kullanıcı önizlemede elektrik kararı onayladı.' });
+assert(learnedWithReason[0]?.reason?.includes('elektrik kararı'), 'recordLearned kullanıcı karar gerekçesini saklar', JSON.stringify(learnedWithReason[0]));
+assert(deleteLearned(learnedWithReason, { alias: 'Sigorta Kutusu', partCode: 'ELK-1' }).length === 0, 'deleteLearned yanlış öğrenmeyi silme altyapısı sağlar', JSON.stringify(learnedWithReason));
 
 // Uçtan uca: kategori-kolonlu Excel önizleme + güvenli çoklu-kolon yazma + orijinal korunur + yedek.
 const aiTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'hb-ai-labor-'));

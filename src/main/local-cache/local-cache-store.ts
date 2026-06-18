@@ -8,7 +8,7 @@ import { readJsonFileOrNull } from '../storage/json-io';
 import { normalizePathForCompare } from '../../shared/path-normalization';
 import { normalizeSearch } from '../../shared/turkish';
 import type { UserPartTerm } from '../../shared/parca-sozlugu';
-import { recordLearned, type LaborCorrection, type LaborLearningEntry } from '../../shared/labor-learning-dictionary';
+import { deleteLearned, recordLearned, type LaborCorrection, type LaborLearningDeleteCriteria, type LaborLearningEntry } from '../../shared/labor-learning-dictionary';
 import { LABOR_CATEGORIES, type LaborCategory } from '../../shared/labor-rules';
 import { atomicWriteJson } from '../storage/atomic-write';
 
@@ -237,6 +237,7 @@ export class LocalCacheStore {
         categories,
         ...(Object.keys(amounts).length ? { amounts } : {}),
         ...(typeof r.amountLogic === 'string' && r.amountLogic ? { amountLogic: r.amountLogic } : {}),
+        ...(typeof r.reason === 'string' && r.reason ? { reason: r.reason } : {}),
         updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : new Date().toISOString()
       });
     }
@@ -254,6 +255,14 @@ export class LocalCacheStore {
     const merged = recordLearned(existing, correction);
     await this.writeLaborLearning(merged);
     return merged;
+  }
+
+  /** Yanlış öğrenmeyi silmek/düzeltmek için altyapı: normalize ad + opsiyonel parça kodu ile kaldırır. */
+  async deleteLaborLearning(criteria: LaborLearningDeleteCriteria): Promise<LaborLearningEntry[]> {
+    const existing = await this.readLaborLearning();
+    const next = deleteLearned(existing, criteria);
+    await this.writeLaborLearning(next);
+    return next;
   }
 
   buildDashboard(index: CaseIndexFile | null, rootAvailable: boolean): DashboardSummary {

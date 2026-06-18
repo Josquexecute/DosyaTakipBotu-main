@@ -31,13 +31,16 @@ export const DEFAULT_CATEGORY_AMOUNT: Record<LaborCategory, number> = {
 const KEYWORD_RULES: Array<{ category: LaborCategory; phrases: string[] }> = [
   { category: 'Cam', phrases: ['on cam', 'arka cam', 'kapi cami', 'kelebek cami', 'cam fitili', 'cam krikosu', 'cam mekanizmasi', 'cam', 'tavan cami', 'sunroof'] },
   { category: 'Döşeme/Kilit', phrases: ['emniyet kemeri', 'kemer tokasi', 'hava yastigi', 'airbag', 'tavan dosemesi', 'koltuk', 'doseme', 'torpido', 'ic trim', 'kapi kolu', 'kapi acma', 'kilit', 'kilit karsiligi', 'guneslik', 'paspas', 'bagaj dosemesi'] },
-  { category: 'Elektrik', phrases: ['far', 'stop', 'sinyal', 'sensor', 'kamera', 'radar', 'beyin', 'ecu', 'modul', 'sigorta', 'tesisat', 'kablo', 'soket', 'korna', 'buji', 'bobin', 'role', 'anten', 'ekran', 'multimedya', 'hoparlor', 'xenon', 'led', 'ampul', 'sis far', 'plaka lambasi'] },
-  { category: 'Mekanik', phrases: ['motor', 'sanziman', 'sarsiman', 'radyator', 'turbo', 'intercooler', 'dinamo', 'alternator', 'kompresor', 'klima kompresoru', 'egzoz', 'katalizator', 'aks', 'porya', 'salincak', 'rotil', 'rot', 'amortisor', 'suspansiyon', 'mafsal', 'debriyaj', 'fren', 'kaliper', 'balata', 'fren diski', 'mars', 'triger', 'kasnak', 'takoz', 'fan', 'su pompasi', 'devirdaim', 'karter', 'diferansiyel', 'sanziman askisi', 'direksiyon kutusu', 'rot mili', 'rot basi', 'jant', 'lastik', 'bilya', 'rulman'] },
-  { category: 'Kaporta', phrases: ['radyator panjuru', 'radyator izgarasi', 'tampon', 'kaput', 'camurluk', 'davlumbaz', 'kapi', 'on panel', 'arka panel', 'panel', 'marspiyel', 'travers', 'sac', 'sase', 'sasi', 'besik', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'izgara', 'panjur', 'spoiler', 'spoyler', 'tampon demiri', 'braket', 'destek', 'havuz', 'taban saci', 'orta direk'] }
+  { category: 'Elektrik', phrases: ['motor elektrik tesisati', 'elektrik tesisati', 'gunduz surus fari', 'far', 'stop', 'sinyal', 'sensor', 'kamera', 'radar', 'beyin', 'ecu', 'modul', 'sigorta kutusu', 'sigorta', 'tesisat', 'kablo', 'soket', 'korna', 'buji', 'bobin', 'role', 'anten', 'ekran', 'multimedya', 'hoparlor', 'xenon', 'led', 'ampul', 'sis far', 'plaka lambasi'] },
+  { category: 'Mekanik', phrases: ['yag pompasi', 'egr valfi', 'hava filtresi', 'filtre kutusu', 'motor', 'sanziman', 'sarsiman', 'radyator', 'turbo', 'intercooler', 'dinamo', 'alternator', 'sarj dinamosu', 'pompa', 'egr', 'valf', 'filtre', 'kompresor', 'klima kompresoru', 'egzoz', 'katalizator', 'aks', 'porya', 'salincak', 'rotil', 'rot', 'amortisor', 'suspansiyon', 'mafsal', 'debriyaj', 'fren', 'kaliper', 'balata', 'fren diski', 'mars', 'triger', 'kasnak', 'takoz', 'fan', 'su pompasi', 'devirdaim', 'karter', 'diferansiyel', 'sanziman askisi', 'direksiyon kutusu', 'rot mili', 'rot basi', 'jant', 'lastik', 'bilya', 'rulman'] },
+  { category: 'Kaporta', phrases: ['motor kaputu', 'radyator panjuru', 'radyator izgarasi', 'baglanti parcasi', 'tampon', 'kaput', 'camurluk', 'davlumbaz', 'kapi', 'on panel', 'arka panel', 'panel', 'marspiyel', 'travers', 'sac', 'sase', 'sasi', 'besik', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'izgara', 'panjur', 'spoiler', 'spoyler', 'tampon demiri', 'braket', 'destek', 'havuz', 'taban saci', 'orta direk'] }
 ];
 
 /** Boya gerektiren (boyanacak) dış gövde parçaları — Kaporta ile birlikte Boya eklenir. */
 const PAINTABLE_BODY_PHRASES = ['tampon', 'kaput', 'camurluk', 'kapi', 'on panel', 'arka panel', 'panel', 'marspiyel', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'davlumbaz', 'spoiler', 'spoyler'];
+
+/** Davlumbaz gibi kaporta parçalarında boya otomatik yazılmaz; gerekiyorsa kullanıcı kontrol eder. */
+const PAINT_REVIEW_ONLY_PHRASES = ['davlumbaz'];
 
 /** Onarım sinyalleri (değişim değil): işçilik "Onarım" kategorisine yönlendirilebilir. */
 const REPAIR_PHRASES = ['onarim', 'tamir', 'duzeltme', 'sok tak', 'sok-tak', 'mobil onarim', 'plastik tamir', 'isil', 'pdr'];
@@ -62,6 +65,8 @@ function wordMatchesToken(word: string, token: string): boolean {
   if (word === token) return true;
   // "CAM" tek başına cam işidir; CAMURLUK/DAVLUMBAZ gibi kaporta kelimeleri cam sayılmamalı.
   if (token === 'CAM') return /^(CAM|CAMI|CAMA|CAMIN|CAMINI|CAMDA|CAMDAN|CAMLAR|CAMLARI)$/.test(word);
+  if (token === 'FAR') return /^(FAR|FARI|FARA|FARIN|FARINI|FARLAR|FARLARI)$/.test(word);
+  if (token === 'STOP') return /^(STOP|STOPU|STOPA|STOPUN|STOPUNU|STOPLAR|STOPLARI)$/.test(word);
   // Türkçe çekim ekleri: "tampon"→"tamponu", "koltuk"→"koltuğu" (yumuşama). Önek/gövde eşleşmesi.
   if (token.length >= 4 && word.startsWith(token)) return true;
   if (token.length >= 5 && word.startsWith(token.slice(0, -1))) return true;
@@ -130,8 +135,14 @@ export function classifyByRules(partName: string, partCode = '', note = ''): Rul
 
   // Kaporta + boya: boyanacak dış gövde parçalarında Boya birlikte dağıtılır.
   if (best.category === 'Kaporta' && hasAny(normalized, PAINTABLE_BODY_PHRASES)) {
-    categories.push('Boya');
-    reasons.push('Boyanacak dış gövde parçası olduğundan Boya da eklendi.');
+    if (hasAny(normalized, PAINT_REVIEW_ONLY_PHRASES)) {
+      confidence = confidence === 'Yüksek' ? 'Orta' : confidence;
+      needsReview = true;
+      reasons.push('Davlumbaz satırında boya otomatik yazılmadı; gerekiyorsa Boya eklenmesi kontrol gerektirir.');
+    } else {
+      categories.push('Boya');
+      reasons.push('Boyanacak dış gövde parçası olduğundan Boya da eklendi.');
+    }
   }
 
   // Far/stop gibi dış elektrik parçaları: birincil Elektrik; boya/kaporta gerekiyorsa kontrol gerekli.

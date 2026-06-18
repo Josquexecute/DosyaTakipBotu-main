@@ -971,7 +971,8 @@ async function autoLaborSaveAction(): Promise<void> {
         ...(row.partCode ? { partCode: row.partCode } : {}),
         categories: Object.keys(amounts) as AutoLaborCategory[],
         amounts,
-        amountLogic: hasEdits ? 'kullanıcı düzeltmesi (AI dağıtıcı)' : 'kullanıcı onayı (AI dağıtıcı)'
+        amountLogic: hasEdits ? 'kullanıcı düzeltmesi (AI dağıtıcı)' : 'kullanıcı onayı (AI dağıtıcı)',
+        reason: row.reason
       });
     }
   }

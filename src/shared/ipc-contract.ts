@@ -128,7 +128,7 @@ export interface LaborAutoSaveArgs {
   /** Önizlemede kontrol gerekli işaretlenen satır sayısı; kayıt raporunda kullanıcıya geri verilir. */
   needsReviewRows?: number;
   /** Kullanıcının elle düzelttiği satırlar — öğrenen sözlüğe kaydedilir. */
-  corrections?: Array<{ alias: string; partCode?: string; categories: AutoLaborCategory[]; amounts?: Partial<Record<AutoLaborCategory, number>>; amountLogic?: string }>;
+  corrections?: Array<{ alias: string; partCode?: string; categories: AutoLaborCategory[]; amounts?: Partial<Record<AutoLaborCategory, number>>; amountLogic?: string; reason?: string }>;
 }
 
 export interface CaseListExportExcelArgs {
