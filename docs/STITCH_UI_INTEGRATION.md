@@ -1,15 +1,40 @@
-# Stitch Arayüz Entegrasyonu
+# UI Entegrasyon Notları
 
-Uygulamanın görsel sistemi, `src/renderer/stitch/` altındaki Stitch referans tasarımlarından türetilmiştir. Tasarım kaynağı `src/renderer/stitch/DESIGN.md` (HasarBotu Enterprise / Dense Functionalist) ve ekran görselleridir.
+Bu doküman HasarBotu v0.4.12 arayüz düzeninin bakım notlarını özetler.
 
-## İlkeler
-- **Yoğun ama sade (Dense Functionalist):** Operasyon paneli; az tıklamayla çok bilgi. Liste-öncelikli düzen.
-- **Tek stil kaynağı:** Tüm renkler ve aralıklar `styles.css` içindeki CSS değişkenleri (`:root` ve `html.dark`) üzerinden gelir.
-- **Uzak bağımlılık yok:** Üretim paketinde CDN, uzak font veya icon servisi kullanılmaz. İkonlar basit Unicode glifleridir (`app/icons.ts`); tema değişkenlerine uyum sağlar.
+## Tasarım Yaklaşımı
 
-## Uygulama
-- Stitch ekranları (`stitch/screens/*`) referans alınarak bileşenler `src/renderer/app/components/` altında saf string-render fonksiyonları olarak yazılmıştır (`layout`, `home`, `cases`, `detail`, `folders`, `settings`, `dashboard`).
-- Koyu/açık tema, yakınlaştırma ve responsive kırılımlar (1840px → 700px) `styles.css` içinde tanımlıdır.
-- Tasarım referansları yalnızca görsel rehberdir; gerçek davranış vanilla TypeScript bileşenlerinde uygulanır.
+Uygulama sigorta eksper operasyonu için yoğun bilgi gösteren bir masaüstü aracıdır. Arayüz:
 
-> Not: `verify-project` denetimi, Stitch referansının üretim paketinde uzak font/CDN/icon izi içermediğini doğrular.
+- sade,
+- yoğun ama taranabilir,
+- form ve tablo odaklı,
+- riskleri görünür kılan,
+- tekrar eden ofis kullanımına uygun
+
+olmalıdır.
+
+## Ekranlar
+
+| Ekran | Amaç |
+| --- | --- |
+| Dashboard | Operasyon özeti, günlük iş masası ve KPI'lar |
+| Dosyalar | Filtrelenebilir dosya listesi ve Excel export |
+| Dosya Detayı | Takip, görev, not, evrak/fotoğraf ve Excel araçları |
+| Klasörler | Salt-okunur klasör gezgini |
+| Ayarlar | Kullanıcı, kök klasör, Gemini ve sürüm kontrolü |
+| Sorunlar / Risk | Veri güvenliği ve operasyon uyarıları |
+
+## Entegrasyon İlkeleri
+
+- Renderer doğrudan dosya sistemi kullanmaz.
+- Kullanıcı onayı gerektiren işlemler modal/önizleme ile görünür olur.
+- Excel ve AI işlemleri ayrı çıktı dosyası üretir.
+- Hard-block hataları normal toast olarak geçiştirilmez; kullanıcı işlemi durdurulur.
+- Kritik dropdown değerleri shared workflow sabitlerinden gelir.
+
+## İlgili Dokümanlar
+
+- [KULLANIM_KILAVUZU.md](KULLANIM_KILAVUZU.md)
+- [TEKNIK_MIMARI.md](TEKNIK_MIMARI.md)
+- [VERI_GUVENLIGI.md](VERI_GUVENLIGI.md)

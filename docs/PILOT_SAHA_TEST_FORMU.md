@@ -1,36 +1,51 @@
 # Pilot Saha Test Formu
 
-Pilot kullanıcı bu formu gerçek dosyalarla doldurur. Her madde için: **Geçti / Kaldı / Not**.
+HasarBotu v0.4.12 Saha Pilot v2 sırasında doldurulur.
 
-| Tarih | Bilgisayar | Kullanıcı | Sürüm |
-|---|---|---|---|
-|  |  |  | v0.4.5 |
+## Bilgi
 
-## A. Tarama & liste
-- [ ] Ay/dosya klasörleri eksiksiz tarandı, beklenen dosyalar listede göründü.
-- [ ] Dosya seçimi, detay ve "Klasörü Aç" doğru çalıştı.
+| Alan | Değer |
+| --- | --- |
+| Test tarihi | |
+| Bilgisayar | |
+| Kullanıcı | |
+| Test edilen klasör | |
+| Uygulama sürümü | v0.4.12 |
 
-## B. Sabah iş masası
-- [ ] Bendeki / Geciken / Bugün / Bu Hafta filtreleri doğru sonuç verdi.
-- [ ] Sahipsiz / Durgun / Veri Kalitesi filtreleri doğru dosyaları gösterdi.
+## Dashboard ve Liste
 
-## C. Operasyon
-- [ ] Not ve görev ekleme/düzenleme/silme sorunsuz; revision arttı.
-- [ ] Kapalı dosyada düzenleme onayı istendi.
+- [ ] Dashboard sayıları gerçek dosya görünümüyle uyumlu.
+- [ ] Bendeki, Geciken, Bugün ve Bu Hafta filtreleri doğru.
+- [ ] Sahipsiz, Durgun ve Veri Kalitesi filtreleri doğru dosyaları gösterdi.
+- [ ] Filtrelenmiş liste Excel olarak dışa aktarılabildi.
+- [ ] Tek dosya yenileme seçili dosyayı güncelledi.
 
-## D. Evrak & fotoğraf
-- [ ] Eksik evrak/fotoğraf uyarıları doğru.
-- [ ] PDF plaka doğrulama (gerekirse OCR) makul çalıştı.
+## Dosya Detayı
 
-## E. Excel & parça/işçilik
-- [ ] İşçilik dağıtımı (hedef toplam / fiyat listesi) doğru tutar üretti; orijinal Excel korundu.
-- [ ] AI parça okuma fişi makul isabetle okudu; "Öğret" ile düzeltme kalıcı oldu.
+- [ ] Not ekleme/düzenleme/silme çalıştı.
+- [ ] Görev ekleme/düzenleme/tamamlama/silme çalıştı.
+- [ ] Sorumlu, takip tarihi ve durum alanları doğru kaydedildi.
+- [ ] Revision arttı ve writeId değişti.
 
-## F. Güvenlik & çoklu PC
-- [ ] Aynı dosya iki bilgisayarda düzenlendiğinde çakışma uyarısı çıktı, veri ezilmedi.
-- [ ] Bozuk takip dosyası senaryosu güvenli raporlandı.
+## Evrak ve Fotoğraf
 
-## Genel değerlendirme
-- Kritik hata gözlendi mi? (Evet/Hayır):
-- Canlıya geçişe uygun mu? (Evet/Hayır):
-- Notlar:
+- [ ] Evrak eksikleri makul tespit edildi.
+- [ ] PDF plaka kontrolü beklenen sonucu verdi.
+- [ ] KM, Vites, Şase/Şasi ve Olay Yeri fotoğraf kontrolleri doğru.
+- [ ] HEIC/RAW format uyarısı eksik fotoğrafla karışmadı.
+- [ ] Yanlış plaka veya farklı dosya fotoğrafı hard-block ile engellendi.
+
+## Excel ve AI İşçilik
+
+- [ ] Portal Excel önizleme oluşturdu.
+- [ ] Giriş dosyası üzerine doğrudan yazma engellendi.
+- [ ] AI İşçilik Dağıtıcı C sütununu ana açıklama olarak kullandı.
+- [ ] A sütunu parça adı kabul edilmedi.
+- [ ] Düşük güvenli satır dolduruldu ve Kontrol gerekli işaretlendi.
+- [ ] Kullanıcı düzeltmesi öğrenme sözlüğüne kaydedildi.
+
+## Notlar
+
+```text
+
+```

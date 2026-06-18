@@ -1,25 +1,31 @@
 # Canlı Kullanım Kılavuzu
 
-Günlük çalışmada HasarBotu'nun güvenli kullanımı.
+Bu kısa rehber HasarBotu v0.4.12'nin canlı ofis kullanımında izlenecek günlük akışı özetler. Detaylı anlatım için [KULLANIM_KILAVUZU.md](KULLANIM_KILAVUZU.md) kullanılır.
 
-## Başlarken
-1. İlk açılışta **Ayarlar → Ana Klasör Seç** ile aktif kök (yerel) klasörü seçin (genelde `...\BARAN GLOBAL EKSPERTIZ\2026`).
-2. **Aktif kullanıcı**yı seçin. Tema/yakınlaştırma isteğe bağlıdır.
-3. (Opsiyonel) AI parça okuma için **Gemini API anahtarı**nı girin.
+## Günlük Başlangıç
 
-## Günlük akış
-1. **Yeniden Tara** (veya F5) ile dosyaları güncelleyin.
-2. **Ana Sayfa**dan ilgili bölüme geçin; **Dosyalar** ekranında hızlı filtrelerle (Bendeki, Geciken, Bugün, Sahipsiz, Durgun, Veri Kalitesi) günün işini önceliklendirin.
-3. **Operasyon**: sorumlu/durum/öncelik atayın, görev ve not ekleyin.
-4. **Evrak & Fotoğraf**: eksikleri kontrol edin.
-5. **Excel Araçları**: işçilik dağıtın veya parça listesi fotoğrafını okutup işçiliğe aktarın.
+1. Uygulamayı açın ve doğru kök klasörün seçili olduğunu kontrol edin.
+2. Dashboard üzerindeki açık dosya, eksik evrak, eksik fotoğraf, portal bekleyen ve veri kalitesi özetlerini inceleyin.
+3. Dosyalar ekranında Bendeki, Geciken, Bugün, Bu Hafta, Sahipsiz, Durgun ve Veri Kalitesi filtrelerini kullanın.
+4. Sorunlar / Risk panelindeki pCloud, corrupt JSON ve revision/writeId uyarılarını kapatmadan kritik dosyalarda işlem yapmayın.
 
-## Önemli kurallar
-- Ana veri kaynağı her dosyanın `_HASARBOTU/takip.json` dosyasıdır. Bu klasörü elle silmeyin/taşımayın.
-- Çakışma uyarısı çıkarsa **veriyi ezmeyin**; "Güvenli Birleştir" veya "Diskteki Sürüm" seçeneklerini kullanın.
-- Tüm ofis bilgisayarları aynı EXE sürümünde olmalıdır.
-- Orijinal portal Excel'leri değiştirilmez; dağıtım yeni bir `.xlsx` olarak kaydedilir.
+## Dosya İşleme
 
-## Sorun olursa
-- Tanı paketi: `npm run pilot:collect` (geliştirici/kurulum için).
-- Geri dönüş gerekiyorsa [GERI_DONUS_PLANI.md](GERI_DONUS_PLANI.md) uygulanır.
+- Not ve görevler dosya detayından güncellenir.
+- Sorumlu, takip tarihi ve son işlem bilgisi dosya bazında tutulur.
+- Tek dosya yenileme seçili dosyayı hızlı günceller.
+- Evrak & Fotoğraf ekranında eksik belge, fotoğraf ve format uyarıları kontrol edilir.
+
+## Excel ve AI Kullanımı
+
+- Portal Excel'leri önce önizlemeye alınır.
+- AI İşçilik Dağıtıcı kullanıcı onayı olmadan yazmaz.
+- Mevcut H-N değerleri otomatik doğru kabul edilmez.
+- Yanlış plakalı veya farklı dosyaya ait fotoğraf AI'a gönderilmez; işlem hard-block ile durur.
+- Gemini API anahtarı gerekiyorsa yalnızca yerel ayara girilir.
+
+## Gün Sonu
+
+- Açık görevler ve geciken takipler kontrol edilir.
+- Sorunlar / Risk panelindeki kritik uyarılar notlanır.
+- Gerekirse filtrelenmiş dosya listesi Excel olarak dışa aktarılır.

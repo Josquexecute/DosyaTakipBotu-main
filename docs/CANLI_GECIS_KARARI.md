@@ -1,18 +1,26 @@
-# Canlıya Geçiş (Go-Live) Karar Listesi
+# Canlı Geçiş Kararı
 
-Pilot tamamlandıktan sonra canlı kullanıma geçmeden önce bu listenin tamamı onaylanmalıdır.
+Bu doküman HasarBotu v0.4.12'nin ofis kullanımına alınması için kısa karar kaydıdır.
 
-## Ön koşullar
-- [ ] [PILOT_KABUL_PLANI.md](PILOT_KABUL_PLANI.md) kabul kriterleri sağlandı.
-- [ ] [PILOT_SAHA_TEST_FORMU.md](PILOT_SAHA_TEST_FORMU.md) en az bir tam gün gerçek dosyayla dolduruldu, kritik hata yok.
-- [ ] `npm run live:preflight` salt-okunur ön kontrol raporu temiz.
-- [ ] Tüm ofis bilgisayarları **aynı EXE sürümünde** (bkz. [OFIS_DAGITIM_KONTROL_LISTESI.md](OFIS_DAGITIM_KONTROL_LISTESI.md)).
+## Kabul Kapıları
 
-## Geçiş kararı
-- [ ] Aktif kök klasör doğru ve erişilebilir (yerel; pCloud yalnızca yedek/arşiv).
-- [ ] Yedek/geri dönüş yolu hazır (bkz. [GERI_DONUS_PLANI.md](GERI_DONUS_PLANI.md)).
-- [ ] Kullanıcılar [CANLI_KULLANIM_KILAVUZU.md](CANLI_KULLANIM_KILAVUZU.md) ile bilgilendirildi.
+- [ ] `npm run typecheck` geçti.
+- [ ] `npm run build` geçti.
+- [ ] `npm run ci` geçti.
+- [ ] `npm run final-office-audit` geçti.
+- [ ] `npm audit` temiz.
+- [ ] Windows EXE üretildi ve SHA-256 çıktısı alındı.
+- [ ] Ofis hedef sürümü v0.4.12 olarak kaydedildi.
+- [ ] Önceki stabil EXE ve takip yedeği saklandı.
+
+## Canlı Kullanım Şartları
+
+- `_HASARBOTU/takip.json` dosyaları source of truth olarak kabul edilir.
+- pCloud conflicted copy ve revision/writeId uyarıları sessizce geçilmez.
+- Yanlış plaka fotoğraf hard-block davranışı korunur.
+- AI İşçilik Dağıtıcı önizleme/onay akışıyla kullanılır.
+- Excel çıktıları ayrı dosya olarak kaydedilir.
 
 ## Karar
-- Canlıya geçiş onayı: __________ (ad/tarih)
-- Geri dönüş tetikleyici eşik: kritik veri kaybı/ezme veya çözülemeyen çakışma.
+
+Dağıtım sorumlusu bu listeyi tamamladıktan sonra [OFIS_DAGITIM_KONTROL_LISTESI.md](OFIS_DAGITIM_KONTROL_LISTESI.md) ile ofis bilgisayarlarını sırayla günceller.

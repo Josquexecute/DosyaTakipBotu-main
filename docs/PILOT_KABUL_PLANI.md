@@ -1,38 +1,42 @@
-# Pilot Kabul Planı — Saha Pilot v2
+# Pilot Kabul Planı
 
-Bu plan, HasarBotu'nun ofiste sınırlı sayıda gerçek dosyayla denendiği **Saha Pilot v2** aşamasının kabul kriterlerini tanımlar. Amaç: uygulamanın gerçek pCloud klasör yapısı ve gerçek evrak/fotoğraflarla güvenli ve doğru çalıştığını teyit etmek.
+Bu plan HasarBotu v0.4.12 için sınırlı gerçek dosya ile yapılan **Saha Pilot v2** kabul sürecini tanımlar.
 
-## 1. Hazırlık
-- Pilot için bir ay klasörü kopyalanır (orijinaller korunur): `npm run pilot:copy-month`.
-- Pilot sırasında tanı paketi toplanır: `npm run pilot:collect`.
-- Windows uyumluluk ön kontrolü: `npm run pilot:windows`.
+## Pilot Hazırlığı
 
-## 2. Kabul kriterleri (Saha Pilot v2)
-Aşağıdaki maddelerin tamamı pilotta doğrulanmalıdır.
+- [ ] Pilot ay klasörü aktif veriden güvenli şekilde ayrıldı.
+- [ ] Gerekirse `npm run pilot:copy-month` ile kontrollü pilot kopyası oluşturuldu.
+- [ ] Pilot bilgisayarda v0.4.12 çalışıyor.
+- [ ] `npm run pilot:collect` ile tanı paketi alınabileceği doğrulandı.
 
-### Sabah iş masası (günlük iş akışı v2)
-Dosyalar ekranındaki hızlı filtreler gerçek verilerle anlamlı sonuç vermeli:
-- **Bendeki**, **Geciken**, **Bugün**, **Bu Hafta**
-- **Sahipsiz** (sorumlu atanmamış açık dosyalar)
-- **Durgun** (uzun süredir işlem görmeyen açık dosyalar)
-- **Veri Kalitesi** (eksik sorumlu/takip tarihi, kapalıda açık görev, PDF plaka uyuşmazlığı vb.)
+## Kabul Alanları
 
-### Veri kalitesi & risk
-- **Veri Kalitesi** uyarıları kritik/uyarı seviyelerinde doğru sınıflandırılmalı.
-- PDF plaka doğrulama (OCR dahil) uyuşmazlıkları "Sorunlar / Risk" ekranına düşmeli.
-- pCloud çakışma/kopya ve revision regresyon tespiti çalışmalı; **sessiz ezme olmamalı**.
+| Alan | Beklenti |
+| --- | --- |
+| Dashboard | Açık dosya, kapalı dosya, eksik evrak, eksik fotoğraf ve portal bekleyen sayıları doğru. |
+| Dosyalar | Bendeki, Geciken, Bugün, Bu Hafta, Sahipsiz, Durgun ve Veri Kalitesi filtreleri doğru çalışıyor. |
+| Evrak | Trafik/kasko eksikleri ve PDF plaka kontrolü makul sonuç veriyor. |
+| Fotoğraf | KM, Vites, Şase/Şasi, Olay Yeri, HEIC/RAW ve bozuk fotoğraf uyarıları ayrışıyor. |
+| Veri Kalitesi | Eksik sorumlu, eksik takip tarihi, kapalıda açık görev ve durgun dosya uyarıları görünür. |
+| pCloud güvenliği | Conflicted copy, same-revision different-write ve revision regression sessiz ezmeye yol açmıyor. |
+| Excel | Portal Excel dağıtımı ayrı çıktı dosyası üretir. |
+| AI İşçilik | Önizleme/onay olmadan yazmaz; C sütunu ana açıklama olarak kullanılır. |
 
-### Veri güvenliği
-- Bozuk/çakışan `takip.json` durumunda ana dosya korunur, default üretilmez.
-- Çok bilgisayarlı kullanımda aynı dosyada çakışma yönetimi (güvenli birleştirme / disk sürümü) doğru çalışır.
+## Başarılı Pilot Kriterleri
 
-### Excel & parça/işçilik
-- İşçilik dağıtıcı: hedef toplam ve gömülü fiyat listesi modları doğru tutar üretir; orijinal Excel değişmez.
-- AI parça listesi okuma: el yazısı fişten makul isabetle parça çıkarır; usta dili gerçek ada çevrilir.
+- Sahipsiz, Durgun ve Veri Kalitesi filtreleri saha dosyalarında beklenen sonucu verir.
+- En az bir dosyada not/görev ekleme, düzenleme ve silme testi geçer.
+- Tek dosya yenileme tam yıl taramasına ihtiyaç duymadan seçili dosyayı günceller.
+- Yanlış plakalı fotoğraf hard-block ile engellenir.
+- AI İşçilik Dağıtıcı düşük güvenli satırı boş bırakmaz ve Kontrol gerekli işaretler.
+- pCloud veya tracking riski görülen dosya Sorunlar / Risk paneline düşer.
 
-## 3. Çıkış (kabul) ölçütü
-- Yukarıdaki maddelerin tümü pilot kullanıcı tarafından onaylanır ([PILOT_SAHA_TEST_FORMU.md](PILOT_SAHA_TEST_FORMU.md) doldurulur).
-- Kritik (veri kaybı/ezme) hata gözlenmez.
-- Sorun halinde [GERI_DONUS_PLANI.md](GERI_DONUS_PLANI.md) uygulanabilir durumdadır.
+## Pilot Sonrası
 
-Kabul sonrası canlıya geçiş kararı için bkz. [CANLI_GECIS_KARARI.md](CANLI_GECIS_KARARI.md).
+Pilot sonunda:
+
+```bash
+npm run pilot:collect
+```
+
+ile tanı paketi alınır ve kabul/ret kararı [CANLI_GECIS_KARARI.md](CANLI_GECIS_KARARI.md) dokümanına işlenir.
