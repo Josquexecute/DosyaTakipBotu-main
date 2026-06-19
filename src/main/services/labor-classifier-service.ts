@@ -67,12 +67,13 @@ export function classifyLaborRow(partName: string, partCode = '', note = '', lea
   const match = lookupLearned(learned, partName, partCode);
   if (match) {
     const confident = match.matchType === 'exact' || match.score >= FUZZY_CONFIDENT_THRESHOLD;
+    const learnedNeedsReview = match.entry.needsReview === true || !confident;
     const categories = match.entry.categories.length ? match.entry.categories : ['Onarım' as LaborCategory];
     return {
       categories,
       amounts: computeAmounts(categories, match.entry.amounts, partName),
       confidence: confident ? 'Yüksek' : 'Düşük',
-      needsReview: !confident,
+      needsReview: learnedNeedsReview,
       reason: confident
         ? `Öğrenilen karar uygulandı (${match.matchType === 'exact' ? 'tam eşleşme' : `benzer parça %${Math.round(match.score * 100)}`}): "${match.entry.alias}" → ${categories.join(', ')}.`
         : `Benzer öğrenilmiş parça bulundu (güven %${Math.round(match.score * 100)}); en yakın karar uygulandı, kontrol gerekli.`,
@@ -81,8 +82,14 @@ export function classifyLaborRow(partName: string, partCode = '', note = '', lea
   }
 
   // 2) Kural motoru + dağıtım kısıtları.
-  const ruled = classifyByRules(partName, partCode, note);
-  const constrained = applyDistributionConstraints(ruled.categories, normalizeSearch(`${partName} ${note}`));
+  // C sütunu (partName) birincildir; B grubu (note) yalnızca C düşük güvenliyse destek olarak kullanılır.
+  const primaryRule = classifyByRules(partName, partCode, '');
+  const useSupportGroup = primaryRule.confidence === 'Düşük' && note.trim().length > 0;
+  const supportRule = useSupportGroup ? classifyByRules(partName, partCode, note) : null;
+  const ruled = supportRule
+    ? { ...supportRule, reason: `${supportRule.reason} B grubu destekleyici bilgi olarak kullanıldı.` }
+    : primaryRule;
+  const constrained = applyDistributionConstraints(ruled.categories, normalizeSearch(useSupportGroup ? `${partName} ${note}` : partName));
   const categories = constrained.categories;
   const reason = [ruled.reason, constrained.removed.length ? `Dağıtım kısıtı: ${constrained.removed.join('; ')}.` : '']
     .filter(Boolean)

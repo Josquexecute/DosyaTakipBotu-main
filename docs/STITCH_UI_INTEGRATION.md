@@ -1,6 +1,6 @@
 # UI Entegrasyon Notları
 
-Bu doküman HasarBotu v0.4.12 arayüz düzeninin bakım notlarını özetler.
+Bu doküman HasarBotu v0.5.0 arayüz düzeninin bakım notlarını özetler.
 
 ## Tasarım Yaklaşımı
 

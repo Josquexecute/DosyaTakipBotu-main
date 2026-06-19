@@ -2,6 +2,25 @@
 
 Tüm önemli değişiklikler bu dosyada tutulur. Sürümleme [SemVer](https://semver.org/lang/tr/) yaklaşımına yakındır.
 
+## [0.5.0] — 2026-06-19
+
+### Eklendi — Ağır Hasar AI ön değerlendirme
+- **Ağır Hasar AI Ön Değerlendirme** akışı v0.5.0 release kapsamına alındı. Ekonomik hasar oranı ve yapısal kritik parça eşiği ayrı hesaplanır; sonuç rapor notu ve kurumsal mail taslağıyla desteklenir.
+- **Gerçek senaryo fixture'ı:** `34 PME 968 / 49/18303851` dosyası için 2026 Hyundai i20 Kasko senaryosu eklendi. Hasar tutarı `650.172,10 TL`, rayiç `1.250.000 TL`, oran yaklaşık `%52`; ekonomik `%60` eşik aşılmasa da yapısal kritik eşik ayrıca değerlendirilir.
+- **Ön Göğüs / firewall teyidi:** `Ön Göğüs` yalnızca eksper tarafından yapısal ön göğüs sacı/firewall olarak teyit edilirse 40 puan verir. Teyitsiz durumda sistem puan vermez, satırı kontrol gerekli bırakır ve torpido/plastik göğüs mü yoksa yapısal sac/firewall mı sorusunu üretir.
+- **Mükerrer puan koruması:** airbag/emniyet kemeri ve ana elektrik/elektronik grupları tekrar tekrar sayılıp ağır hasar skorunu şişirmez; grup içindeki en güçlü kanıt puana dahil edilir.
+- **Destek/kontrol satırları:** ön travers ve direksiyon mili gibi tek başına kesin ağır hasar puanı üretmemesi gereken satırlar kontrol/destek satırı olarak kalır.
+
+### İyileştirildi — AI İşçilik Dağıtıcı
+- Karar motoru v2 seviyesine çıkarıldı: güçlü pozitif evidence, negatif kurallar, çakışma çözümü ve açıklanabilir gerekçe üretimi genişletildi.
+- Portal Excel fixture testleri büyütüldü: A sütununun parça adı olmadığı, B/C/D kolonlarının doğru kullanıldığı, mevcut H-N değerlerinin otomatik öğrenilmediği ve düşük güvenli satırların boş bırakılmadığı doğrulanır.
+- Önizleme/kaydetme deneyimi profesyonelleştirildi: filtreler, arama, özet kartları, kullanıcı düzeltmesi, öğrenmeye aday satırlar, formül uyarısı, son onay modalı ve kaydetme sonrası rapor akışı kapsama alındı.
+- Büyük Excel önizlemesinde sayfalama, aktif sayfa render modeli, uzun gerekçelerin varsayılan kapalı gösterimi ve arama debounce koruması eklendi.
+
+### Release hazırlığı
+- Paket sürümü, `APP_VERSION`, README, docs changelog, ofis dağıtım notları, EXE rehberi, canlı geçiş ve final office audit kapısı v0.5.0’a çekildi.
+- EXE üretimi bu adımda yapılmadı; kaynak, kalite komutları ve release kontrol akışı v0.5.0 için hazırlandı.
+
 ## [0.4.11] — 2026-06-18
 
 ### Eklendi — AI destekli, öğrenen ve önizlemeli İşçilik Dağıtıcı

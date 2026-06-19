@@ -496,6 +496,9 @@ function mergeTrackingFiles(base: TrackingFile, local: TrackingFile, current: Tr
   next.labor = chooseObjectByField(base.labor, local.labor, current.labor);
   next.kttKusur = chooseObjectByField(base.kttKusur, local.kttKusur, current.kttKusur);
   next.heavyDamage = chooseObjectByField(base.heavyDamage, local.heavyDamage, current.heavyDamage);
+  const assessment = chooseValue(base.heavyDamageAssessment, local.heavyDamageAssessment, current.heavyDamageAssessment);
+  if (assessment) next.heavyDamageAssessment = assessment;
+  else delete next.heavyDamageAssessment;
   next.portalChecklist = mergeArrayById(base.portalChecklist, local.portalChecklist, current.portalChecklist, 'key');
   next.todos = mergeArrayById(base.todos, local.todos, current.todos, 'id');
   next.notes = mergeArrayById(base.notes, local.notes, current.notes, 'id');

@@ -17,8 +17,15 @@ import { APP_VERSION } from '../shared/constants';
 import { IPC_INVOKE_CHANNELS as IPC } from '../shared/ipc-contract';
 import type {
   CaseListExportExcelArgs,
+  HeavyDamageClearArgs,
+  HeavyDamageGenerateNoteArgs,
+  HeavyDamageGetArgs,
+  HeavyDamagePreviewArgs,
+  HeavyDamageSaveArgs,
   LaborDistributeExcelArgs,
   LaborInspectExcelArgs,
+  LaborLearningAdminKey,
+  LaborLearningUpdateInput,
   LaborAutoSaveArgs,
   PartsAnalyzePhotoArgs,
   PartsExportLaborArgs,
@@ -41,7 +48,9 @@ import {
   DeploymentService,
   ExcelWorkflowService,
   FoldersService,
+  HeavyDamageAssessmentService,
   IpcDomainContext,
+  LaborLearningAdminService,
   type IpcLogger,
   type MutationArgsBase,
   SettingsService,
@@ -60,6 +69,8 @@ export class IpcController {
   private readonly tracking: TrackingMutationService;
   private readonly conflicts: ConflictResolverService;
   private readonly excel: ExcelWorkflowService;
+  private readonly laborLearning: LaborLearningAdminService;
+  private readonly heavyDamage: HeavyDamageAssessmentService;
   private readonly deployment: DeploymentService;
 
   constructor(private readonly cache: LocalCacheStore, private readonly mainWindowProvider: () => BrowserWindow | null, private readonly logger?: IpcLogger) {
@@ -71,6 +82,8 @@ export class IpcController {
     this.tracking = new TrackingMutationService(this.context, this.cases);
     this.conflicts = new ConflictResolverService(this.context, this.cases);
     this.excel = new ExcelWorkflowService(this.context);
+    this.laborLearning = new LaborLearningAdminService(this.context);
+    this.heavyDamage = new HeavyDamageAssessmentService(this.context, this.cases);
     this.deployment = new DeploymentService(this.context);
   }
 
@@ -94,6 +107,18 @@ export class IpcController {
     ipcMain.handle(IPC.partsAnalyzePhoto, (_event, args?: PartsAnalyzePhotoArgs) => this.safe((): Promise<PartsPhotoAnalysis> => this.excel.analyzePartsPhoto(args)));
     ipcMain.handle(IPC.laborAutoPreview, () => this.safe((): Promise<AutoLaborPreview> => this.excel.autoLaborPreview()));
     ipcMain.handle(IPC.laborAutoSave, (_event, args: LaborAutoSaveArgs) => this.safe((): Promise<AutoLaborSaveResult> => this.excel.autoLaborSave(args)));
+    ipcMain.handle(IPC.laborLearningList, () => this.safe(() => this.laborLearning.list()));
+    ipcMain.handle(IPC.laborLearningUpdate, (_event, args: LaborLearningUpdateInput) => this.safe(() => this.laborLearning.update(args)));
+    ipcMain.handle(IPC.laborLearningDisable, (_event, args: LaborLearningAdminKey) => this.safe(() => this.laborLearning.disable(args)));
+    ipcMain.handle(IPC.laborLearningEnable, (_event, args: LaborLearningAdminKey) => this.safe(() => this.laborLearning.enable(args)));
+    ipcMain.handle(IPC.laborLearningDelete, (_event, args: LaborLearningAdminKey) => this.safe(() => this.laborLearning.delete(args)));
+    ipcMain.handle(IPC.laborLearningExport, () => this.safe(() => this.laborLearning.export()));
+    ipcMain.handle(IPC.laborLearningImport, () => this.safe(() => this.laborLearning.import()));
+    ipcMain.handle(IPC.heavyDamagePreview, (_event, args: HeavyDamagePreviewArgs) => this.safe(() => this.heavyDamage.preview(args)));
+    ipcMain.handle(IPC.heavyDamageGet, (_event, args: HeavyDamageGetArgs) => this.safe(() => this.heavyDamage.get(args)));
+    ipcMain.handle(IPC.heavyDamageSave, (_event, args: HeavyDamageSaveArgs) => this.safe(() => this.heavyDamage.save(args)));
+    ipcMain.handle(IPC.heavyDamageClear, (_event, args: HeavyDamageClearArgs) => this.safe(() => this.heavyDamage.clear(args)));
+    ipcMain.handle(IPC.heavyDamageGenerateNote, (_event, args: HeavyDamageGenerateNoteArgs) => this.safe(() => this.heavyDamage.generateNote(args)));
     ipcMain.handle(IPC.partsGetUserTerms, () => this.safe(() => this.excel.getUserPartTerms()));
     ipcMain.handle(IPC.partsLearnTerm, (_event, args: PartsLearnTermArgs) => this.safe(() => this.excel.learnPartTerm(args)));
     ipcMain.handle(IPC.partsExportLaborExcel, (_event, args: PartsExportLaborArgs) => this.safe(() => this.excel.exportPartsLaborExcel(args)));

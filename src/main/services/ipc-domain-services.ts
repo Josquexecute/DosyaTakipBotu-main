@@ -19,6 +19,8 @@ import { existsDirectory } from './fs-utils';
 // servisler ve yardımcılar buradan yeniden dışa aktarılır (davranış değişmez).
 export { existsDirectory } from './fs-utils';
 export { ExcelWorkflowService } from './excel-workflow-service';
+export { LaborLearningAdminService } from './labor-learning-admin-service';
+export { HeavyDamageAssessmentService } from './heavy-damage-assessment-service';
 export { DeploymentService } from './deployment-service';
 export { FoldersService } from './folders-service';
 export { SettingsService } from './settings-service';

@@ -1,6 +1,6 @@
 # Pilot Saha Test Formu
 
-HasarBotu v0.4.12 Saha Pilot v2 sırasında doldurulur.
+HasarBotu v0.5.0 Saha Pilot v2 sırasında doldurulur.
 
 ## Bilgi
 
@@ -10,7 +10,7 @@ HasarBotu v0.4.12 Saha Pilot v2 sırasında doldurulur.
 | Bilgisayar | |
 | Kullanıcı | |
 | Test edilen klasör | |
-| Uygulama sürümü | v0.4.12 |
+| Uygulama sürümü | v0.5.0 |
 
 ## Dashboard ve Liste
 

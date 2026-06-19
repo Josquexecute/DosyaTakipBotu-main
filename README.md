@@ -1,6 +1,6 @@
 # HasarBotu - DosyaTakipBotu
 
-[![Sürüm](https://img.shields.io/badge/sürüm-v0.4.12-1f6feb)](#v0412-yenilikleri)
+[![Sürüm](https://img.shields.io/badge/sürüm-v0.5.0-1f6feb)](#v050-yenilikleri)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-2563eb)](#windows-exe-üretimi)
 [![Electron](https://img.shields.io/badge/Electron-41-47848f)](#sistem-mimarisi-kısa-özeti)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6)](#geliştirme-komutları)
@@ -8,7 +8,7 @@
 
 Baran Global Ekspertiz için geliştirilen **sigorta eksper dosya takip otomasyonu**. Hasar dosyalarını klasör yapısı üzerinden tarar, her dosyanın durumunu local-first şekilde yönetir, evrak/fotoğraf risklerini görünür kılar, Excel işçilik süreçlerini güvenli önizleme ile çalıştırır ve çok bilgisayarlı ofis kullanımında veri ezilmesini engellemeye odaklanır.
 
-> Güncel sürüm: **v0.4.12**  
+> Güncel sürüm: **v0.5.0**  
 > Hedef kullanım: Baran Global Ekspertiz kurum içi Windows masaüstü operasyonu
 
 ## Öne Çıkan Özellikler
@@ -25,16 +25,17 @@ Baran Global Ekspertiz için geliştirilen **sigorta eksper dosya takip otomasyo
 | Excel araçları | Portal Excel işçilik dağıtımı, filtrelenmiş dosya listesi export, parça + işçilik Excel üretimi. |
 | AI İşçilik Dağıtıcı | Gerçek portal Excel kolonlarına göre H-N işçilik önerisi üretir; önizleme, kullanıcı düzeltmesi, kontrollü öğrenme ve ayrı çıktı dosyası akışı kullanır. |
 | Öğrenen sözlük | Kullanıcı onaylı/düzeltilmiş kararlar yerel sözlüğe alınır; mevcut H-N değerleri otomatik eğitim verisi kabul edilmez. |
+| Ağır Hasar AI | Ekonomik oran ve yapısal kritik parça eşiklerini ayrı gösteren ön değerlendirme, rapor notu ve mail taslağı üretir. |
 
-## v0.4.12 Yenilikleri
+## v0.5.0 Yenilikleri
 
-- AI İşçilik Dağıtıcı gerçek portal Excel kolon yapısına göre sabitlendi.
-- Parça adı artık A sütunundan değil, **C sütunundaki açıklamadan** okunur.
-- B sütunu DVN/parça grubu destek bilgisi, D sütunu parça kodu olarak kullanılır.
-- H-N kolonlarındaki mevcut değerler otomatik öğrenme verisi yapılmaz.
-- Her satıra öneri verilir; düşük güvenli satırlar boş bırakılmaz, **Kontrol gerekli** olarak işaretlenir.
-- Cam/çamurluk, motor/mekanik, elektrik ve kaporta sınıflandırmaları için güvenlik kuralları güçlendirildi.
-- Önizleme olmadan yazma ve kullanıcı onayı olmadan kaydetme akışı kapalı tutulur.
+- **AI İşçilik Dağıtıcı v2:** puan/evidence mantığı, negatif kurallar ve çakışma çözümü güçlendirildi; motor/elektrik/cam/kaporta karışmaları için regresyon kapsamı genişletildi.
+- **Profesyonel önizleme ve kaydetme akışı:** filtreler, arama, özet kartları, sayfalama, kullanıcı düzeltmesi, öğrenmeye aday satırlar, formül uyarısı, son onay modalı ve kaydetme sonrası rapor netleştirildi.
+- **Büyük Excel koruması:** önizleme aktif sayfa üzerinden render edilir; uzun gerekçeler varsayılan kapalıdır, arama ve filtreleme tam veri üstünden ama hafif çalışır.
+- **Öğrenme sözlüğü yönetimi:** kullanıcı onaylı/düzeltilmiş kararlar öğrenmeye aday olur; mevcut H-N değerleri otomatik eğitim verisi yapılmaz.
+- **Ağır Hasar AI ön değerlendirme:** `34 PME 968 / 49/18303851` fixture senaryosu eklendi; ekonomik %60 eşik ile yapısal kritik parça eşiği ayrı raporlanır.
+- **Yapısal ön göğüs/firewall güvenliği:** `Ön Göğüs` eksper teyidi olmadan 40 puan almaz; teyitsizse kontrol gerekli kalır ve torpido/plastik göğüs mü, yapısal sac/firewall mı sorusu gösterilir.
+- **Release hazırlığı:** package/app sürümü, README, docs, changelog, final office audit ve ofis hedef sürüm örnekleri v0.5.0’a çekildi.
 
 ## Sistem Mimarisi Kısa Özeti
 
@@ -132,8 +133,8 @@ npm run dist:win
 
 Çıktılar `release/` klasöründe üretilir:
 
-- `HasarBotu-Baran-Ekspertiz-Kurulum-v0.4.12-x64.exe`
-- `HasarBotu-Baran-Ekspertiz-Tasinabilir-v0.4.12-x64.exe`
+- `HasarBotu-Baran-Ekspertiz-Kurulum-0.5.0.exe`
+- `HasarBotu-Baran-Ekspertiz-Tasinabilir-0.5.0.exe`
 
 EXE rehberi: [docs/EXE_URETIM_REHBERI.md](docs/EXE_URETIM_REHBERI.md)
 

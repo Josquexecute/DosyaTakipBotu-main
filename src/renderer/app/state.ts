@@ -1,5 +1,9 @@
-import type { AppSettings, AutoLaborPreview, AutoLaborSaveResult, CaseIndexItem, DashboardSummary, ExcelLaborDistributeResult, ExcelLaborPreview, FolderBrowseResult, PartsPhotoAnalysis, ScanReport, TrackingFile, DeploymentStatus } from '../../shared/types';
+import type { AppSettings, AutoLaborCategory, AutoLaborPreview, AutoLaborSaveResult, CaseIndexItem, DashboardSummary, ExcelLaborDistributeResult, ExcelLaborPreview, FolderBrowseResult, PartsPhotoAnalysis, ScanReport, TrackingFile, DeploymentStatus } from '../../shared/types';
 import type { UserPartTerm } from '../../shared/parca-sozlugu';
+import { AUTO_LABOR_DEFAULT_PAGE_SIZE, type AutoLaborPreviewFilter } from '../../shared/auto-labor-view-model';
+import type { LaborLearningEntry } from '../../shared/labor-learning-dictionary';
+import type { HeavyDamageAssessmentPreview, HeavyDamageRowEdit } from '../../shared/heavy-damage-types';
+import type { HeavyDamageFilter } from '../../shared/heavy-damage-rules';
 
 export interface UiState {
   settings: AppSettings | null;
@@ -33,6 +37,14 @@ export interface UiState {
   autoLaborSaving: boolean;
   autoLaborResult: AutoLaborSaveResult | null;
   autoLaborAllowFormula: boolean;
+  autoLaborFilter: AutoLaborPreviewFilter;
+  autoLaborSearch: string;
+  autoLaborPage: number;
+  autoLaborPageSize: number;
+  autoLaborReviewRows: Record<number, boolean>;
+  autoLaborConfirmOpen: boolean;
+  autoLaborSaveError: AutoLaborSaveErrorState | null;
+  autoLaborReportSnapshot: AutoLaborReportSnapshot | null;
   /** İşçilik tablosunda kullanıcının elle değiştirdiği satır tutarları (satır no → tutar). */
   laborRowOverrides: Record<number, number>;
   /** AI ile okunan parça listesi fotoğrafı analizi. */
@@ -41,6 +53,21 @@ export interface UiState {
   partsAnalyzing: boolean;
   /** Kullanıcının öğrettiği parça terimleri (kalıcı, kişisel sözlük). */
   partsUserTerms: UserPartTerm[];
+  laborLearningEntries: LaborLearningEntry[];
+  laborLearningSearch: string;
+  laborLearningFilter: string;
+  laborLearningLoading: boolean;
+  laborLearningReport: string;
+  heavyDamagePreview: HeavyDamageAssessmentPreview | null;
+  heavyDamageEdits: Record<string, HeavyDamageRowEdit>;
+  heavyDamageFilter: HeavyDamageFilter;
+  heavyDamageManualText: string;
+  heavyDamageRepairCost: string;
+  heavyDamageMarketValue: string;
+  heavyDamageUserNotes: string;
+  heavyDamageConfirmOpen: boolean;
+  heavyDamageSaving: boolean;
+  heavyDamageReport: string;
   deploymentStatus: DeploymentStatus | null;
   /** v0.4.1 Klasörler: yalnızca-okunur pCloud klasör gezgini durumu. */
   folderBrowse: FolderBrowseResult | null;
@@ -91,6 +118,26 @@ export type CaseSortMode = 'plate-az' | 'plate-za' | 'office-az' | 'notice-az' |
 export type DetailTab = 'home' | 'dosyalar' | 'klasorler' | 'durum' | 'ozet' | 'issues' | 'operasyon' | 'evrak' | 'portal' | 'labor' | 'rucu' | 'ktt' | 'heavy' | 'ai' | 'settings';
 
 export type StatusBoardSort = 'dosya-az' | 'plate-az' | 'updated-desc' | 'durum';
+export type { AutoLaborPreviewFilter };
+
+export interface AutoLaborSaveErrorState {
+  message: string;
+  originalStatus: string;
+  backupStatus: string;
+  partialWriteStatus: string;
+}
+
+export interface AutoLaborReportSnapshot {
+  categoryTotals: Partial<Record<AutoLaborCategory, number>>;
+  userEditedRows: number;
+  learningCandidateRows: number;
+  oldClearedCells: number;
+  lowConfidenceRows: number;
+  mediumConfidenceRows: number;
+  formulaRows: number;
+  partialWriteStatus: string;
+  warnings: string[];
+}
 
 export const state: UiState = {
   settings: null,
@@ -121,10 +168,33 @@ export const state: UiState = {
   autoLaborSaving: false,
   autoLaborResult: null,
   autoLaborAllowFormula: false,
+  autoLaborFilter: 'all',
+  autoLaborSearch: '',
+  autoLaborPage: 1,
+  autoLaborPageSize: AUTO_LABOR_DEFAULT_PAGE_SIZE,
+  autoLaborReviewRows: {},
+  autoLaborConfirmOpen: false,
+  autoLaborSaveError: null,
+  autoLaborReportSnapshot: null,
   laborRowOverrides: {},
   partsAnalysis: null,
   partsAnalyzing: false,
   partsUserTerms: [],
+  laborLearningEntries: [],
+  laborLearningSearch: '',
+  laborLearningFilter: 'all',
+  laborLearningLoading: false,
+  laborLearningReport: '',
+  heavyDamagePreview: null,
+  heavyDamageEdits: {},
+  heavyDamageFilter: 'all',
+  heavyDamageManualText: '',
+  heavyDamageRepairCost: '',
+  heavyDamageMarketValue: '',
+  heavyDamageUserNotes: '',
+  heavyDamageConfirmOpen: false,
+  heavyDamageSaving: false,
+  heavyDamageReport: '',
   deploymentStatus: null,
   folderBrowse: null,
   folderLoading: false,

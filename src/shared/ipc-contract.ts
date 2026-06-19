@@ -23,8 +23,12 @@ import type {
   TrackingWriteResult
 } from './types';
 import type { UserPartTerm } from './parca-sozlugu';
+import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from './labor-learning-dictionary';
+import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageClearArgs, HeavyDamageGenerateNoteArgs, HeavyDamageGetArgs, HeavyDamagePreviewArgs, HeavyDamageSaveArgs } from './heavy-damage-types';
 
 export type { ApiResult };
+export type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from './labor-learning-dictionary';
+export type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageClearArgs, HeavyDamageGenerateNoteArgs, HeavyDamageGetArgs, HeavyDamagePreviewArgs, HeavyDamageSaveArgs } from './heavy-damage-types';
 
 export const IPC_INVOKE_CHANNELS = {
   settingsGet: 'settings:get',
@@ -47,6 +51,18 @@ export const IPC_INVOKE_CHANNELS = {
   partsExportLaborExcel: 'parts:export-labor-excel',
   laborAutoPreview: 'labor:auto-preview',
   laborAutoSave: 'labor:auto-save',
+  laborLearningList: 'labor-learning:list',
+  laborLearningUpdate: 'labor-learning:update',
+  laborLearningDisable: 'labor-learning:disable',
+  laborLearningEnable: 'labor-learning:enable',
+  laborLearningDelete: 'labor-learning:delete',
+  laborLearningExport: 'labor-learning:export',
+  laborLearningImport: 'labor-learning:import',
+  heavyDamagePreview: 'heavy-damage:preview',
+  heavyDamageGet: 'heavy-damage:get',
+  heavyDamageSave: 'heavy-damage:save',
+  heavyDamageClear: 'heavy-damage:clear',
+  heavyDamageGenerateNote: 'heavy-damage:generate-note',
   casesExportExcel: 'cases:export-excel',
   trackingUpdateChecklist: 'tracking:update-checklist',
   trackingAddTodo: 'tracking:add-todo',
@@ -162,6 +178,18 @@ export interface HasarbotuApi {
   analyzePartsPhoto<T = PartsPhotoAnalysis>(args?: PartsAnalyzePhotoArgs): Promise<ApiResult<T>>;
   autoLaborPreview<T = AutoLaborPreview>(): Promise<ApiResult<T>>;
   autoLaborSave<T = AutoLaborSaveResult>(args: LaborAutoSaveArgs): Promise<ApiResult<T>>;
+  laborLearningList<T = LaborLearningEntry[]>(): Promise<ApiResult<T>>;
+  laborLearningUpdate<T = LaborLearningEntry[]>(args: LaborLearningUpdateInput): Promise<ApiResult<T>>;
+  laborLearningDisable<T = LaborLearningEntry[]>(args: LaborLearningAdminKey): Promise<ApiResult<T>>;
+  laborLearningEnable<T = LaborLearningEntry[]>(args: LaborLearningAdminKey): Promise<ApiResult<T>>;
+  laborLearningDelete<T = LaborLearningEntry[]>(args: LaborLearningAdminKey): Promise<ApiResult<T>>;
+  laborLearningExport<T = LaborLearningExportResult>(): Promise<ApiResult<T>>;
+  laborLearningImport<T = LaborLearningImportResult>(): Promise<ApiResult<T>>;
+  heavyDamagePreview<T = HeavyDamageAssessmentPreview>(args: HeavyDamagePreviewArgs): Promise<ApiResult<T>>;
+  heavyDamageGet<T = HeavyDamageAssessmentRecord | null>(args: HeavyDamageGetArgs): Promise<ApiResult<T>>;
+  heavyDamageSave<T = TrackingWriteResult>(args: HeavyDamageSaveArgs): Promise<ApiResult<T>>;
+  heavyDamageClear<T = TrackingWriteResult>(args: HeavyDamageClearArgs): Promise<ApiResult<T>>;
+  heavyDamageGenerateNote<T = string>(args: HeavyDamageGenerateNoteArgs): Promise<ApiResult<T>>;
   getPartUserTerms<T = UserPartTerm[]>(): Promise<ApiResult<T>>;
   learnPartTerm<T = UserPartTerm[]>(args: PartsLearnTermArgs): Promise<ApiResult<T>>;
   exportPartsLaborExcel<T = CaseListExportResult>(args: PartsExportLaborArgs): Promise<ApiResult<T>>;

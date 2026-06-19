@@ -1,5 +1,6 @@
 import type { ClaimType, TrackingFile } from '../../shared/types';
 import { CLAIM_TYPES, PRIORITIES, WORKFLOW_STATUSES } from '../../shared/workflow';
+import { normalizeHeavyDamageAssessmentRecord } from '../../shared/heavy-damage-rules';
 
 const PRIORITY_SET = new Set(PRIORITIES);
 const WORKFLOW_STATUS_SET = new Set(WORKFLOW_STATUSES);
@@ -86,6 +87,9 @@ export function migrateTracking(value: unknown): TrackingFile | null {
     not: stringOr(tracking.heavyDamage?.not, ''),
     ...(Number.isFinite(Number(tracking.heavyDamage?.skor)) ? { skor: Number(tracking.heavyDamage?.skor) } : {})
   };
+  const assessment = normalizeOptionalHeavyDamageAssessment((tracking as unknown as Record<string, unknown>).heavyDamageAssessment);
+  if (assessment) tracking.heavyDamageAssessment = assessment;
+  else delete tracking.heavyDamageAssessment;
   tracking.audit = Array.isArray(tracking.audit) ? tracking.audit : [];
   return tracking;
 }
@@ -116,6 +120,14 @@ function stringOr(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback;
 }
 
+function normalizeOptionalHeavyDamageAssessment(value: unknown): TrackingFile['heavyDamageAssessment'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  try {
+    return normalizeHeavyDamageAssessmentRecord(value as NonNullable<TrackingFile['heavyDamageAssessment']>);
+  } catch {
+    return undefined;
+  }
+}
 
 export function getUnsupportedSchemaVersion(value: unknown): number | null {
   if (!isObject(value)) return null;

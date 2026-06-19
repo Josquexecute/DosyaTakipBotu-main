@@ -1,6 +1,6 @@
 # EXE Üretim Rehberi
 
-HasarBotu v0.4.12 Windows dağıtımı Electron Builder ile üretilir. Release çıktıları `release/` klasöründe tutulur.
+HasarBotu v0.5.0 Windows dağıtımı Electron Builder ile üretilir. Release çıktıları `release/` klasöründe tutulur.
 
 ## Ön Koşullar
 
@@ -24,8 +24,8 @@ Beklenen çıktılar:
 
 | Çıktı | Amaç |
 | --- | --- |
-| `HasarBotu-Baran-Ekspertiz-Kurulum-v0.4.12-x64.exe` | NSIS kurulum paketi |
-| `HasarBotu-Baran-Ekspertiz-Tasinabilir-v0.4.12-x64.exe` | Taşınabilir uygulama |
+| `HasarBotu-Baran-Ekspertiz-Kurulum-0.5.0.exe` | NSIS kurulum paketi |
+| `HasarBotu-Baran-Ekspertiz-Tasinabilir-0.5.0.exe` | Taşınabilir uygulama |
 
 ## Hash ve Release Notu
 
@@ -38,7 +38,7 @@ Beklenen ek çıktılar:
 
 - `RELEASE_HASHES_SHA256.txt`
 - `RELEASE_HASHES_SHA256.json`
-- `RELEASE_NOTES_v0.4.12.md`
+- `RELEASE_NOTES_v0.5.0.md`
 
 ## Kuru Prova ve Aday Kontrolü
 
@@ -62,6 +62,6 @@ kontrol eder.
 - [ ] `npm run dist:win` iki EXE üretti.
 - [ ] SHA-256 çıktıları üretildi.
 - [ ] Release notu üretildi.
-- [ ] Ofis hedef sürüm v0.4.12 olarak ayarlandı.
+- [ ] Ofis hedef sürüm v0.5.0 olarak ayarlandı.
 - [ ] Önceki stabil EXE ve son takip yedeği saklandı.
 - [ ] Geri dönüş planı ekip tarafından biliniyor.

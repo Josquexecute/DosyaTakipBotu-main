@@ -1,6 +1,6 @@
 # Canlı Kullanım Kılavuzu
 
-Bu kısa rehber HasarBotu v0.4.12'nin canlı ofis kullanımında izlenecek günlük akışı özetler. Detaylı anlatım için [KULLANIM_KILAVUZU.md](KULLANIM_KILAVUZU.md) kullanılır.
+Bu kısa rehber HasarBotu v0.5.0'nin canlı ofis kullanımında izlenecek günlük akışı özetler. Detaylı anlatım için [KULLANIM_KILAVUZU.md](KULLANIM_KILAVUZU.md) kullanılır.
 
 ## Günlük Başlangıç
 

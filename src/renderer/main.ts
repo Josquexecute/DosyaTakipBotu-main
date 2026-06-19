@@ -1,7 +1,6 @@
 import type {
   ApiResult,
   AppSettings,
-  AutoLaborCategory,
   AutoLaborPreview,
   AutoLaborSaveResult,
   CaseIndexItem,
@@ -21,17 +20,23 @@ import type {
   TrackingFile,
   TrackingWriteResult
 } from '../shared/types';
+import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from '../shared/ipc-contract';
+import type { LaborCategory } from '../shared/labor-rules';
+import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageDamageType, HeavyDamageRepairSeverity, HeavyDamageRowEdit } from '../shared/heavy-damage-types';
+import { applyHeavyDamageEdits, generateHeavyDamageAssessmentNote, HEAVY_DAMAGE_FILTERS, type HeavyDamageFilter } from '../shared/heavy-damage-rules';
 import { renderApp } from './app/components/layout';
 import { getFilteredCases, getVirtualListTotalHeight, renderCaseVirtualRows } from './app/components/cases';
 import { statusBoardCases, statusBoardPageCount } from './app/components/status-board';
 import { formatMoney, laborWrittenTotal } from './app/components/detail';
 import { todayDateInput } from './app/validation';
 import { state, selectedCase } from './app/state';
+import type { AutoLaborPreviewFilter } from './app/state';
 import { normalizeSearch } from '../shared/turkish';
 import { createMutationQueue, setTrackingLocalField as setLocalField } from '../shared/renderer-stability';
 import { normalizePartName } from '../shared/parca-sozlugu';
 import type { UserPartTerm } from '../shared/parca-sozlugu';
 import { suggestLaborForPart } from '../shared/price-list';
+import { AUTO_LABOR_DEFAULT_PAGE_SIZE, buildAutoLaborSavePlan, normalizeAutoLaborPageSize } from './app/auto-labor-view-model';
 
 const appEl = document.getElementById('app') as HTMLElement | null;
 if (!appEl) {
@@ -43,6 +48,7 @@ let autoScanTimer: number | null = null;
 let virtualRenderQueued = false;
 let responsiveResizeTimer: number | null = null;
 let searchDebounceTimer: number | null = null;
+let autoLaborSearchDebounceTimer: number | null = null;
 let scanRequestInFlight = false;
 let toastAutoDismissTimer: number | null = null;
 let errorAutoDismissTimer: number | null = null;
@@ -57,6 +63,7 @@ void boot().catch((error) => renderFatalError(error));
 async function boot(): Promise<void> {
   await loadSettings();
   void loadPartsUserTerms();
+  void loadLaborLearning();
   await loadDeploymentStatus();
   applyThemeAndZoom();
   window.hasarbotu.on('scan:finished', (payload) => {
@@ -196,7 +203,7 @@ function restoreFocusedControl(snapshot: FocusSnapshot | null): void {
 
 function stableSelectorFor(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): string | null {
   if (element.id) return `#${cssEscape(element.id)}`;
-  for (const attr of ['field', 'checklist', 'todoComplete', 'todoTitle', 'todoPriority', 'todoAssigned', 'todoDue', 'noteText', 'setting', 'settingInterval', 'userRename', 'listFilter', 'laborAmount', 'autoLaborAmount', 'autoLaborApprove', 'partCanonical', 'statusFilter', 'statusSort', 'statusResponsible', 'statusToggle']) {
+  for (const attr of ['field', 'checklist', 'todoComplete', 'todoTitle', 'todoPriority', 'todoAssigned', 'todoDue', 'noteText', 'setting', 'settingInterval', 'userRename', 'listFilter', 'laborAmount', 'autoLaborAmount', 'autoLaborApprove', 'autoLaborReview', 'partCanonical', 'statusFilter', 'statusSort', 'statusResponsible', 'statusToggle', 'laborLearningFilter', 'learningCategory', 'learningReview', 'learningActive', 'learningReason', 'heavyRowCategory', 'heavyRowDamage', 'heavyRowSeverity', 'heavyRowScore', 'heavyRowReview', 'heavyRowStructural', 'heavyRowNote']) {
     const value = element.dataset[attr];
     if (value !== undefined) return `[data-${camelToKebab(attr)}="${cssEscape(value)}"]`;
   }
@@ -222,6 +229,16 @@ function queueSearchUpdate(value: string): void {
   }, SEARCH_DEBOUNCE_MS);
 }
 
+function queueAutoLaborSearchUpdate(value: string): void {
+  if (autoLaborSearchDebounceTimer !== null) window.clearTimeout(autoLaborSearchDebounceTimer);
+  state.autoLaborSearch = value;
+  state.autoLaborPage = 1;
+  autoLaborSearchDebounceTimer = window.setTimeout(() => {
+    autoLaborSearchDebounceTimer = null;
+    render();
+  }, SEARCH_DEBOUNCE_MS);
+}
+
 async function hydrateSelectedCase(folderPath: string, shouldRender: boolean): Promise<void> {
   if (!folderPath) return;
   const result = await window.hasarbotu.getCase<CaseIndexItem | null>(folderPath);
@@ -240,6 +257,15 @@ function wireEvents(): void {
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
     if (target.id === 'global-search') {
       queueSearchUpdate(target.value);
+      return;
+    }
+    if (target.id === 'auto-labor-search') {
+      queueAutoLaborSearchUpdate(target.value);
+      return;
+    }
+    if (target.id === 'labor-learning-search') {
+      state.laborLearningSearch = target.value;
+      render();
       return;
     }
     if (target.id === 'status-board-search') {
@@ -278,6 +304,31 @@ function wireEvents(): void {
       updateAutoLaborEdit(target);
       return;
     }
+    if (target instanceof HTMLInputElement && target.dataset.heavyRowScore !== undefined) {
+      updateHeavyDamageRowEdit(target);
+      return;
+    }
+    if (target instanceof HTMLTextAreaElement && target.dataset.heavyRowNote !== undefined) {
+      updateHeavyDamageRowEdit(target);
+      return;
+    }
+    if (target.id === 'heavy-damage-manual') {
+      state.heavyDamageManualText = target.value;
+      return;
+    }
+    if (target.id === 'heavy-damage-repair-cost') {
+      state.heavyDamageRepairCost = target.value;
+      return;
+    }
+    if (target.id === 'heavy-damage-market-value') {
+      state.heavyDamageMarketValue = target.value;
+      return;
+    }
+    if (target.id === 'heavy-damage-user-notes') {
+      state.heavyDamageUserNotes = target.value;
+      state.heavyDamageReport = '';
+      return;
+    }
     if (target.dataset.listFilter === 'responsible') {
       state.responsibleFilter = target.value || 'all';
       state.caseListScrollTop = 0;
@@ -311,17 +362,49 @@ function wireEvents(): void {
       void handleSettingsInputChange(target);
       return;
     }
+    if (target.dataset.laborLearningFilter !== undefined) {
+      state.laborLearningFilter = target.value || 'all';
+      render();
+      return;
+    }
     if (target.id === 'labor-target-column' || target.id === 'labor-use-price-list') {
       void refreshLaborExcelPreview();
       return;
     }
+    if (target instanceof HTMLSelectElement && target.dataset.autoLaborPageSize !== undefined) {
+      setAutoLaborPageSize(Number(target.value));
+      return;
+    }
     if (target instanceof HTMLInputElement && target.dataset.autoLaborToggle === 'formula') {
       state.autoLaborAllowFormula = target.checked;
+      clearAutoLaborSaveOutcome();
+      render();
       return;
     }
     if (target instanceof HTMLInputElement && target.dataset.autoLaborApprove !== undefined) {
       const rowNumber = Number(target.dataset.autoLaborApprove);
       if (Number.isInteger(rowNumber)) state.autoLaborApprovedRows[rowNumber] = target.checked;
+      clearAutoLaborSaveOutcome();
+      render();
+      return;
+    }
+    if (target instanceof HTMLInputElement && target.dataset.autoLaborReview !== undefined) {
+      const rowNumber = Number(target.dataset.autoLaborReview);
+      if (Number.isInteger(rowNumber)) state.autoLaborReviewRows[rowNumber] = target.checked;
+      clearAutoLaborSaveOutcome();
+      render();
+      return;
+    }
+    if (
+      target.dataset.heavyRowCategory !== undefined ||
+      target.dataset.heavyRowDamage !== undefined ||
+      target.dataset.heavyRowSeverity !== undefined ||
+      target.dataset.heavyRowScore !== undefined ||
+      target.dataset.heavyRowReview !== undefined ||
+      target.dataset.heavyRowStructural !== undefined ||
+      target.dataset.heavyRowNote !== undefined
+    ) {
+      updateHeavyDamageRowEdit(target);
       return;
     }
     // v0.4.6: Kaydırılabilir parça öneri listesi (select) → ilgili "Gerçek Ad" input'unu doldurur.
@@ -421,7 +504,9 @@ function wireEvents(): void {
     }
     const folder = element.dataset.folder;
     if (folder) {
+      const folderChanged = state.selectedFolderPath !== folder;
       state.selectedFolderPath = folder;
+      if (folderChanged) resetHeavyDamagePreviewState(true);
       render();
       void hydrateSelectedCase(folder, true);
       return;
@@ -483,8 +568,28 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'distribute-labor-excel': await distributeLaborExcel(); break;
     case 'reset-labor-overrides': state.laborRowOverrides = {}; render(); break;
     case 'auto-labor-preview': await autoLaborPreviewAction(); break;
-    case 'auto-labor-save': await autoLaborSaveAction(); break;
-    case 'auto-labor-clear': state.autoLaborPreview = null; state.autoLaborEdits = {}; state.autoLaborApprovedRows = {}; state.autoLaborResult = null; state.autoLaborAllowFormula = false; render(); break;
+    case 'auto-labor-filter': setAutoLaborFilter(element?.dataset.autoLaborFilter); break;
+    case 'auto-labor-page': setAutoLaborPage(Number(element?.dataset.autoLaborPage ?? 1)); break;
+    case 'auto-labor-save': openAutoLaborConfirm(); break;
+    case 'auto-labor-save-confirm': await autoLaborSaveAction(); break;
+    case 'auto-labor-confirm-back': state.autoLaborConfirmOpen = false; render(); break;
+    case 'auto-labor-save-cancel': state.autoLaborConfirmOpen = false; setToast('Kaydetme iptal edildi.', 'info'); render(); break;
+    case 'auto-labor-clear': resetAutoLaborPreviewState(); render(); break;
+    case 'heavy-damage-preview': await heavyDamagePreviewAction(); break;
+    case 'heavy-damage-filter': setHeavyDamageFilter(element?.dataset.heavyDamageFilter); break;
+    case 'heavy-damage-reset': resetHeavyDamagePreviewState(); render(); break;
+    case 'heavy-damage-save': openHeavyDamageConfirm(); break;
+    case 'heavy-damage-save-confirm': await heavyDamageSaveAction(); break;
+    case 'heavy-damage-confirm-back': state.heavyDamageConfirmOpen = false; render(); break;
+    case 'heavy-damage-save-cancel': state.heavyDamageConfirmOpen = false; setToast('Ağır hasar kaydı iptal edildi.', 'info'); render(); break;
+    case 'heavy-damage-clear': await clearHeavyDamageAssessment(); break;
+    case 'labor-learning-refresh': await loadLaborLearning(true); break;
+    case 'labor-learning-update': await updateLaborLearningEntry(element); break;
+    case 'labor-learning-disable': await setLaborLearningEntryActive(element, false); break;
+    case 'labor-learning-enable': await setLaborLearningEntryActive(element, true); break;
+    case 'labor-learning-delete': await deleteLaborLearningEntry(element); break;
+    case 'labor-learning-export': await exportLaborLearning(); break;
+    case 'labor-learning-import': await importLaborLearning(); break;
     case 'analyze-parts-photo': await analyzePartsPhotoAction(); break;
     case 'clear-parts-analysis': state.partsAnalysis = null; render(); break;
     case 'learn-part-term': await learnPartTermAction(Number(element?.dataset.partIndex ?? -1)); break;
@@ -792,6 +897,106 @@ async function loadPartsUserTerms(): Promise<void> {
   if (result.ok) state.partsUserTerms = result.data;
 }
 
+async function loadLaborLearning(showToast = false): Promise<void> {
+  state.laborLearningLoading = true;
+  const result = await window.hasarbotu.laborLearningList<LaborLearningEntry[]>();
+  state.laborLearningLoading = false;
+  if (result.ok) {
+    state.laborLearningEntries = result.data;
+    if (showToast) setToast(`AI işçilik öğrenme sözlüğü yenilendi: ${result.data.length} kayıt.`, 'success');
+  } else {
+    state.error = result.error.message;
+  }
+  if (showToast) render();
+}
+
+function laborLearningKeyFromElement(element?: HTMLElement): LaborLearningAdminKey | null {
+  const holder = element?.closest<HTMLElement>('[data-learning-name]');
+  const normalizedName = holder?.dataset.learningName ?? '';
+  if (!normalizedName) return null;
+  const partCode = holder?.dataset.learningCode ?? '';
+  return { normalizedName, ...(partCode ? { partCode } : {}) };
+}
+
+function collectLaborLearningUpdate(element?: HTMLElement): LaborLearningUpdateInput | null {
+  const row = element?.closest<HTMLElement>('.labor-learning-row');
+  const key = laborLearningKeyFromElement(row ?? element);
+  if (!row || !key) return null;
+  const categories = Array.from(row.querySelectorAll<HTMLInputElement>('[data-learning-category]:checked'))
+    .map((input) => input.dataset.learningCategory)
+    .filter((category): category is LaborCategory => Boolean(category));
+  if (categories.length === 0) {
+    state.error = 'En az bir işçilik türü seçilmelidir.';
+    render();
+    return null;
+  }
+  const reason = row.querySelector<HTMLTextAreaElement>('[data-learning-reason]')?.value.trim() ?? '';
+  const needsReview = row.querySelector<HTMLInputElement>('[data-learning-review]')?.checked ?? false;
+  const active = row.querySelector<HTMLInputElement>('[data-learning-active]')?.checked ?? true;
+  return { ...key, categories, reason, needsReview, active, source: 'user-correction' };
+}
+
+async function updateLaborLearningEntry(element?: HTMLElement): Promise<void> {
+  const args = collectLaborLearningUpdate(element);
+  if (!args) return;
+  const result = await window.hasarbotu.laborLearningUpdate<LaborLearningEntry[]>(args);
+  if (result.ok) {
+    state.laborLearningEntries = result.data;
+    state.laborLearningReport = 'Öğrenme kaydı güncellendi. Sonraki AI önerilerinde güncel kayıt kullanılacak.';
+    setToast('AI işçilik öğrenme kaydı güncellendi.', 'success');
+  } else state.error = result.error.message;
+  render();
+}
+
+async function setLaborLearningEntryActive(element: HTMLElement | undefined, active: boolean): Promise<void> {
+  const key = laborLearningKeyFromElement(element);
+  if (!key) return;
+  const result = active
+    ? await window.hasarbotu.laborLearningEnable<LaborLearningEntry[]>(key)
+    : await window.hasarbotu.laborLearningDisable<LaborLearningEntry[]>(key);
+  if (result.ok) {
+    state.laborLearningEntries = result.data;
+    state.laborLearningReport = active ? 'Bu kayıt tekrar aktif edildi.' : 'Bu kayıt devre dışı bırakıldı. Devre dışı kayıtlar AI kararlarında kullanılmaz.';
+    setToast(active ? 'Öğrenme kaydı aktif edildi.' : 'Öğrenme kaydı devre dışı bırakıldı.', active ? 'success' : 'warning');
+  } else state.error = result.error.message;
+  render();
+}
+
+async function deleteLaborLearningEntry(element?: HTMLElement): Promise<void> {
+  const key = laborLearningKeyFromElement(element);
+  if (!key) return;
+  if (!window.confirm('Bu öğrenme kaydını silmek istediğinize emin misiniz? Silinen kayıt AI kararlarında kullanılmaz.')) return;
+  const result = await window.hasarbotu.laborLearningDelete<LaborLearningEntry[]>(key);
+  if (result.ok) {
+    state.laborLearningEntries = result.data;
+    state.laborLearningReport = 'Öğrenme kaydı silindi. Silinen kayıt AI kararlarında kullanılmaz.';
+    setToast('Öğrenme kaydı silindi.', 'warning');
+  } else state.error = result.error.message;
+  render();
+}
+
+async function exportLaborLearning(): Promise<void> {
+  const result = await window.hasarbotu.laborLearningExport<LaborLearningExportResult>();
+  if (result.ok) {
+    state.laborLearningReport = `Dışa aktarma tamamlandı: ${result.data.count} kayıt • ${result.data.filePath}`;
+    setToast(`Öğrenme sözlüğü dışa aktarıldı: ${result.data.count} kayıt.`, 'success');
+  } else if (!/iptal/i.test(result.error.message)) state.error = result.error.message;
+  render();
+}
+
+async function importLaborLearning(): Promise<void> {
+  const result = await window.hasarbotu.laborLearningImport<LaborLearningImportResult>();
+  if (result.ok) {
+    state.laborLearningEntries = result.data.entries;
+    const warning = result.data.errors.length > 0 ? ` Uyarı: ${result.data.errors.slice(0, 3).join(' | ')}` : '';
+    state.laborLearningReport = `İçe aktarma tamamlandı: ${result.data.added} eklendi, ${result.data.updated} güncellendi, ${result.data.skipped} atlandı.${warning}`;
+    setToast(state.laborLearningReport, result.data.skipped > 0 ? 'warning' : 'success');
+  } else if (!/iptal/i.test(result.error.message)) {
+    state.error = result.error.message || 'Bozuk veya uyumsuz öğrenme sözlüğü dosyası.';
+  }
+  render();
+}
+
 async function learnPartTermAction(index: number): Promise<void> {
   const analysis = state.partsAnalysis;
   const row = analysis?.rows[index];
@@ -922,6 +1127,68 @@ function updateAutoLaborEdit(input: HTMLInputElement): void {
     edits[category] = Math.round(amount);
   }
   state.autoLaborEdits[rowNumber] = edits;
+  clearAutoLaborSaveOutcome();
+}
+
+function setAutoLaborFilter(rawFilter?: string): void {
+  const allowed: AutoLaborPreviewFilter[] = ['all', 'changed', 'review', 'high', 'medium', 'low', 'oldCleared', 'learning'];
+  if (!allowed.includes(rawFilter as AutoLaborPreviewFilter)) return;
+  state.autoLaborFilter = rawFilter as AutoLaborPreviewFilter;
+  state.autoLaborPage = 1;
+  render();
+}
+
+function setAutoLaborPage(page: number): void {
+  if (!state.autoLaborPreview) return;
+  if (!Number.isInteger(page) || page < 1) return;
+  state.autoLaborPage = page;
+  render();
+}
+
+function setAutoLaborPageSize(pageSize: number): void {
+  if (!state.autoLaborPreview) return;
+  state.autoLaborPageSize = normalizeAutoLaborPageSize(pageSize);
+  state.autoLaborPage = 1;
+  render();
+}
+
+function clearAutoLaborSaveOutcome(): void {
+  state.autoLaborResult = null;
+  state.autoLaborReportSnapshot = null;
+  state.autoLaborSaveError = null;
+  document.querySelector('.auto-labor-result')?.remove();
+  document.querySelector('.auto-labor-save-error')?.remove();
+}
+
+function resetAutoLaborPreviewState(): void {
+  if (autoLaborSearchDebounceTimer !== null) {
+    window.clearTimeout(autoLaborSearchDebounceTimer);
+    autoLaborSearchDebounceTimer = null;
+  }
+  state.autoLaborPreview = null;
+  state.autoLaborEdits = {};
+  state.autoLaborApprovedRows = {};
+  state.autoLaborReviewRows = {};
+  state.autoLaborResult = null;
+  state.autoLaborReportSnapshot = null;
+  state.autoLaborSaveError = null;
+  state.autoLaborAllowFormula = false;
+  state.autoLaborFilter = 'all';
+  state.autoLaborSearch = '';
+  state.autoLaborPage = 1;
+  state.autoLaborPageSize = AUTO_LABOR_DEFAULT_PAGE_SIZE;
+  state.autoLaborConfirmOpen = false;
+}
+
+function openAutoLaborConfirm(): void {
+  const preview = state.autoLaborPreview;
+  if (!preview) return;
+  if (preview.columns.length === 0) { reportOperationError('İşçilik kategori sütunları bulunamadı; bu Excel için AI yazamaz.'); return; }
+  const plan = buildAutoLaborSavePlan(preview, state);
+  if (plan.rows.length === 0) { reportOperationError('Yazılacak işçilik tutarı bulunamadı.'); return; }
+  state.autoLaborConfirmOpen = true;
+  state.autoLaborSaveError = null;
+  render();
 }
 
 async function autoLaborPreviewAction(): Promise<void> {
@@ -935,8 +1202,16 @@ async function autoLaborPreviewAction(): Promise<void> {
   state.autoLaborPreview = result.data;
   state.autoLaborEdits = {};
   state.autoLaborApprovedRows = {};
+  state.autoLaborReviewRows = {};
   state.autoLaborResult = null;
+  state.autoLaborReportSnapshot = null;
+  state.autoLaborSaveError = null;
   state.autoLaborAllowFormula = false;
+  state.autoLaborFilter = 'all';
+  state.autoLaborSearch = '';
+  state.autoLaborPage = 1;
+  state.autoLaborPageSize = AUTO_LABOR_DEFAULT_PAGE_SIZE;
+  state.autoLaborConfirmOpen = false;
   const s = result.data.summary;
   setToast(`AI dağıtım hazır: ${s.processed} satır işlendi • ${s.highConfidence} yüksek güven • ${s.needsReview} kontrol gerekli.`, 'success');
   render();
@@ -945,57 +1220,265 @@ async function autoLaborPreviewAction(): Promise<void> {
 async function autoLaborSaveAction(): Promise<void> {
   const preview = state.autoLaborPreview;
   if (!preview || state.autoLaborSaving) return;
-  if (preview.columns.length === 0) { reportOperationError('İşçilik kategori sütunları bulunamadı; bu Excel için AI yazamaz.'); return; }
-  const validCategories = new Set<AutoLaborCategory>(preview.columns.map((c) => c.category));
-  const rows: Array<{ rowNumber: number; amounts: Partial<Record<AutoLaborCategory, number>> }> = [];
-  const corrections: NonNullable<Parameters<typeof window.hasarbotu.autoLaborSave>[0]['corrections']> = [];
-  for (const row of preview.rows) {
-    const edits = state.autoLaborEdits[row.rowNumber];
-    const approved = state.autoLaborApprovedRows[row.rowNumber] === true;
-    const hasEdits = !!edits && Object.keys(edits).length > 0;
-    const amounts: Partial<Record<AutoLaborCategory, number>> = {};
-    for (const [cat, value] of Object.entries(row.amounts)) {
-      if (typeof value === 'number' && value > 0) amounts[cat as AutoLaborCategory] = value;
-    }
-    if (edits) {
-      for (const [cat, value] of Object.entries(edits)) {
-        if (!validCategories.has(cat as AutoLaborCategory)) continue;
-        if (value > 0) amounts[cat as AutoLaborCategory] = Math.round(value);
-        else delete amounts[cat as AutoLaborCategory];
-      }
-    }
-    if (Object.keys(amounts).length > 0) rows.push({ rowNumber: row.rowNumber, amounts });
-    if ((approved || hasEdits) && Object.keys(amounts).length > 0) {
-      corrections.push({
-        alias: row.partName,
-        ...(row.partCode ? { partCode: row.partCode } : {}),
-        categories: Object.keys(amounts) as AutoLaborCategory[],
-        amounts,
-        amountLogic: hasEdits ? 'kullanıcı düzeltmesi (AI dağıtıcı)' : 'kullanıcı onayı (AI dağıtıcı)',
-        reason: row.reason
-      });
-    }
+  if (!state.autoLaborConfirmOpen) {
+    reportOperationError('Son onay ekranı açılmadan Excel kaydedilemez.');
+    return;
   }
-  if (rows.length === 0) { reportOperationError('Yazılacak işçilik tutarı bulunamadı.'); return; }
-  state.autoLaborSaving = true;
-  render();
-  const result = await window.hasarbotu.autoLaborSave<AutoLaborSaveResult>({
-    filePath: preview.filePath,
-    rows,
-    columns: preview.columns,
-    allowFormulaReplacement: state.autoLaborAllowFormula,
-    needsReviewRows: preview.rows.filter((row) => row.needsReview).length,
-    corrections
-  });
-  state.autoLaborSaving = false;
-  if (!result.ok) {
-    if (!/iptal/i.test(result.error.message)) reportOperationError(result.error.message);
+  if (preview.columns.length === 0) { reportOperationError('İşçilik kategori sütunları bulunamadı; bu Excel için AI yazamaz.'); return; }
+  if (preview.formulaCellsFound > 0 && !state.autoLaborAllowFormula) {
+    state.autoLaborSaveError = {
+      message: 'Formüllü hücreler tespit edildi. Formülleri sabit tutara çevirmek için önce açık onay kutusunu işaretleyin.',
+      originalStatus: 'Orijinal Excel dosyasına yazılmadı.',
+      backupStatus: 'İşlem yazma aşamasına geçmediği için yedek alınmadı.',
+      partialWriteStatus: 'Kısmi yazma yok.'
+    };
     render();
     return;
   }
-  state.autoLaborResult = result.data;
-  setToast(`AI işçilik kaydedildi: ${result.data.changedRows} satır • ${result.data.learnedCount} öğrenildi • yedek alındı.`, 'success');
+  const plan = buildAutoLaborSavePlan(preview, state);
+  if (plan.rows.length === 0) { reportOperationError('Yazılacak işçilik tutarı bulunamadı.'); return; }
+  state.autoLaborSaving = true;
+  state.autoLaborSaveError = null;
   render();
+  const result = await window.hasarbotu.autoLaborSave<AutoLaborSaveResult>({
+    filePath: preview.filePath,
+    rows: plan.rows,
+    columns: preview.columns,
+    allowFormulaReplacement: state.autoLaborAllowFormula,
+    needsReviewRows: plan.stats.reviewRows,
+    corrections: plan.corrections
+  });
+  state.autoLaborSaving = false;
+  if (!result.ok) {
+    state.autoLaborConfirmOpen = false;
+    state.autoLaborResult = null;
+    state.autoLaborReportSnapshot = null;
+    if (/iptal/i.test(result.error.message)) {
+      setToast('Excel kaydetme işlemi iptal edildi.', 'info');
+    } else {
+      state.autoLaborSaveError = {
+        message: result.error.message,
+        originalStatus: 'Orijinal dosyaya doğrudan yazılmadı; AI dağıtıcı ayrı çıktı dosyası üretir.',
+        backupStatus: 'Servis başarılı yedek yolu döndürmedi; yedek oluştuysa orijinal klasörde "-orijinal-yedek-" adıyla bulunur.',
+        partialWriteStatus: 'Başarı onayı alınmadı; çıktı dosyası oluştuysa kullanmadan önce kontrol edin.'
+      };
+      setToast('Excel kaydedilemedi. Orijinal dosya korunuyor.', 'warning');
+    }
+    render();
+    return;
+  }
+  state.autoLaborConfirmOpen = false;
+  state.autoLaborResult = result.data;
+  state.autoLaborReportSnapshot = {
+    categoryTotals: plan.stats.categoryTotals,
+    userEditedRows: plan.stats.userEditedRows,
+    learningCandidateRows: plan.stats.learningCandidateRows,
+    oldClearedCells: plan.stats.oldClearedCells,
+    lowConfidenceRows: plan.stats.lowConfidenceRows,
+    mediumConfidenceRows: plan.stats.mediumConfidenceRows,
+    formulaRows: plan.stats.formulaRows,
+    partialWriteStatus: 'Kısmi yazma yok. Servis başarı onayı döndürdü; orijinal dosya korunur, işlem ayrı çıktı dosyasına yazılır.',
+    warnings: plan.stats.warnings
+  };
+  setToast(`Excel başarıyla kaydedildi: ${result.data.changedRows} satır • ${result.data.learnedCount} öğrenildi • yedek alındı.`, 'success');
+  if (result.data.learnedCount > 0) void loadLaborLearning();
+  render();
+}
+
+function resetHeavyDamagePreviewState(clearInputs = false): void {
+  state.heavyDamagePreview = null;
+  state.heavyDamageEdits = {};
+  state.heavyDamageFilter = 'all';
+  state.heavyDamageUserNotes = '';
+  state.heavyDamageConfirmOpen = false;
+  state.heavyDamageSaving = false;
+  state.heavyDamageReport = '';
+  if (clearInputs) {
+    state.heavyDamageManualText = '';
+    state.heavyDamageRepairCost = '';
+    state.heavyDamageMarketValue = '';
+  }
+}
+
+function setHeavyDamageFilter(rawFilter?: string): void {
+  if (!(HEAVY_DAMAGE_FILTERS as readonly string[]).includes(rawFilter ?? '')) return;
+  state.heavyDamageFilter = rawFilter as HeavyDamageFilter;
+  render();
+}
+
+function updateHeavyDamageRowEdit(target: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): void {
+  const rowId = target.dataset.heavyRowCategory
+    ?? target.dataset.heavyRowDamage
+    ?? target.dataset.heavyRowSeverity
+    ?? target.dataset.heavyRowScore
+    ?? target.dataset.heavyRowReview
+    ?? target.dataset.heavyRowStructural
+    ?? target.dataset.heavyRowNote;
+  if (!rowId || !state.heavyDamagePreview) return;
+  const next: HeavyDamageRowEdit = { ...(state.heavyDamageEdits[rowId] ?? {}) };
+  if (target.dataset.heavyRowCategory !== undefined) next.guideCategory = target.value;
+  if (target.dataset.heavyRowDamage !== undefined) next.damageType = normalizeHeavyDamageType(target.value);
+  if (target.dataset.heavyRowSeverity !== undefined) next.repairSeverity = normalizeHeavyDamageSeverity(target.value);
+  if (target instanceof HTMLInputElement && target.dataset.heavyRowScore !== undefined) {
+    const value = numberOrUndefined(target.value);
+    next.score = value === undefined ? 0 : Math.max(0, Math.round(value * 10) / 10);
+  }
+  if (target instanceof HTMLInputElement && target.dataset.heavyRowReview !== undefined) next.needsReview = target.checked;
+  if (target instanceof HTMLInputElement && target.dataset.heavyRowStructural !== undefined) {
+    next.structuralConfirmed = target.checked;
+    next.guideCategory = 'firewall';
+    next.damageType = target.checked ? 'change' : 'unknown';
+    next.repairSeverity = 'none';
+    next.score = target.checked ? 40 : 0;
+    next.needsReview = !target.checked;
+  }
+  if (target instanceof HTMLTextAreaElement && target.dataset.heavyRowNote !== undefined) next.userNote = target.value.trim();
+  state.heavyDamageEdits[rowId] = next;
+  state.heavyDamageConfirmOpen = false;
+  state.heavyDamageReport = '';
+  render();
+}
+
+function normalizeHeavyDamageType(value: string): HeavyDamageDamageType {
+  if (value === 'repair') return 'repair';
+  if (value === 'unknown') return 'unknown';
+  return 'change';
+}
+
+function normalizeHeavyDamageSeverity(value: string): HeavyDamageRepairSeverity {
+  if (value === 'light' || value === 'medium' || value === 'heavy' || value === 'unknown') return value;
+  return 'none';
+}
+
+async function heavyDamagePreviewAction(): Promise<void> {
+  const item = selectedCase();
+  if (!item || state.heavyDamageSaving) return;
+  state.error = '';
+  state.heavyDamageReport = '';
+  state.heavyDamageConfirmOpen = false;
+  setToast('Ağır hasar ön değerlendirmesi hazırlanıyor.', 'info');
+  render();
+  const repairCost = numberOrUndefined(state.heavyDamageRepairCost);
+  const marketValue = numberOrUndefined(state.heavyDamageMarketValue);
+  const args = {
+    folderPath: item.folderPath,
+    manualText: state.heavyDamageManualText,
+    ...(repairCost !== undefined ? { repairCost } : {}),
+    ...(marketValue !== undefined ? { marketValue } : {})
+  };
+  const result = await window.hasarbotu.heavyDamagePreview<HeavyDamageAssessmentPreview>(args);
+  if (!result.ok) {
+    reportOperationError(result.error.message);
+    return;
+  }
+  state.heavyDamagePreview = result.data;
+  state.heavyDamageEdits = {};
+  state.heavyDamageFilter = 'all';
+  state.heavyDamageUserNotes = result.data.userNotes;
+  const s = result.data.summary;
+  setToast(`Ağır hasar ön değerlendirmesi hazır: ${s.totalScore} puan • ${s.needsReviewRows} kontrol gerekli • ${s.lowConfidenceRows} düşük güven.`, s.thresholdExceeded ? 'warning' : 'success');
+  render();
+}
+
+function currentHeavyDamageAssessment(now = new Date().toISOString()): HeavyDamageAssessmentRecord | null {
+  if (!state.heavyDamagePreview) return null;
+  return applyHeavyDamageEdits(state.heavyDamagePreview, state.heavyDamageEdits, state.heavyDamageUserNotes, now);
+}
+
+function openHeavyDamageConfirm(): void {
+  const assessment = currentHeavyDamageAssessment(state.heavyDamagePreview?.assessedAt);
+  if (!assessment) {
+    reportOperationError('Ön değerlendirme oluşturulmadan ağır hasar kaydı yapılamaz.');
+    return;
+  }
+  state.heavyDamageConfirmOpen = true;
+  state.heavyDamageReport = '';
+  render();
+}
+
+async function heavyDamageSaveAction(): Promise<void> {
+  if (state.heavyDamageSaving) return;
+  if (!state.heavyDamagePreview) {
+    reportOperationError('Ön değerlendirme olmadan takip dosyasına ağır hasar kaydı yapılamaz.');
+    return;
+  }
+  if (!state.heavyDamageConfirmOpen) {
+    reportOperationError('Son onay ekranı açılmadan takip dosyasına ağır hasar kaydı yapılamaz.');
+    return;
+  }
+  const assessment = currentHeavyDamageAssessment();
+  if (!assessment) return;
+  state.heavyDamageSaving = true;
+  state.heavyDamageReport = '';
+  state.error = '';
+  render();
+  await guardedMutation(
+    (current, allowClosedMutation) => window.hasarbotu.heavyDamageSave<TrackingWriteResult>({
+      folderPath: current.folderPath,
+      allowClosedMutation,
+      expectedRevision: current.revision,
+      expectedWriteId: current.tracking.metadata.writeId,
+      assessment,
+      userConfirmed: true
+    }),
+    (tracking) => {
+      const note = generateHeavyDamageAssessmentNote(assessment);
+      tracking.heavyDamageAssessment = assessment;
+      tracking.heavyDamage.enabled = assessment.summary.riskLevel !== 'low' || assessment.summary.totalScore > 0;
+      tracking.heavyDamage.skor = Math.round(assessment.summary.totalScore);
+      tracking.heavyDamage.not = [note, assessment.userNotes].filter(Boolean).join('\n\n').slice(0, 4000);
+    }
+  );
+  state.heavyDamageSaving = false;
+  const saved = selectedCase()?.tracking.heavyDamageAssessment;
+  if (!state.error && !state.conflict && saved?.assessedAt === assessment.assessedAt) {
+    state.heavyDamagePreview = null;
+    state.heavyDamageEdits = {};
+    state.heavyDamageConfirmOpen = false;
+    state.heavyDamageReport = heavyDamageSaveReport(assessment);
+    setToast('Ağır hasar ön değerlendirmesi takip dosyasına kaydedildi.', 'success');
+  } else {
+    state.heavyDamageConfirmOpen = false;
+  }
+  render();
+}
+
+async function clearHeavyDamageAssessment(): Promise<void> {
+  const item = selectedCase();
+  if (!item || state.heavyDamageSaving) return;
+  const ok = window.confirm('Kayıtlı ağır hasar ön değerlendirmesi temizlenecek. Devam edilsin mi?');
+  if (!ok) return;
+  state.heavyDamageSaving = true;
+  state.error = '';
+  render();
+  await guardedMutation(
+    (current, allowClosedMutation) => window.hasarbotu.heavyDamageClear<TrackingWriteResult>({
+      folderPath: current.folderPath,
+      allowClosedMutation,
+      expectedRevision: current.revision,
+      expectedWriteId: current.tracking.metadata.writeId
+    }),
+    (tracking) => {
+      delete tracking.heavyDamageAssessment;
+      tracking.heavyDamage.enabled = false;
+      delete tracking.heavyDamage.skor;
+      tracking.heavyDamage.not = '';
+    }
+  );
+  state.heavyDamageSaving = false;
+  if (!state.error && !state.conflict) {
+    resetHeavyDamagePreviewState();
+    state.heavyDamageReport = 'Kayıtlı ağır hasar ön değerlendirmesi temizlendi.';
+    setToast('Ağır hasar ön değerlendirmesi temizlendi.', 'success');
+  }
+  render();
+}
+
+function heavyDamageSaveReport(assessment: HeavyDamageAssessmentRecord): string {
+  const editedRows = assessment.rows.filter((row) => row.userEdited).length;
+  const s = assessment.summary;
+  const ratio = s.repairToMarketRatio === undefined ? 'oran girilmedi' : `hasar/rayiç %${s.repairToMarketRatio}`;
+  return `Kaydedildi: ${s.totalScore} puan, ${s.criticalPartCount} kritik satır, ${s.needsReviewRows} kontrol gerekli, ${s.lowConfidenceRows} düşük güven, ${editedRows} kullanıcı düzeltmesi. 35 puan eşiği ${s.thresholdExceeded ? 'aşıldı' : 'aşılmadı'}; ${ratio}.`;
 }
 
 function updateLaborLiveTotal(): void {
@@ -1165,7 +1648,9 @@ function clearStatusBoardFilters(): void {
 
 function openCaseFromBoard(folder?: string): void {
   if (!folder) return;
+  const folderChanged = state.selectedFolderPath !== folder;
   state.selectedFolderPath = folder;
+  if (folderChanged) resetHeavyDamagePreviewState(true);
   state.activeTab = 'operasyon';
   render();
   void hydrateSelectedCase(folder, true);

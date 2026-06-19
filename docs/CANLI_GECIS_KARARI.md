@@ -1,6 +1,6 @@
 # Canlı Geçiş Kararı
 
-Bu doküman HasarBotu v0.4.12'nin ofis kullanımına alınması için kısa karar kaydıdır.
+Bu doküman HasarBotu v0.5.0'nin ofis kullanımına alınması için kısa karar kaydıdır.
 
 ## Kabul Kapıları
 
@@ -10,7 +10,7 @@ Bu doküman HasarBotu v0.4.12'nin ofis kullanımına alınması için kısa kara
 - [ ] `npm run final-office-audit` geçti.
 - [ ] `npm audit` temiz.
 - [ ] Windows EXE üretildi ve SHA-256 çıktısı alındı.
-- [ ] Ofis hedef sürümü v0.4.12 olarak kaydedildi.
+- [ ] Ofis hedef sürümü v0.5.0 olarak kaydedildi.
 - [ ] Önceki stabil EXE ve takip yedeği saklandı.
 
 ## Canlı Kullanım Şartları
@@ -19,6 +19,8 @@ Bu doküman HasarBotu v0.4.12'nin ofis kullanımına alınması için kısa kara
 - pCloud conflicted copy ve revision/writeId uyarıları sessizce geçilmez.
 - Yanlış plaka fotoğraf hard-block davranışı korunur.
 - AI İşçilik Dağıtıcı önizleme/onay akışıyla kullanılır.
+- AI İşçilik Dağıtıcı son onay modalı görülmeden Excel'e yazmaz.
+- Ağır Hasar AI rapor notu ve mail taslağı yardımcı ön değerlendirmedir; nihai karar eksper/kullanıcı onayıyla verilir.
 - Excel çıktıları ayrı dosya olarak kaydedilir.
 
 ## Karar

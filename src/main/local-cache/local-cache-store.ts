@@ -8,8 +8,7 @@ import { readJsonFileOrNull } from '../storage/json-io';
 import { normalizePathForCompare } from '../../shared/path-normalization';
 import { normalizeSearch } from '../../shared/turkish';
 import type { UserPartTerm } from '../../shared/parca-sozlugu';
-import { deleteLearned, recordLearned, type LaborCorrection, type LaborLearningDeleteCriteria, type LaborLearningEntry } from '../../shared/labor-learning-dictionary';
-import { LABOR_CATEGORIES, type LaborCategory } from '../../shared/labor-rules';
+import { deleteLearned, normalizeLaborLearningEntry, recordLearned, touchLearnedUsage, type LaborCorrection, type LaborLearningAdminKey, type LaborLearningDeleteCriteria, type LaborLearningEntry } from '../../shared/labor-learning-dictionary';
 import { atomicWriteJson } from '../storage/atomic-write';
 
 export class LocalCacheStore {
@@ -215,31 +214,10 @@ export class LocalCacheStore {
     await this.ensure();
     const saved = await readJsonFileOrNull<unknown>(this.laborLearningPath()).catch(() => null);
     if (!Array.isArray(saved)) return [];
-    const valid = new Set<LaborCategory>(LABOR_CATEGORIES);
     const out: LaborLearningEntry[] = [];
     for (const item of saved) {
-      if (!item || typeof item !== 'object') continue;
-      const r = item as Record<string, unknown>;
-      const normalizedName = typeof r.normalizedName === 'string' ? r.normalizedName.trim() : '';
-      const alias = typeof r.alias === 'string' ? r.alias.trim() : normalizedName;
-      const categories = Array.isArray(r.categories) ? r.categories.filter((c): c is LaborCategory => typeof c === 'string' && valid.has(c as LaborCategory)) : [];
-      if (!normalizedName || categories.length === 0) continue;
-      const amounts: Partial<Record<LaborCategory, number>> = {};
-      if (r.amounts && typeof r.amounts === 'object') {
-        for (const [k, v] of Object.entries(r.amounts as Record<string, unknown>)) {
-          if (valid.has(k as LaborCategory) && Number.isFinite(Number(v))) amounts[k as LaborCategory] = Number(v);
-        }
-      }
-      out.push({
-        alias,
-        normalizedName,
-        ...(typeof r.partCode === 'string' && r.partCode ? { partCode: r.partCode } : {}),
-        categories,
-        ...(Object.keys(amounts).length ? { amounts } : {}),
-        ...(typeof r.amountLogic === 'string' && r.amountLogic ? { amountLogic: r.amountLogic } : {}),
-        ...(typeof r.reason === 'string' && r.reason ? { reason: r.reason } : {}),
-        updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : new Date().toISOString()
-      });
+      const entry = normalizeLaborLearningEntry(item);
+      if (entry) out.push(entry);
     }
     return out;
   }
@@ -261,6 +239,13 @@ export class LocalCacheStore {
   async deleteLaborLearning(criteria: LaborLearningDeleteCriteria): Promise<LaborLearningEntry[]> {
     const existing = await this.readLaborLearning();
     const next = deleteLearned(existing, criteria);
+    await this.writeLaborLearning(next);
+    return next;
+  }
+
+  async touchLaborLearningUsage(usages: LaborLearningAdminKey[]): Promise<LaborLearningEntry[]> {
+    const existing = await this.readLaborLearning();
+    const next = touchLearnedUsage(existing, usages);
     await this.writeLaborLearning(next);
     return next;
   }

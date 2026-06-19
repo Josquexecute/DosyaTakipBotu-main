@@ -2,6 +2,18 @@ import type { UiState } from '../state';
 import { escapeHtml } from '../validation';
 import { APP_VERSION } from '../../../shared/constants';
 import { icon } from '../icons';
+import { LABOR_CATEGORIES, type LaborCategory } from '../../../shared/labor-rules';
+import { normalizeSearch } from '../../../shared/turkish';
+import type { LaborLearningEntry } from '../../../shared/labor-learning-dictionary';
+
+const LABOR_LEARNING_FILTERS = [
+  { value: 'all', label: 'Tüm kayıtlar' },
+  { value: 'active', label: 'Aktif kayıtlar' },
+  { value: 'disabled', label: 'Devre dışı kayıtlar' },
+  ...LABOR_CATEGORIES.map((category) => ({ value: `cat:${category}`, label: category })),
+  { value: 'recent', label: 'Son eklenenler' },
+  { value: 'top', label: 'En çok kullanılanlar' }
+];
 
 export function renderSettingsPage(state: UiState): string {
   const settings = state.settings;
@@ -68,6 +80,8 @@ export function renderSettingsPage(state: UiState): string {
         </div>
       </div>
 
+      ${renderLaborLearningCard(state)}
+
       <div class="info-card wide">
         <h3>${icon('operation')} Kullanıcı Yönetimi</h3>
         <p class="settings-help">Buradaki liste raportör/sorumlu seçimlerinde kullanılır. Kullanıcı silmek eski takip kayıtlarını silmez; sadece yeni seçim listesinden kaldırır.</p>
@@ -89,6 +103,119 @@ export function renderSettingsPage(state: UiState): string {
       </div>
     </div>
   </section>`;
+}
+
+function renderLaborLearningCard(state: UiState): string {
+  const entries = sortedLaborLearningEntries(filteredLaborLearningEntries(state), state.laborLearningFilter);
+  const total = state.laborLearningEntries.length;
+  const active = state.laborLearningEntries.filter((entry) => entry.active !== false).length;
+  const disabled = total - active;
+  const shown = entries.slice(0, 80);
+  const rows = shown.length
+    ? shown.map(renderLaborLearningRow).join('')
+    : '<div class="labor-learning-empty">Bu filtrede öğrenme kaydı yok.</div>';
+  return `<div class="info-card wide labor-learning-card">
+    <div class="labor-learning-header">
+      <div>
+        <h3>${icon('ai')} AI İşçilik Öğrenme Sözlüğü</h3>
+        <p class="settings-help">Kullanıcı onayı veya düzeltmesiyle öğrenilen işçilik kararlarını yönetin. Devre dışı kayıtlar AI kararlarında kullanılmaz.</p>
+      </div>
+      <div class="settings-header-actions">
+        <button class="secondary compact" data-action="labor-learning-refresh">${icon('refresh')}<span>Yenile</span></button>
+        <button class="secondary compact" data-action="labor-learning-import">${icon('upload')}<span>İçe Aktar</span></button>
+        <button class="secondary compact" data-action="labor-learning-export">${icon('excel')}<span>Dışa Aktar</span></button>
+      </div>
+    </div>
+    <div class="labor-learning-stats">
+      <span><small>Toplam</small><b>${total}</b></span>
+      <span><small>Aktif</small><b>${active}</b></span>
+      <span><small>Devre dışı</small><b>${disabled}</b></span>
+      <span><small>Gösterilen</small><b>${entries.length}</b></span>
+    </div>
+    <div class="labor-learning-toolbar">
+      <label class="labor-learning-search">${icon('search')}<input id="labor-learning-search" value="${escapeHtml(state.laborLearningSearch)}" placeholder="Parça adı, kod, işçilik veya gerekçe ara" /></label>
+      <label>Filtre
+        <select data-labor-learning-filter="dictionary">
+          ${LABOR_LEARNING_FILTERS.map((filter) => `<option value="${escapeHtml(filter.value)}" ${state.laborLearningFilter === filter.value ? 'selected' : ''}>${escapeHtml(filter.label)}</option>`).join('')}
+        </select>
+      </label>
+    </div>
+    ${state.laborLearningReport ? `<div class="app-alert info"><span>${escapeHtml(state.laborLearningReport)}</span></div>` : ''}
+    <div class="labor-learning-list">${rows}</div>
+    ${entries.length > shown.length ? `<small class="settings-help inline">Performans için ilk ${shown.length} kayıt gösteriliyor. Arama veya filtreyle listeyi daraltabilirsiniz.</small>` : ''}
+  </div>`;
+}
+
+function renderLaborLearningRow(entry: LaborLearningEntry): string {
+  const keyAttrs = `data-learning-name="${escapeHtml(entry.normalizedName)}" data-learning-code="${escapeHtml(entry.partCode ?? '')}"`;
+  const categories = LABOR_CATEGORIES.map((category) => `<label><input type="checkbox" data-learning-category="${escapeHtml(category)}" ${entry.categories.includes(category) ? 'checked' : ''}/> ${escapeHtml(category)}</label>`).join('');
+  return `<div class="labor-learning-row ${entry.active === false ? 'disabled' : ''}" ${keyAttrs}>
+    <div class="labor-learning-main">
+      <div>
+        <b>${escapeHtml(entry.alias)}</b>
+        <small>${escapeHtml(entry.normalizedName)}${entry.partCode ? ` • Kod: ${escapeHtml(entry.partCode)}` : ''}</small>
+      </div>
+      <span class="status-chip ${entry.active === false ? 'warning' : 'ok'}">${entry.active === false ? 'Devre dışı' : 'Aktif'}</span>
+    </div>
+    <div class="labor-learning-meta">
+      <span><small>İşçilik</small><b>${escapeHtml(entry.categories.join(', '))}</b></span>
+      <span><small>Kaynak</small><b>${escapeHtml(laborLearningSourceLabel(entry.source))}</b></span>
+      <span><small>Kullanım</small><b>${entry.useCount ?? 0}</b></span>
+      <span><small>Öğrenildi</small><b>${escapeHtml(formatLearningDate(entry.createdAt))}</b></span>
+      <span><small>Son kullanım</small><b>${escapeHtml(formatLearningDate(entry.lastUsedAt))}</b></span>
+      <span><small>Güncelleme</small><b>${escapeHtml(formatLearningDate(entry.updatedAt))}</b></span>
+    </div>
+    <div class="labor-learning-edit">
+      <div class="labor-learning-categories">${categories}</div>
+      <label class="switch"><input type="checkbox" data-learning-review ${entry.needsReview ? 'checked' : ''}/> Kontrol gerekli varsayılanı</label>
+      <label class="switch"><input type="checkbox" data-learning-active ${entry.active !== false ? 'checked' : ''}/> Aktif</label>
+      <label class="wide">Karar gerekçesi / not<textarea data-learning-reason rows="2">${escapeHtml(entry.reason ?? '')}</textarea></label>
+    </div>
+    <div class="labor-learning-actions">
+      <button class="primary compact" data-action="labor-learning-update" ${keyAttrs}>${icon('check')}<span>Kaydet</span></button>
+      ${entry.active === false
+        ? `<button class="secondary compact" data-action="labor-learning-enable" ${keyAttrs}>Aktifleştir</button>`
+        : `<button class="secondary compact" data-action="labor-learning-disable" ${keyAttrs}>Devre dışı bırak</button>`}
+      <button class="secondary danger compact" data-action="labor-learning-delete" ${keyAttrs}>Sil</button>
+    </div>
+  </div>`;
+}
+
+function filteredLaborLearningEntries(state: UiState): LaborLearningEntry[] {
+  const query = normalizeSearch(state.laborLearningSearch);
+  const filter = state.laborLearningFilter || 'all';
+  return state.laborLearningEntries.filter((entry) => {
+    if (filter === 'active' && entry.active === false) return false;
+    if (filter === 'disabled' && entry.active !== false) return false;
+    if (filter.startsWith('cat:') && !entry.categories.includes(filter.slice(4) as LaborCategory)) return false;
+    if (!query) return true;
+    const haystack = normalizeSearch([
+      entry.alias,
+      entry.normalizedName,
+      entry.partCode ?? '',
+      entry.categories.join(' '),
+      entry.reason ?? ''
+    ].join(' '));
+    return haystack.includes(query);
+  });
+}
+
+function sortedLaborLearningEntries(entries: LaborLearningEntry[], filter: string): LaborLearningEntry[] {
+  const copy = [...entries];
+  if (filter === 'top') return copy.sort((a, b) => (b.useCount ?? 0) - (a.useCount ?? 0));
+  return copy.sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''));
+}
+
+function laborLearningSourceLabel(source?: string): string {
+  if (source === 'user-correction') return 'Kullanıcı düzeltmesi';
+  if (source === 'user-approval') return 'Kullanıcı onayı';
+  return 'Manuel kayıt';
+}
+
+function formatLearningDate(value?: string): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString('tr-TR') : '-';
 }
 
 function renderVersionControlCard(state: UiState): string {

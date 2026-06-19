@@ -1,10 +1,10 @@
 # Ofis Dağıtım Kontrol Listesi
 
-Bu kontrol listesi HasarBotu v0.4.12'nin Baran Global Ekspertiz ofis bilgisayarlarına güvenli ve tutarlı şekilde dağıtılması için kullanılır.
+Bu kontrol listesi HasarBotu v0.5.0'nin Baran Global Ekspertiz ofis bilgisayarlarına güvenli ve tutarlı şekilde dağıtılması için kullanılır.
 
 ## 1. Sürüm Hazırlığı
 
-- [ ] `package.json`, `package-lock.json` ve `APP_VERSION` v0.4.12 ile uyumlu.
+- [ ] `package.json`, `package-lock.json` ve `APP_VERSION` v0.5.0 ile uyumlu.
 - [ ] `npm run typecheck` geçti.
 - [ ] `npm run build` geçti.
 - [ ] `npm run ci` geçti.
@@ -21,10 +21,10 @@ Bu kontrol listesi HasarBotu v0.4.12'nin Baran Global Ekspertiz ofis bilgisayarl
 
 ## 3. Ofis Sürüm Hizalaması
 
-Ofis hedef sürümü v0.4.12 olarak kaydedin:
+Ofis hedef sürümü v0.5.0 olarak kaydedin:
 
 ```powershell
-npm run live:version-check -- -RootPath "D:\BARAN_GLOBAL_EKSPERTIZ\2026" -ExpectedVersion 0.4.12 -SetExpected -RegisterThisPC
+npm run live:version-check -- -RootPath "D:\BARAN_GLOBAL_EKSPERTIZ\2026" -ExpectedVersion 0.5.0 -SetExpected -RegisterThisPC
 ```
 
 - [ ] Her bilgisayar "Bu PC'yi Kaydet" akışıyla kayıt altına alındı.
@@ -42,12 +42,22 @@ npm run live:version-check -- -RootPath "D:\BARAN_GLOBAL_EKSPERTIZ\2026" -Expect
 ## 5. Excel / AI İşçilik
 
 - [ ] Kullanıcılar AI İşçilik Dağıtıcı'nın önce önizleme ürettiğini biliyor.
+- [ ] Filtre, arama, güven seviyesi, kontrol gerekli ve değişen satır filtreleri örnek Excel üzerinde denendi.
 - [ ] Mevcut H-N kolonlarının otomatik eğitim verisi kabul edilmediği anlatıldı.
 - [ ] Düşük güvenli satırlarda "Kontrol gerekli" işaretinin inceleneceği anlatıldı.
+- [ ] Kaydetmeden önce son onay modalı ve kaydetme sonrası rapor akışı görüldü.
+- [ ] Büyük Excel dosyalarında sayfalama ve kapalı gerekçe davranışı kontrol edildi.
 - [ ] Yanlış plakalı fotoğraf seçiminde hard-block davranışı test edildi.
 - [ ] Gemini API anahtarı gerekiyorsa yalnızca yerel ayara girildi.
 
-## 6. Kabul
+## 6. Ağır Hasar AI
+
+- [ ] Ekonomik `%60` eşik ve yapısal kritik parça eşiğinin ayrı gösterildiği doğrulandı.
+- [ ] `Ön Göğüs` satırında yapısal sac/firewall teyidi olmadan 40 puan verilmediği doğrulandı.
+- [ ] Yapısal teyit verildiğinde rapor notu ve mail taslağı üretildiği görüldü.
+- [ ] Airbag/emniyet ve elektrik/elektronik gruplarında mükerrer puan şişmesi olmadığı test edildi.
+
+## 7. Kabul
 
 - [ ] En az bir açık dosyada not/görev ekleme testi yapıldı.
 - [ ] Tek dosya yenileme çalıştı.

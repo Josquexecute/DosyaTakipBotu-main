@@ -1,6 +1,6 @@
 # Geri Dönüş Planı
 
-Bu plan HasarBotu v0.4.12 canlı kullanımında kritik sorun görülürse veri kaybı oluşturmadan önceki stabil duruma dönmek için kullanılır.
+Bu plan HasarBotu v0.5.0 canlı kullanımında kritik sorun görülürse veri kaybı oluşturmadan önceki stabil duruma dönmek için kullanılır.
 
 ## Tetikleyiciler
 

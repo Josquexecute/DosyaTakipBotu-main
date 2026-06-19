@@ -1,6 +1,6 @@
 # Teknik Mimari
 
-HasarBotu v0.4.12 Electron, TypeScript ve local-first dosya sistemi yaklaşımıyla geliştirilmiş bir masaüstü uygulamasıdır.
+HasarBotu v0.5.0 Electron, TypeScript ve local-first dosya sistemi yaklaşımıyla geliştirilmiş bir masaüstü uygulamasıdır.
 
 ## Katmanlar
 
@@ -22,6 +22,7 @@ src/shared
   Workflow sabitleri
   Veri kalite kuralları
   İşçilik sınıflandırma kuralları
+  Ağır hasar ön değerlendirme kuralları
 ```
 
 ## Veri Akışı
@@ -71,6 +72,16 @@ Excel işlemleri main process içindedir. AI İşçilik Dağıtıcı:
 - kullanıcı onayından sonra ayrı dosyaya yazar.
 
 Parça listesi fotoğraf okuma Gemini API kullanabilir. Yanlış plaka veya farklı dosya klasörü tespit edilirse görsel gönderilmez.
+
+## Ağır Hasar AI Servisi
+
+Ağır Hasar AI Ön Değerlendirme, `src/shared/heavy-damage-rules.ts` ve ilgili main/renderer bileşenleriyle çalışır.
+
+- Ekonomik eşik `%60` hasar/rayiç oranı üzerinden hesaplanır.
+- Yapısal eşik skor modeliyle ayrı değerlendirilir; ekonomik eşik aşılmasa bile yapısal eşik aşımı görünür kalır.
+- `Ön Göğüs` için yapısal ön göğüs sacı/firewall teyidi ayrı alan olarak taşınır.
+- Airbag/emniyet kemeri ve elektrik/elektronik grupları mükerrer puan şişirmeyecek şekilde tekilleştirilir.
+- Rapor notu ve mail taslağı kullanıcıya ön değerlendirme sunar; nihai karar kullanıcı onayına bağlıdır.
 
 ## Kalite Kapıları
 

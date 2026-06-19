@@ -1,6 +1,6 @@
 # Veri Güvenliği
 
-HasarBotu v0.4.12 local-first çalışır. Uygulamanın ana veri güvenliği hedefi, canlı dosya klasörlerinde kullanıcı verisini sessizce ezmemek ve riskli senaryoları görünür hale getirmektir.
+HasarBotu v0.5.0 local-first çalışır. Uygulamanın ana veri güvenliği hedefi, canlı dosya klasörlerinde kullanıcı verisini sessizce ezmemek ve riskli senaryoları görünür hale getirmektir.
 
 ## Source of Truth
 

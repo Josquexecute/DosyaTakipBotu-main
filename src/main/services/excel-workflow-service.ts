@@ -13,6 +13,7 @@ import type {
 } from '../../shared/types';
 import type { LaborAutoSaveArgs, PartsAnalyzePhotoArgs } from '../../shared/ipc-contract';
 import type { UserPartTerm } from '../../shared/parca-sozlugu';
+import { lookupLearned } from '../../shared/labor-learning-dictionary';
 import { buildMultiMoneyLaborWorkbook, distributeLaborExcel, inspectLaborExcel } from '../import/excel-importer';
 import { analyzePartsPhoto } from '../import/parts-list-analyzer';
 import { assertSelectedPhotoMatchesCase } from './case-asset-guard';
@@ -83,7 +84,14 @@ export class ExcelWorkflowService {
     const excelPath = path.resolve(result.filePaths[0]);
     this.context.state.approvedExcelFiles.add(excelPath);
     const learned = await this.context.cache.readLaborLearning();
-    return buildAutoLaborPreview(excelPath, learned);
+    const preview = await buildAutoLaborPreview(excelPath, learned);
+    const usages = preview.rows
+      .filter((row) => row.source === 'learned')
+      .map((row) => lookupLearned(learned, row.partName, row.partCode)?.entry)
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+      .map((entry) => ({ normalizedName: entry.normalizedName, ...(entry.partCode ? { partCode: entry.partCode } : {}) }));
+    if (usages.length > 0) await this.context.cache.touchLaborLearningUsage(usages);
+    return preview;
   }
 
   /**

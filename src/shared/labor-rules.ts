@@ -2,9 +2,8 @@ import { normalizeSearch } from './turkish';
 
 /**
  * İşçilik sınıflandırma kural tabanı (saf, çevrimdışı, deterministik).
- * Bir parça adını/kodunu 7 işçilik kategorisinden birine (veya birkaçına) eşler; güven seviyesi,
- * açıklanabilir gerekçe ve "kontrol gerekli" işareti üretir. AI katmanı yok — yerel kural motoru.
- * Karar önceliği (classifier-service'te): öğrenen sözlük > bu kurallar > fiyat listesi.
+ * v0.5.0 hazırlığı: kararlar artık pozitif kanıt puanı + negatif engel + çakışma çözümü ile açıklanır.
+ * Karar önceliği classifier-service içinde korunur: öğrenen sözlük > bu kurallar > fiyat listesi.
  */
 
 export type LaborCategory = 'Kaporta' | 'Boya' | 'Mekanik' | 'Elektrik' | 'Cam' | 'Döşeme/Kilit' | 'Onarım';
@@ -24,29 +23,31 @@ export const DEFAULT_CATEGORY_AMOUNT: Record<LaborCategory, number> = {
   Onarım: 2000
 };
 
-/**
- * Kategori anahtar kelimeleri. Çok kelimeli ifadeler (ör. "KAPI CAMI") tek kelimelere göre daha
- * spesifiktir ve daha yüksek puan alır; böylece "kapı camı" → Cam (Kaporta değil) olur.
- */
 const KEYWORD_RULES: Array<{ category: LaborCategory; phrases: string[] }> = [
-  { category: 'Cam', phrases: ['on cam', 'arka cam', 'kapi cami', 'kelebek cami', 'cam fitili', 'cam krikosu', 'cam mekanizmasi', 'cam', 'tavan cami', 'sunroof'] },
-  { category: 'Döşeme/Kilit', phrases: ['emniyet kemeri', 'kemer tokasi', 'hava yastigi', 'airbag', 'tavan dosemesi', 'koltuk', 'doseme', 'torpido', 'ic trim', 'kapi kolu', 'kapi acma', 'kilit', 'kilit karsiligi', 'guneslik', 'paspas', 'bagaj dosemesi'] },
-  { category: 'Elektrik', phrases: ['motor elektrik tesisati', 'elektrik tesisati', 'gunduz surus fari', 'far', 'stop', 'sinyal', 'sensor', 'kamera', 'radar', 'beyin', 'ecu', 'modul', 'sigorta kutusu', 'sigorta', 'tesisat', 'kablo', 'soket', 'korna', 'buji', 'bobin', 'role', 'anten', 'ekran', 'multimedya', 'hoparlor', 'xenon', 'led', 'ampul', 'sis far', 'plaka lambasi'] },
-  { category: 'Mekanik', phrases: ['yag pompasi', 'egr valfi', 'hava filtresi', 'filtre kutusu', 'motor', 'sanziman', 'sarsiman', 'radyator', 'turbo', 'intercooler', 'dinamo', 'alternator', 'sarj dinamosu', 'pompa', 'egr', 'valf', 'filtre', 'kompresor', 'klima kompresoru', 'egzoz', 'katalizator', 'aks', 'porya', 'salincak', 'rotil', 'rot', 'amortisor', 'suspansiyon', 'mafsal', 'debriyaj', 'fren', 'kaliper', 'balata', 'fren diski', 'mars', 'triger', 'kasnak', 'takoz', 'fan', 'su pompasi', 'devirdaim', 'karter', 'diferansiyel', 'sanziman askisi', 'direksiyon kutusu', 'rot mili', 'rot basi', 'jant', 'lastik', 'bilya', 'rulman'] },
-  { category: 'Kaporta', phrases: ['motor kaputu', 'radyator panjuru', 'radyator izgarasi', 'baglanti parcasi', 'tampon', 'kaput', 'camurluk', 'davlumbaz', 'kapi', 'on panel', 'arka panel', 'panel', 'marspiyel', 'travers', 'sac', 'sase', 'sasi', 'besik', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'izgara', 'panjur', 'spoiler', 'spoyler', 'tampon demiri', 'braket', 'destek', 'havuz', 'taban saci', 'orta direk'] }
+  { category: 'Cam', phrases: ['on cam', 'ön cam', 'arka cam', 'kapi cami', 'kapı camı', 'kelebek cami', 'kelebek camı', 'cam fitili', 'cam krikosu', 'cam mekanizmasi', 'cam mekanizması', 'cam', 'tavan cami', 'tavan camı', 'sunroof'] },
+  { category: 'Döşeme/Kilit', phrases: ['emniyet kemeri', 'kemer tokasi', 'kemer tokası', 'hava yastigi', 'hava yastığı', 'airbag', 'tavan dosemesi', 'tavan döşemesi', 'koltuk', 'doseme', 'döşeme', 'torpido', 'ic trim', 'iç trim', 'kapi kolu', 'kapı kolu', 'kapi acma', 'kapı açma', 'kilit', 'kilit karsiligi', 'kilit karşılığı', 'guneslik', 'güneşlik', 'paspas', 'bagaj dosemesi', 'bagaj döşemesi'] },
+  { category: 'Elektrik', phrases: ['motor elektrik tesisati', 'motor elektrik tesisatı', 'elektrik tesisati', 'elektrik tesisatı', 'gunduz surus fari', 'gündüz sürüş farı', 'far', 'stop', 'sinyal', 'sensor', 'sensör', 'kamera', 'radar', 'beyin', 'ecu', 'modul', 'modül', 'sigorta kutusu', 'sigorta', 'tesisat', 'kablo', 'soket', 'korna', 'buji', 'bobin', 'role', 'röle', 'anten', 'ekran', 'multimedya', 'hoparlor', 'hoparlör', 'xenon', 'led', 'ampul', 'sis far', 'plaka lambasi', 'plaka lambası'] },
+  { category: 'Mekanik', phrases: ['yag pompasi', 'yağ pompası', 'egr valfi', 'hava filtresi', 'filtre kutusu', 'motor', 'sanziman', 'şanzıman', 'sarsiman', 'radyator', 'radyatör', 'turbo', 'intercooler', 'dinamo', 'alternator', 'alternatör', 'sarj dinamosu', 'şarj dinamosu', 'pompa', 'egr', 'valf', 'filtre', 'kompresor', 'kompresör', 'klima kompresoru', 'klima kompresörü', 'egzoz', 'katalizator', 'katalizatör', 'aks', 'porya', 'salincak', 'salıncak', 'rotil', 'rot', 'amortisor', 'amortisör', 'suspansiyon', 'süspansiyon', 'mafsal', 'debriyaj', 'fren', 'kaliper', 'balata', 'fren diski', 'mars', 'marş', 'triger', 'kasnak', 'takoz', 'fan', 'su pompasi', 'su pompası', 'devirdaim', 'karter', 'diferansiyel', 'sanziman askisi', 'şanzıman askısı', 'direksiyon kutusu', 'rot mili', 'rot basi', 'rot başı', 'jant', 'lastik', 'bilya', 'rulman'] },
+  { category: 'Kaporta', phrases: ['motor kaputu', 'radyator panjuru', 'radyatör panjuru', 'radyator izgarasi', 'radyatör ızgarası', 'baglanti parcasi', 'bağlantı parçası', 'tampon', 'kaput', 'kaputu', 'camurluk', 'çamurluk', 'davlumbaz', 'kapi', 'kapı', 'on panel', 'ön panel', 'arka panel', 'panel', 'marspiyel', 'marşpiyel', 'travers', 'sac', 'sase', 'şase', 'sasi', 'şasi', 'besik', 'beşik', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'sütun', 'izgara', 'ızgara', 'panjur', 'spoiler', 'spoyler', 'tampon demiri', 'braket', 'destek', 'havuz', 'taban saci', 'taban sacı', 'orta direk'] }
 ];
 
-/** Boya gerektiren (boyanacak) dış gövde parçaları — Kaporta ile birlikte Boya eklenir. */
-const PAINTABLE_BODY_PHRASES = ['tampon', 'kaput', 'camurluk', 'kapi', 'on panel', 'arka panel', 'panel', 'marspiyel', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'davlumbaz', 'spoiler', 'spoyler'];
-
-/** Davlumbaz gibi kaporta parçalarında boya otomatik yazılmaz; gerekiyorsa kullanıcı kontrol eder. */
+const PAINTABLE_BODY_PHRASES = ['tampon', 'kaput', 'kaputu', 'camurluk', 'çamurluk', 'kapi', 'kapı', 'on panel', 'ön panel', 'arka panel', 'panel', 'marspiyel', 'marşpiyel', 'bagaj', 'tavan', 'dikme', 'direk', 'sutun', 'sütun', 'davlumbaz', 'spoiler', 'spoyler'];
 const PAINT_REVIEW_ONLY_PHRASES = ['davlumbaz'];
+const REPAIR_PHRASES = ['onarim', 'onarım', 'tamir', 'duzeltme', 'düzeltme', 'sok tak', 'sök tak', 'sok-tak', 'sök-tak', 'mobil onarim', 'mobil onarım', 'plastik tamir', 'isil', 'ısıl', 'pdr'];
+const EXTERIOR_ELECTRIC_PHRASES = ['far', 'stop', 'sinyal', 'sis far', 'gunduz surus fari', 'gündüz sürüş farı'];
 
-/** Onarım sinyalleri (değişim değil): işçilik "Onarım" kategorisine yönlendirilebilir. */
-const REPAIR_PHRASES = ['onarim', 'tamir', 'duzeltme', 'sok tak', 'sok-tak', 'mobil onarim', 'plastik tamir', 'isil', 'pdr'];
+const FALSE_CAM_PHRASES = ['camurluk', 'çamurluk', 'davlumbaz'];
+const BODY_NOT_MECHANICAL_PHRASES = ['motor kaputu', 'kaput', 'kaputu', 'radyator panjuru', 'radyatör panjuru', 'radyator izgarasi', 'radyatör ızgarası', 'panjur', 'izgara', 'ızgara', 'camurluk', 'çamurluk', 'davlumbaz', 'travers', 'marspiyel', 'marşpiyel'];
+const STRONG_ELECTRIC_PHRASES = ['motor elektrik tesisati', 'motor elektrik tesisatı', 'elektrik tesisati', 'elektrik tesisatı', 'sigorta kutusu', 'tesisat', 'beyin', 'sensor', 'sensör', 'far', 'stop', 'radar', 'kamera', 'modul', 'modül', 'kablo', 'soket'];
+const STRONG_MECHANICAL_PHRASES = ['yag pompasi', 'yağ pompası', 'egr valfi', 'hava filtresi', 'filtre kutusu', 'sarj dinamosu', 'şarj dinamosu', 'alternator', 'alternatör', 'dinamo', 'motor', 'sanziman', 'şanzıman', 'turbo', 'radyator', 'radyatör', 'kompresor', 'kompresör', 'egzoz', 'aks', 'salincak', 'salıncak', 'amortisor', 'amortisör', 'pompa', 'egr', 'valf', 'filtre'];
+const TRUE_GLASS_PHRASES = ['on cam', 'ön cam', 'arka cam', 'kapi cami', 'kapı camı', 'kelebek cami', 'kelebek camı', 'cam fitili', 'cam krikosu', 'cam mekanizmasi', 'cam mekanizması', 'tavan cami', 'tavan camı', 'sunroof', 'cam'];
 
-/** Far/stop gibi dış elektrik parçaları (boya/kaporta önerisi "kontrol gerekli" olur). */
-const EXTERIOR_ELECTRIC_PHRASES = ['far', 'stop', 'sinyal', 'sis far'];
+interface CategoryEvidence {
+  category: LaborCategory;
+  score: number;
+  matchedPhrases: string[];
+  strongestPhrase: string;
+}
 
 export interface RuleClassification {
   categories: LaborCategory[];
@@ -55,7 +56,6 @@ export interface RuleClassification {
   reason: string;
 }
 
-/** 250 TL katlarına yuvarlar (kuruşsuz). 0/negatif → 0. */
 export function roundTo250(amount: number): number {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
   return Math.round(amount / 250) * 250;
@@ -63,11 +63,9 @@ export function roundTo250(amount: number): number {
 
 function wordMatchesToken(word: string, token: string): boolean {
   if (word === token) return true;
-  // "CAM" tek başına cam işidir; CAMURLUK/DAVLUMBAZ gibi kaporta kelimeleri cam sayılmamalı.
   if (token === 'CAM') return /^(CAM|CAMI|CAMA|CAMIN|CAMINI|CAMDA|CAMDAN|CAMLAR|CAMLARI)$/.test(word);
   if (token === 'FAR') return /^(FAR|FARI|FARA|FARIN|FARINI|FARLAR|FARLARI)$/.test(word);
   if (token === 'STOP') return /^(STOP|STOPU|STOPA|STOPUN|STOPUNU|STOPLAR|STOPLARI)$/.test(word);
-  // Türkçe çekim ekleri: "tampon"→"tamponu", "koltuk"→"koltuğu" (yumuşama). Önek/gövde eşleşmesi.
   if (token.length >= 4 && word.startsWith(token)) return true;
   if (token.length >= 5 && word.startsWith(token.slice(0, -1))) return true;
   return false;
@@ -81,38 +79,84 @@ function phraseScore(normalized: string, phrase: string): number {
   if (tokens.length > 1) {
     for (let index = 0; index <= words.length - tokens.length; index += 1) {
       const matches = tokens.every((token, offset) => wordMatchesToken(words[index + offset] ?? '', token));
-      if (matches) return p.length + tokens.length * 8;
+      if (matches) return p.length + tokens.length * 10;
     }
     return 0;
   }
   for (const word of words) {
-    if (wordMatchesToken(word, p)) return word === p ? p.length + 4 : p.length;
+    if (wordMatchesToken(word, p)) return word === p ? p.length + 5 : p.length;
   }
   return 0;
 }
 
-function bestCategoryByRules(normalized: string): { category: LaborCategory; score: number; matchedPhrase: string } | null {
-  let best: { category: LaborCategory; score: number; matchedPhrase: string } | null = null;
+function collectEvidence(normalized: string): CategoryEvidence[] {
+  const evidence: CategoryEvidence[] = [];
   for (const rule of KEYWORD_RULES) {
-    for (const phrase of rule.phrases) {
-      const score = phraseScore(normalized, phrase);
-      if (score > 0 && (!best || score > best.score)) best = { category: rule.category, score, matchedPhrase: phrase };
-    }
+    const matches = rule.phrases
+      .map((phrase) => ({ phrase, score: phraseScore(normalized, phrase) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    if (!matches.length) continue;
+    const strongest = matches[0]!;
+    const secondary = matches.slice(1, 4).reduce((sum, item) => sum + Math.min(item.score, 8), 0);
+    evidence.push({
+      category: rule.category,
+      score: strongest.score + secondary,
+      matchedPhrases: matches.slice(0, 3).map((item) => item.phrase),
+      strongestPhrase: strongest.phrase
+    });
   }
-  return best;
+  return evidence.sort((a, b) => b.score - a.score);
 }
 
-function hasAny(normalized: string, phrases: string[]): string | null {
+function hasAny(normalized: string, phrases: readonly string[]): string | null {
   for (const phrase of phrases) {
     if (phraseScore(normalized, phrase) > 0) return phrase;
   }
   return null;
 }
 
-/**
- * Parça adını/kodunu/notunu kurallarla sınıflandırır. Her zaman bir karar üretir; bilinmeyen parçada
- * en yakın mantıklı kategoriyi seçip "Kontrol gerekli" (Düşük güven) işaretler.
- */
+function addBlock(blocked: Map<LaborCategory, string[]>, category: LaborCategory, reason: string): void {
+  const list = blocked.get(category) ?? [];
+  list.push(reason);
+  blocked.set(category, list);
+}
+
+function buildBlockedCategories(normalized: string): Map<LaborCategory, string[]> {
+  const blocked = new Map<LaborCategory, string[]>();
+  const falseCam = hasAny(normalized, FALSE_CAM_PHRASES);
+  if (falseCam) addBlock(blocked, 'Cam', `cam benzeri kelime "${falseCam}" gerçek cam değildir`);
+
+  const bodySignal = hasAny(normalized, BODY_NOT_MECHANICAL_PHRASES);
+  if (bodySignal) addBlock(blocked, 'Mekanik', `"${bodySignal}" gövde/kaporta kanıtıdır; mekanik sayılmaz`);
+
+  const electricSignal = hasAny(normalized, STRONG_ELECTRIC_PHRASES);
+  if (electricSignal) {
+    for (const category of ['Kaporta', 'Boya', 'Mekanik', 'Cam'] as LaborCategory[]) {
+      addBlock(blocked, category, `"${electricSignal}" elektrik kanıtıdır; ${category} otomatik seçilmez`);
+    }
+  }
+
+  const glassSignal = hasAny(normalized, TRUE_GLASS_PHRASES);
+  if (glassSignal && !falseCam) {
+    for (const category of ['Kaporta', 'Boya', 'Mekanik', 'Elektrik'] as LaborCategory[]) {
+      addBlock(blocked, category, `"${glassSignal}" gerçek cam kanıtıdır; ${category} otomatik seçilmez`);
+    }
+  }
+
+  const mechanicalSignal = hasAny(normalized, STRONG_MECHANICAL_PHRASES);
+  if (mechanicalSignal && !bodySignal && !electricSignal) {
+    for (const category of ['Cam', 'Kaporta', 'Boya', 'Elektrik'] as LaborCategory[]) {
+      addBlock(blocked, category, `"${mechanicalSignal}" mekanik kanıtıdır; ${category} otomatik seçilmez`);
+    }
+  }
+  return blocked;
+}
+
+function uniqueReasons(blocked: Map<LaborCategory, string[]>): string[] {
+  return [...new Set([...blocked.values()].flat())];
+}
+
 export function classifyByRules(partName: string, partCode = '', note = ''): RuleClassification {
   const normalized = normalizeSearch(`${partName} ${note}`);
   if (!normalized.trim()) {
@@ -120,57 +164,77 @@ export function classifyByRules(partName: string, partCode = '', note = ''): Rul
   }
 
   const repair = hasAny(normalized, REPAIR_PHRASES);
-  const best = bestCategoryByRules(normalized);
+  const blockers = buildBlockedCategories(normalized);
+  const evidence = collectEvidence(normalized);
+  const eligible = evidence.filter((item) => !blockers.has(item.category));
+  const best = eligible[0];
 
   if (!best) {
-    // Bilinmeyen parça: değişim değilse Onarım, aksi hâlde en yaygın kategori (Kaporta); her hâlükârda kontrol gerekli.
     const fallback: LaborCategory = repair ? 'Onarım' : 'Kaporta';
-    return { categories: [fallback], confidence: 'Düşük', needsReview: true, reason: `Bilinmeyen parça ("${partName.trim()}"); en yakın mantıklı işçilik ${fallback} seçildi, kontrol gerekli.` };
+    const negative = uniqueReasons(blockers);
+    return {
+      categories: [fallback],
+      confidence: 'Düşük',
+      needsReview: true,
+      reason: [`Bilinmeyen parça ("${partName.trim()}"); en yakın mantıklı işçilik ${fallback} seçildi, kontrol gerekli.`, negative.length ? `Negatif kurallar: ${negative.join('; ')}.` : ''].filter(Boolean).join(' ')
+    };
   }
 
   const categories: LaborCategory[] = [best.category];
-  const reasons: string[] = [`Parça adı "${best.matchedPhrase}" içerdiği için ${best.category} yazıldı.`];
+  const reasons: string[] = [`Kanıt: ${best.category} için ${best.matchedPhrases.map((p) => `"${p}"`).join(', ')} (puan ${Math.round(best.score)}).`];
+  const negative = uniqueReasons(blockers).filter((reason) => !reason.includes(`${best.category} otomatik seçilmez`));
+  if (negative.length) reasons.push(`Negatif kurallar: ${negative.join('; ')}.`);
+
   let confidence: LaborConfidence = 'Yüksek';
   let needsReview = false;
 
-  // Kaporta + boya: boyanacak dış gövde parçalarında Boya birlikte dağıtılır.
+  const second = eligible[1];
+  if (second && second.score >= best.score * 0.75) {
+    confidence = 'Orta';
+    needsReview = true;
+    reasons.push(`Yakın ikinci aday ${second.category} (${second.matchedPhrases.join(', ')}) olduğu için kontrol gerekli.`);
+  }
+
   if (best.category === 'Kaporta' && hasAny(normalized, PAINTABLE_BODY_PHRASES)) {
-    if (hasAny(normalized, PAINT_REVIEW_ONLY_PHRASES)) {
+    const reviewOnly = hasAny(normalized, PAINT_REVIEW_ONLY_PHRASES);
+    if (reviewOnly) {
       confidence = confidence === 'Yüksek' ? 'Orta' : confidence;
       needsReview = true;
-      reasons.push('Davlumbaz satırında boya otomatik yazılmadı; gerekiyorsa Boya eklenmesi kontrol gerektirir.');
+      reasons.push(`"${reviewOnly}" satırında boya otomatik yazılmadı; boya gerekiyorsa kullanıcı kontrolü gerekir.`);
     } else {
       categories.push('Boya');
-      reasons.push('Boyanacak dış gövde parçası olduğundan Boya da eklendi.');
+      reasons.push('Boyanacak dış gövde parçası olduğu için Boya da eklendi.');
     }
   }
 
-  // Far/stop gibi dış elektrik parçaları: birincil Elektrik; boya/kaporta gerekiyorsa kontrol gerekli.
   if (best.category === 'Elektrik' && hasAny(normalized, EXTERIOR_ELECTRIC_PHRASES)) {
     confidence = 'Orta';
     needsReview = true;
-    reasons.push('Dış aydınlatma parçası; gerekiyorsa boya/kaporta eklenmesi kontrol gerektirir.');
+    reasons.push('Dış aydınlatma/elektrik parçası; gerekiyorsa boya/kaporta eklenmesi kullanıcı kontrolü gerektirir.');
   }
 
-  // Onarım sinyali varsa ve birincil Kaporta/Mekanik ise: gerekçeye eklenir (değişim değil olabilir).
   if (repair && (best.category === 'Kaporta' || best.category === 'Mekanik')) {
     confidence = confidence === 'Yüksek' ? 'Orta' : confidence;
-    reasons.push('Onarım/tamir ifadesi var; değişim yerine onarım işçiliği olabilir (kontrol önerilir).');
     needsReview = true;
+    reasons.push('Onarım/tamir ifadesi var; değişim yerine onarım işçiliği olabilir.');
   }
 
   return { categories, confidence, needsReview, reason: reasons.join(' ') };
 }
 
-/**
- * Kategori-kategori dağıtım kısıtları. Kurallara aykırı kombinasyonları ayıklar (gerekçeli).
- * - Mekanik (motor tamiri) satırına Cam yazma. - Cam parçasına Mekanik yazma.
- * - Elektrik parçasına Kaporta/Boya yazma (far/stop hariç "kontrol gerekli").
- */
 export function applyDistributionConstraints(categories: LaborCategory[], normalizedName: string): { categories: LaborCategory[]; removed: string[] } {
   const set = new Set(categories);
   const removed: string[] = [];
-  const isCam = hasAny(normalizedName, ['cam']) !== null && set.has('Cam');
+  const blockers = buildBlockedCategories(normalizedName);
+  for (const category of [...set]) {
+    const reasons = blockers.get(category);
+    if (reasons?.length) {
+      set.delete(category);
+      removed.push(`${category} (${reasons.join('; ')})`);
+    }
+  }
+
+  const isCam = hasAny(normalizedName, TRUE_GLASS_PHRASES) !== null && set.has('Cam');
   const isElectric = set.has('Elektrik');
   const isExteriorElectric = hasAny(normalizedName, EXTERIOR_ELECTRIC_PHRASES) !== null;
 
@@ -180,6 +244,7 @@ export function applyDistributionConstraints(categories: LaborCategory[], normal
     if (set.has('Kaporta')) { set.delete('Kaporta'); removed.push('Kaporta (elektrik parçasına kaporta yazılmaz)'); }
     if (set.has('Boya')) { set.delete('Boya'); removed.push('Boya (elektrik parçasına boya yazılmaz)'); }
   }
-  const next = LABOR_CATEGORIES.filter((c) => set.has(c));
+
+  const next = LABOR_CATEGORIES.filter((category) => set.has(category));
   return { categories: next.length ? next : categories.slice(0, 1), removed };
 }

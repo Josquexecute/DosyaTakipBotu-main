@@ -1,0 +1,32 @@
+{
+  "dosyaNo": "49/18303851",
+  "plate": "34 PME 968",
+  "vehicle": "2026 Hyundai i20 1.0 T 90 Jump DCT",
+  "claimType": "Kasko",
+  "damageCause": "Yola aniden çıkan ehil hayvana çarpma",
+  "damageDirection": "Sağ ön ağırlıklı darbe",
+  "marketValue": 1250000,
+  "totalDamageWithVat": 650172.1,
+  "expectedRepairToMarketRatio": 52,
+  "expertOpinion": "Ağır hasar / pert-total",
+  "parts": [
+    { "name": "Ön Göğüs", "operation": "replacement", "structuralConfirmed": true, "note": "Eksper teyidi: yapısal ön göğüs sacı / firewall bölgesi" },
+    { "name": "Direksiyon Mili" },
+    { "name": "Ön Travers" },
+    { "name": "Sürücü Hava Yastığı" },
+    { "name": "Yolcu Hava Yastığı" },
+    { "name": "Yan Hava Yastığı Ön Sol" },
+    { "name": "Perde Hava Yastığı Sistemi Sol" },
+    { "name": "Sağ Ön Emniyet Kemeri" },
+    { "name": "Sol Ön Emniyet Kemeri" },
+    { "name": "Sağ Arka Emniyet Kemeri" },
+    { "name": "Sol Arka Emniyet Kemeri" },
+    { "name": "Ön Koltuk Emniyet Kemeri Tokası" },
+    { "name": "Hava Yastığı Modülü" },
+    { "name": "Motor Elektrik Tesisatı" },
+    { "name": "Sigorta Kutusu" },
+    { "name": "Darbe Sensörü B Sütunu Sol" },
+    { "name": "Klima Grubu" },
+    { "name": "Radyatör Grubu" }
+  ]
+}

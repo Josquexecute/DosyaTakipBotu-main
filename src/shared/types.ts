@@ -1,3 +1,5 @@
+import type { HeavyDamageAssessmentRecord } from './heavy-damage-types';
+
 export type ApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: ApiError };
@@ -145,6 +147,7 @@ export interface TrackingFile {
   labor: LaborInfo;
   kttKusur: HelperModuleInfo;
   heavyDamage: HeavyDamageInfo;
+  heavyDamageAssessment?: HeavyDamageAssessmentRecord;
   audit: AuditItem[];
 }
 

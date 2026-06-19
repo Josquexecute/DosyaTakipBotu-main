@@ -1,6 +1,6 @@
 # Kullanım Kılavuzu
 
-HasarBotu v0.4.12, Baran Global Ekspertiz'in hasar dosyalarını tek masaüstü uygulamasında takip etmesi için hazırlanmıştır. Uygulama dosya klasörlerini okur, her dosyanın takip bilgisini `_HASARBOTU/takip.json` içinde tutar ve kullanıcı onayı olmadan kritik veri yazmaz.
+HasarBotu v0.5.0, Baran Global Ekspertiz'in hasar dosyalarını tek masaüstü uygulamasında takip etmesi için hazırlanmıştır. Uygulama dosya klasörlerini okur, her dosyanın takip bilgisini `_HASARBOTU/takip.json` içinde tutar ve kullanıcı onayı olmadan kritik veri yazmaz.
 
 ## İlk Açılış
 
@@ -16,7 +16,7 @@ HasarBotu v0.4.12, Baran Global Ekspertiz'in hasar dosyalarını tek masaüstü 
 | --- | --- | --- |
 | 1 | Dashboard | Günün risk ve iş yükünü görmek |
 | 2 | Dosyalar | Plaka, dosya no, sorumlu, servis, durum ve kalite filtreleriyle dosya bulmak |
-| 3 | Dosya detayı | Not, görev, sorumlu, takip tarihi ve operasyon alanlarını güncellemek |
+| 3 | Dosya detayı | Not, görev, sorumlu, takip tarihi, ağır hasar ön değerlendirmesi ve operasyon alanlarını güncellemek |
 | 4 | Evrak & Fotoğraf | Eksik belge/fotoğraf, HEIC/RAW, bozuk fotoğraf ve plaka risklerini kontrol etmek |
 | 5 | Excel & Parça Veri Merkezi | Portal Excel işçilik dağıtımı, AI işçilik önizlemesi ve parça listesi fotoğraf okuma yapmak |
 | 6 | Sorunlar / Risk | pCloud, corrupt JSON, revision/writeId ve veri kalitesi uyarılarını kapatmak |
@@ -43,6 +43,16 @@ Dosya detayında şu alanlar yönetilir:
 - Evrak ve fotoğraf kontrol özeti.
 
 Her mutasyon `takip.json` içinde revision artırır ve yeni writeId üretir. Diskte aynı anda farklı bir kayıt görülürse uygulama sessizce ezmez; kullanıcıya risk olarak bildirir.
+
+## Ağır Hasar AI Ön Değerlendirme
+
+v0.5.0 ile ağır hasar ekranında ekonomik oran ve yapısal kritik parça eşiği ayrı değerlendirilir.
+
+- Rayiç ve hasar tutarı ekonomik `%60` eşik için hesaplanır.
+- Yapısal kritik parçalar ayrıca puanlanır; tek başına eşiği aşan parça varsa ekonomik oran düşük kalsa da risk açık gösterilir.
+- `Ön Göğüs` satırı eksper tarafından yapısal ön göğüs sacı/firewall olarak teyit edilmeden 40 puan almaz.
+- Teyitsiz `Ön Göğüs` satırında sistem kontrol gerekli sorusu üretir: torpido/plastik göğüs mü, yapısal sac/firewall mı?
+- Sonuç notu ve mail taslağı nihai eksper kararının yerine geçmez; dosya sorumlusu tarafından incelenir.
 
 ## Evrak ve Fotoğraf Kontrolü
 

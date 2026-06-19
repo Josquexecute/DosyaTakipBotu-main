@@ -19,11 +19,13 @@ import { normalizePartName } from '../dist-electron/shared/parca-sozlugu.js';
 import { evaluatePlateMatch, looksLikePlate } from '../dist-electron/shared/plate-match.js';
 import { resolvePlateFromPath, resolveCaseFolderFromPath, assertSelectedPhotoMatchesCase } from '../dist-electron/main/services/case-asset-guard.js';
 import { classifyByRules, applyDistributionConstraints, roundTo250 } from '../dist-electron/shared/labor-rules.js';
-import { deleteLearned, lookupLearned, recordLearned, laborNameSimilarity } from '../dist-electron/shared/labor-learning-dictionary.js';
+import { deleteLearned, exportLaborLearningJson, importLaborLearningJson, isLearnableLaborAlias, lookupLearned, recordLearned, laborNameSimilarity, setLearnedActive, updateLearned } from '../dist-electron/shared/labor-learning-dictionary.js';
+import { AUTO_LABOR_DEFAULT_PAGE_SIZE, AUTO_LABOR_PAGE_SIZE_OPTIONS, AUTO_LABOR_ROWS_PER_PAGE, buildAutoLaborPageModel, buildAutoLaborStats, buildAutoLaborSavePlan, autoLaborFilterMatches, autoLaborSearchMatches, normalizeAutoLaborPageSize } from '../dist-electron/shared/auto-labor-view-model.js';
 import { classifyLaborRow } from '../dist-electron/main/services/labor-classifier-service.js';
 import { buildAutoLaborPreview } from '../dist-electron/main/services/labor-preview-service.js';
 import { saveAutoLaborExcel } from '../dist-electron/main/services/labor-excel-writer.js';
 import { buildGenericLaborWorkbook, loadWorkbook } from '../dist-electron/main/import/excel-importer.js';
+import { applyHeavyDamageEdits, buildHeavyDamagePreview, classifyHeavyDamagePart, generateHeavyDamageAssessmentMailDraft, generateHeavyDamageAssessmentNote, heavyDamageFilterMatches, HEAVY_DAMAGE_ECONOMIC_THRESHOLD, HEAVY_DAMAGE_THRESHOLD } from '../dist-electron/shared/heavy-damage-rules.js';
 
 const checks = [];
 function ok(name) { checks.push({ name, ok: true }); console.log(`TAMAM - ${name}`); }
@@ -224,6 +226,38 @@ const clUnknown = classifyByRules('Zxqw Bilinmeyen Parça');
 assert(clUnknown.confidence === 'Düşük' && clUnknown.needsReview === true && clUnknown.categories.length > 0, 'classifyByRules bilinmeyen parçayı doldurur ama kontrol gerekli işaretler', JSON.stringify(clUnknown));
 const constrained = applyDistributionConstraints(['Mekanik', 'Cam'], 'MOTOR');
 assert(!constrained.categories.includes('Cam'), 'applyDistributionConstraints motor satırından cam işçiliğini çıkarır', JSON.stringify(constrained));
+const constrainedElectric = applyDistributionConstraints(['Elektrik', 'Kaporta', 'Boya', 'Mekanik'], 'MOTOR ELEKTRIK TESISATI');
+assert(constrainedElectric.categories.length === 1 && constrainedElectric.categories[0] === 'Elektrik', 'applyDistributionConstraints elektrik satırından kaporta/boya/mekanik çakışmasını çıkarır', JSON.stringify(constrainedElectric));
+const constrainedFalseCam = applyDistributionConstraints(['Kaporta', 'Cam'], 'CAMURLUK DAVLUMBAZI');
+assert(constrainedFalseCam.categories.includes('Kaporta') && !constrainedFalseCam.categories.includes('Cam'), 'applyDistributionConstraints çamurluk/davlumbaz kelimesini cam saymaz', JSON.stringify(constrainedFalseCam));
+
+const criticalLaborCases = [
+  ['MOTOR ELEKTRİK TESİSATI', ['Elektrik'], ['Mekanik', 'Kaporta', 'Cam']],
+  ['MOTOR KAPUTU', ['Kaporta', 'Boya'], ['Mekanik', 'Cam']],
+  ['SOL GÜNDÜZ SÜRÜŞ FARI', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']],
+  ['YAĞ POMPASI', ['Mekanik'], ['Cam', 'Kaporta']],
+  ['EGR VALFİ', ['Mekanik'], ['Cam', 'Kaporta']],
+  ['KOMPLE HAVA FİLTRESİ', ['Mekanik'], ['Cam', 'Kaporta']],
+  ['RADYATÖR PANJURU', ['Kaporta'], ['Mekanik', 'Cam']],
+  ['ÇAMURLUK DAVLUMBAZI', ['Kaporta'], ['Cam', 'Mekanik']],
+  ['ŞARJ DİNAMOSU', ['Mekanik'], ['Cam', 'Kaporta']],
+  ['ALTERNATÖR', ['Mekanik'], ['Cam', 'Kaporta']],
+  ['SİGORTA KUTUSU', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']],
+  ['TESİSAT', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']],
+  ['BEYİN', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']],
+  ['SENSÖR', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']],
+  ['STOP LAMBASI', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']],
+  ['RADAR SENSÖRÜ', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']],
+  ['GERİ GÖRÜŞ KAMERASI', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']]
+];
+for (const [name, expected, forbidden] of criticalLaborCases) {
+  const decision = classifyByRules(name);
+  assert(expected.every((cat) => decision.categories.includes(cat)), `v0.5 karar motoru beklenen sınıf: ${name}`, JSON.stringify(decision));
+  assert(forbidden.every((cat) => !decision.categories.includes(cat)), `v0.5 karar motoru yasak sınıfı engeller: ${name}`, JSON.stringify(decision));
+  assert(decision.reason.includes('Kanıt:'), `v0.5 karar motoru kanıt gerekçesi üretir: ${name}`, decision.reason);
+}
+assert(classifyByRules('MOTOR ELEKTRİK TESİSATI').reason.includes('Negatif'), 'v0.5 motor elektrik tesisatında mekanik negatif kural gerekçesi yazar', classifyByRules('MOTOR ELEKTRİK TESİSATI').reason);
+assert(classifyByRules('RADYATÖR PANJURU').reason.includes('Negatif'), 'v0.5 radyatör panjurunda mekanik negatif kural gerekçesi yazar', classifyByRules('RADYATÖR PANJURU').reason);
 
 // Öğrenen sözlük kuraldan önceliklidir.
 const learnedEntries = recordLearned([], { alias: 'Ön Tampon', categories: ['Mekanik'] });
@@ -237,6 +271,27 @@ assert(learnedWithReason[0]?.reason?.includes('elektrik kararı'), 'recordLearne
 assert(deleteLearned(learnedWithReason, { alias: 'Sigorta Kutusu', partCode: 'ELK-1' }).length === 0, 'deleteLearned yanlış öğrenmeyi silme altyapısı sağlar', JSON.stringify(learnedWithReason));
 
 // Uçtan uca: kategori-kolonlu Excel önizleme + güvenli çoklu-kolon yazma + orijinal korunur + yedek.
+const disabledLearned = setLearnedActive(learnedEntries, { normalizedName: learnedEntries[0].normalizedName }, false);
+assert(!lookupLearned(disabledLearned, 'Ã–n Tampon'), 'v0.5.0 ogrenme sozlugu devre disi kaydi AI kararinda kullanmaz', JSON.stringify(disabledLearned[0]));
+const enabledLearned = setLearnedActive(disabledLearned, { normalizedName: learnedEntries[0].normalizedName }, true);
+assert(lookupLearned(enabledLearned, 'Ã–n Tampon')?.entry.active !== false, 'v0.5.0 ogrenme sozlugu tekrar aktif edilen kaydi AI kararinda kullanir', JSON.stringify(enabledLearned[0]));
+const editedLearned = updateLearned(enabledLearned, { normalizedName: learnedEntries[0].normalizedName, categories: ['Elektrik'], reason: 'Manuel yonetim duzeltmesi', needsReview: true, active: true });
+const editedDecision = classifyLaborRow('Ã–n Tampon', '', '', editedLearned);
+assert(editedDecision.source === 'learned' && editedDecision.categories[0] === 'Elektrik' && editedDecision.needsReview, 'v0.5.0 ogrenme sozlugu duzenleme sonraki AI kararini etkiler', JSON.stringify(editedDecision));
+const deletedLearned = deleteLearned(editedLearned, { normalizedName: learnedEntries[0].normalizedName });
+assert(!lookupLearned(deletedLearned, 'Ã–n Tampon'), 'v0.5.0 ogrenme sozlugu silinen kaydi AI kararinda kullanmaz', JSON.stringify(deletedLearned));
+assert(!isLearnableLaborAlias('') && !isLearnableLaborAlias('1') && !isLearnableLaborAlias('49') && !isLearnableLaborAlias('A 12') && isLearnableLaborAlias('EGR Valfi'), 'v0.5.0 ogrenme sozlugu bos/sira numarasi/anlamsiz kaydi ogrenmez', 'alias guard');
+assert(recordLearned([], { alias: '49', categories: ['Kaporta'] }).length === 0, 'v0.5.0 ogrenme sozlugu sira numarasi kaynakli kaydi dosyaya eklemez', JSON.stringify(recordLearned([], { alias: '49', categories: ['Kaporta'] })));
+const exportedLearningJson = exportLaborLearningJson(editedLearned);
+assert(exportedLearningJson.includes('entries') && exportedLearningJson.includes('Elektrik'), 'v0.5.0 ogrenme sozlugu disa aktarma JSON uretir', exportedLearningJson);
+let brokenImportRejected = false;
+try { importLaborLearningJson([], '{bozuk json'); } catch { brokenImportRejected = true; }
+assert(brokenImportRejected, 'v0.5.0 ogrenme sozlugu bozuk JSON ice aktarmayi reddeder', 'broken json rejected');
+const importedLearning = importLaborLearningJson([], exportedLearningJson);
+assert(importedLearning.added === 1 && importedLearning.updated === 0 && importedLearning.skipped === 0 && importedLearning.entries.length === 1, 'v0.5.0 ogrenme sozlugu gecerli JSON ice aktarma kayit ekler', JSON.stringify(importedLearning));
+const conflictLearning = importLaborLearningJson(importedLearning.entries, exportLaborLearningJson(updateLearned(importedLearning.entries, { normalizedName: importedLearning.entries[0].normalizedName, categories: ['Mekanik'], reason: 'Import guncellemesi' })));
+assert(conflictLearning.added === 0 && conflictLearning.updated === 1 && conflictLearning.skipped === 0 && conflictLearning.entries[0].categories[0] === 'Mekanik', 'v0.5.0 ogrenme sozlugu cakismali import raporunu dogru doner', JSON.stringify(conflictLearning));
+
 const aiTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'hb-ai-labor-'));
 const aiHeaders = ['Parça', 'Kod', 'Parça Tutarı', 'Kaporta', 'Boya', 'Mekanik', 'Elektrik', 'Cam', 'Döşeme/Kilit', 'Onarım'];
 const aiRows = [
@@ -272,6 +327,8 @@ const origWb = await loadWorkbook(aiInput);
 const origCell = origWb.sheet.cells.find((c) => c.ref === `${kaportaCol}${pvTampon.rowNumber}`);
 assert(!origCell || origCell.numeric === null, 'orijinal Excel değiştirilmedi (Kaporta hücresi hâlâ boş)', JSON.stringify(origCell ?? null));
 assert(await fs.stat(aiSave.backupPath).then(() => true).catch(() => false), 'orijinalin yedeği oluşturuldu', aiSave.backupPath);
+const excelWorkflowSource = await fs.readFile(path.join(process.cwd(), 'src', 'main', 'services', 'excel-workflow-service.ts'), 'utf-8');
+assert(excelWorkflowSource.includes('approvedExcelFiles.has(excelPath)') && excelWorkflowSource.includes('AI önizleme ile'), 'AI autoLaborSave önizleme/uygulama içi seçim olmadan Excel yazmaz', 'approvedExcelFiles güvenlik kapısı bulunamadı');
 
 // v0.4.11 fixture: GERÇEK portal Excel (Liste.xlsx) ile kolon eşleme doğrulaması.
 const portalFixture = path.join(process.cwd(), 'scripts', 'fixtures', 'liste-portal.xlsx');
@@ -301,6 +358,166 @@ assert(portal.rows.every((r) => r.categories.length > 0), 'portal: her satıra i
 // Önizleme dosyaya YAZMAZ; orijinal fixture değişmez (H-N mevcut değerleri otomatik öğrenilmez/yazılmaz).
 const fixtureStatAfter = await fs.stat(portalFixture);
 assert(fixtureStatAfter.size === fixtureStatBefore.size && fixtureStatAfter.mtimeMs === fixtureStatBefore.mtimeMs, 'portal: önizleme orijinal Excel dosyasını değiştirmez', 'fixture değişti');
+
+// v0.5.0: gerçek portal kolon DÜZENİNDE geniş problemli parça fixture'ı.
+const portalV2Headers = ['Sıra', 'DVN Grubu', 'İşçilik Açıklaması', 'Parça Kodu', 'Boş', 'Parça Sahiplenme Bedeli', 'Parça Orijinal Bedeli', 'Kaporta', 'Mekanik', 'Elektrik', 'Döşeme-Kilit', 'Cam', 'Boya', 'Onarım'];
+const portalV2Rows = [
+  [1, 'MEKANIK', 'MOTOR ELEKTRİK TESİSATI', 'ELK-001', '', 1000, 2000, 999, 999, '', '', 999, '', ''],
+  [2, 'MEKANIK', 'MOTOR KAPUTU', 'KPT-001', '', 2000, 3000, '', 888, '', '', '', '', ''],
+  [3, 'AYDINLATMA', 'SOL GÜNDÜZ SÜRÜŞ FARI', 'FAR-001', '', 500, 1000, 777, '', '', '', '', '', ''],
+  [4, 'CAM', 'YAĞ POMPASI', 'MEK-001', '', 500, 1000, '', '', '', '', 666, '', ''],
+  [5, 'KAPORTA', 'EGR VALFİ', 'MEK-002', '', 500, 1000, 555, '', '', '', '', '', ''],
+  [6, 'KAPORTA', 'KOMPLE HAVA FİLTRESİ', 'MEK-003', '', 500, 1000, '', '', '', '', 444, '', ''],
+  [7, 'MEKANIK', 'RADYATÖR PANJURU', 'KAP-001', '', 500, 1000, '', 333, '', '', '', '', ''],
+  [8, 'CAM', 'ÇAMURLUK DAVLUMBAZI', 'KAP-002', '', 500, 1000, '', '', '', '', 222, '', ''],
+  [9, 'ELEKTRIK', 'ŞARJ DİNAMOSU', 'MEK-004', '', 500, 1000, '', '', 111, '', '', '', ''],
+  [10, 'ELEKTRIK', 'ALTERNATÖR', 'MEK-005', '', 500, 1000, '', '', 111, '', '', '', ''],
+  [11, 'KAPORTA', 'SİGORTA KUTUSU', 'ELK-002', '', 500, 1000, 111, '', '', '', '', '', ''],
+  [12, 'KAPORTA', 'RADAR SENSÖRÜ', 'ELK-003', '', 500, 1000, 111, '', '', '', '', '', ''],
+  [13, 'KAPORTA', 'ÖN CAM', 'CAM-001', '', 500, 1000, 111, '', '', '', '', '', ''],
+  [14, 'GENEL', 'ZXQW BİLİNMEYEN PARÇA', 'UNK-001', '', 500, 1000, '', '', '', '', '', '', '']
+];
+const portalV2Input = path.join(aiTmp, 'portal-v2-shape.xlsx');
+await fs.writeFile(portalV2Input, buildGenericLaborWorkbook(portalV2Headers, portalV2Rows));
+const portalV2StatBefore = await fs.stat(portalV2Input);
+const portalV2 = await buildAutoLaborPreview(portalV2Input, []);
+assert(portalV2.partNameColumn === 'C' && portalV2.groupColumn === 'B' && portalV2.partCodeColumn === 'D', 'portal v2 fixture: A sıra, B grup, C açıklama, D kod olarak okunur', JSON.stringify({ part: portalV2.partNameColumn, group: portalV2.groupColumn, code: portalV2.partCodeColumn }));
+assert(portalV2.rows.every((r) => r.source !== 'learned'), 'portal v2 fixture: mevcut H-N değerleri otomatik öğrenilmez', JSON.stringify(portalV2.rows.map((r) => r.source)));
+assert(portalV2.rows.every((r) => r.categories.length > 0), 'portal v2 fixture: her satıra öneri üretilir', `bos=${portalV2.rows.filter((r) => r.categories.length === 0).length}`);
+const portalV2Find = (needle) => portalV2.rows.find((r) => r.partName.toLocaleUpperCase('tr-TR').includes(needle));
+const assertPortalV2Decision = (needle, expected, forbidden, reviewExpected = null) => {
+  const row = portalV2Find(needle);
+  assert(row && expected.every((cat) => row.categories.includes(cat)), `portal v2 fixture: ${needle} beklenen sınıfa gider`, JSON.stringify(row));
+  assert(row && forbidden.every((cat) => !row.categories.includes(cat)), `portal v2 fixture: ${needle} yasak işçilikleri almaz`, JSON.stringify(row));
+  if (reviewExpected !== null) assert(row && row.needsReview === reviewExpected, `portal v2 fixture: ${needle} kontrol gerekli=${reviewExpected}`, JSON.stringify(row));
+};
+assertPortalV2Decision('MOTOR ELEKTRİK TESİSATI', ['Elektrik'], ['Mekanik', 'Kaporta', 'Cam']);
+assertPortalV2Decision('MOTOR KAPUTU', ['Kaporta', 'Boya'], ['Mekanik', 'Cam']);
+assertPortalV2Decision('GÜNDÜZ SÜRÜŞ FARI', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam'], true);
+assertPortalV2Decision('YAĞ POMPASI', ['Mekanik'], ['Cam', 'Kaporta']);
+assertPortalV2Decision('EGR VALFİ', ['Mekanik'], ['Cam', 'Kaporta']);
+assertPortalV2Decision('HAVA FİLTRESİ', ['Mekanik'], ['Cam', 'Kaporta']);
+assertPortalV2Decision('RADYATÖR PANJURU', ['Kaporta'], ['Mekanik', 'Cam']);
+assertPortalV2Decision('ÇAMURLUK DAVLUMBAZI', ['Kaporta'], ['Cam', 'Mekanik'], true);
+assertPortalV2Decision('ŞARJ DİNAMOSU', ['Mekanik'], ['Cam', 'Kaporta']);
+assertPortalV2Decision('ALTERNATÖR', ['Mekanik'], ['Cam', 'Kaporta']);
+assertPortalV2Decision('SİGORTA KUTUSU', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']);
+assertPortalV2Decision('RADAR SENSÖRÜ', ['Elektrik'], ['Kaporta', 'Mekanik', 'Cam']);
+assertPortalV2Decision('ÖN CAM', ['Cam'], ['Mekanik', 'Kaporta']);
+const lowConfidencePortalRow = portalV2Find('BİLİNMEYEN');
+assert(lowConfidencePortalRow && lowConfidencePortalRow.categories.length > 0 && lowConfidencePortalRow.confidence === 'Düşük' && lowConfidencePortalRow.needsReview, 'portal v2 fixture: düşük güvenli satır boş bırakılmaz ve kontrol gerekli işaretlenir', JSON.stringify(lowConfidencePortalRow));
+const portalV2StatAfter = await fs.stat(portalV2Input);
+assert(portalV2StatAfter.size === portalV2StatBefore.size && portalV2StatAfter.mtimeMs === portalV2StatBefore.mtimeMs, 'portal v2 fixture: önizleme Excel dosyasını yazmadan okur', 'portal v2 fixture değişti');
+
+// v0.5.0: Ağır Hasar AI Ön Değerlendirme karar motoru ve güvenlik kapıları.
+const hdFrontRight = classifyHeavyDamagePart({ name: 'Sağ ön şasi kolu değişim', source: 'manual' });
+assert(hdFrontRight.guideCategory === 'front-chassis-right' && hdFrontRight.score === 20 && hdFrontRight.confidence === 'Yüksek', 'ağır hasar: sağ ön şasi kolu değişim 20 puan yüksek güven', JSON.stringify(hdFrontRight));
+const hdFirewall = classifyHeavyDamagePart({ name: 'Ön göğüs sacı değişim', source: 'manual' });
+assert(hdFirewall.guideCategory === 'firewall' && hdFirewall.score === 40 && hdFirewall.directThreshold === true, 'ağır hasar: ön göğüs sacı değişim doğrudan eşik riski üretir', JSON.stringify(hdFirewall));
+const hdUnknownChassis = classifyHeavyDamagePart({ name: 'Ön şasi kolu onarım', source: 'tracking-note' });
+assert(hdUnknownChassis.needsReview && hdUnknownChassis.confidence === 'Orta' && hdUnknownChassis.questions.length > 0, 'ağır hasar: yön/derece belirsiz şasi satırı kontrol gerekli olur', JSON.stringify(hdUnknownChassis));
+const hdOut = classifyHeavyDamagePart({ name: 'Ön tampon değişim', source: 'manual' });
+assert(!hdOut.inScope && hdOut.score === 0 && hdOut.needsReview && hdOut.confidence === 'Düşük', 'ağır hasar: kapsam dışı kaporta parçası puanlanmaz ama inceleme satırı üretir', JSON.stringify(hdOut));
+
+const hdPreview = buildHeavyDamagePreview({
+  folderPath: 'C:/case/34ABC123',
+  plate: '34ABC123',
+  officeFileNo: '2026/99',
+  assessedBy: 'Davranış Testi',
+  repairCost: 600000,
+  marketValue: 1000000,
+  now: '2026-06-19T09:00:00.000Z',
+  inputs: [
+    { name: 'Sağ ön şasi kolu değişim', source: 'manual' },
+    { name: 'Tavan sacı değişim', source: 'manual' },
+    { name: 'Tavan travers onarım ağır', source: 'manual' }
+  ]
+});
+assert(HEAVY_DAMAGE_THRESHOLD === 35 && hdPreview.summary.totalScore === 35 && hdPreview.summary.thresholdExceeded, 'ağır hasar: 35 puan eşiği toplam skorla aşılır', JSON.stringify(hdPreview.summary));
+assert(HEAVY_DAMAGE_ECONOMIC_THRESHOLD === 60 && hdPreview.summary.repairToMarketRatio === 60 && hdPreview.summary.economicThresholdExceeded, 'ağır hasar: %60 ekonomik eşik ayrı hesaplanır', JSON.stringify(hdPreview.summary));
+assert(hdPreview.userApproved === false, 'ağır hasar: önizleme kullanıcı onayı olmadan kayıt sayılmaz', JSON.stringify({ userApproved: hdPreview.userApproved }));
+assert(hdPreview.summary.aiSummary.includes('35') && hdPreview.summary.warnings.some((warning) => warning.includes('Nihai')), 'ağır hasar: AI özeti nihai karar olmadığını uyarır', JSON.stringify(hdPreview.summary));
+
+const hdEdited = applyHeavyDamageEdits(hdPreview, {
+  [hdPreview.rows[2].id]: {
+    guideCategory: 'roof-crossmember-unknown',
+    damageType: 'repair',
+    repairSeverity: 'medium',
+    score: 3,
+    needsReview: true,
+    userNote: 'Eksper orta onarım olarak düzeltti.'
+  }
+}, 'Eksper fotoğraf kontrolü sonrası onayladı.', '2026-06-19T10:00:00.000Z');
+assert(hdEdited.userApproved === true && hdEdited.rows[2].userEdited && hdEdited.rows[2].score === 3 && hdEdited.summary.totalScore === 33, 'ağır hasar: kullanıcı satır düzeltmesi skora ve özete uygulanır', JSON.stringify(hdEdited.rows[2]));
+assert(generateHeavyDamageAssessmentNote(hdEdited).includes('Nihai değerlendirme') && generateHeavyDamageAssessmentNote(hdEdited).includes('33'), 'ağır hasar: rapor notu puan ve nihai karar uyarısını içerir', generateHeavyDamageAssessmentNote(hdEdited));
+assert(heavyDamageFilterMatches(hdEdited.rows[2], 'review') && heavyDamageFilterMatches(hdEdited.rows[2], 'repair-medium') && !heavyDamageFilterMatches(hdEdited.rows[2], 'repair-heavy'), 'ağır hasar: kontrol ve onarım derece filtreleri çalışır', JSON.stringify(hdEdited.rows[2]));
+
+const pmeFixture = JSON.parse(await fs.readFile(path.join(process.cwd(), 'scripts', 'fixtures', 'heavy-damage-34-pme-968.json'), 'utf-8'));
+const pmeInputs = pmeFixture.parts.map((part) => ({
+  name: part.name,
+  source: 'manual',
+  ...(part.note ? { note: part.note } : {}),
+  ...(part.operation ? { operation: part.operation } : {}),
+  ...(part.structuralConfirmed !== undefined ? { structuralConfirmed: part.structuralConfirmed } : {})
+}));
+const pmePreview = buildHeavyDamagePreview({
+  folderPath: 'C:/case/34PME968',
+  plate: pmeFixture.plate,
+  officeFileNo: pmeFixture.dosyaNo,
+  assessedBy: 'Davranış Testi',
+  repairCost: pmeFixture.totalDamageWithVat,
+  marketValue: pmeFixture.marketValue,
+  now: '2026-06-19T11:00:00.000Z',
+  inputs: pmeInputs
+});
+const pmeFirewall = pmePreview.rows.find((row) => row.sourcePartName === 'Ön Göğüs');
+assert(pmePreview.summary.repairToMarketRatio === pmeFixture.expectedRepairToMarketRatio && !pmePreview.summary.economicThresholdExceeded, '34 PME 968 fixture: ekonomik oran yaklaşık %52 ve %60 eşik aşılmadı', JSON.stringify(pmePreview.summary));
+assert(pmeFirewall && pmeFirewall.guideCategory === 'firewall' && pmeFirewall.structuralConfirmed === true && pmeFirewall.score === 40 && !pmeFirewall.needsReview, '34 PME 968 fixture: yapısal teyitli Ön Göğüs firewall olarak 40 puan verir', JSON.stringify(pmeFirewall));
+assert(pmePreview.summary.thresholdExceeded && pmePreview.summary.totalScore >= 40 && pmePreview.summary.riskLabel.includes('aşıldı'), '34 PME 968 fixture: ekonomik eşik aşılmasa da yapısal eşik ağır hasar riskini açar', JSON.stringify(pmePreview.summary));
+assert(pmePreview.summary.warnings.some((warning) => warning.includes('Ekonomik %60 eşik aşılmadı ancak yapısal kritik parça eşiği aşıldı')), '34 PME 968 fixture: ekonomik/yapısal eşik ayrımı gerekçede açık yazılır', JSON.stringify(pmePreview.summary.warnings));
+const pmeAirbagRows = pmePreview.rows.filter((row) => row.guideCategory === 'airbag-seatbelt');
+const pmeElectricRows = pmePreview.rows.filter((row) => row.guideCategory === 'main-electrical');
+const pmeRawScore = pmePreview.rows.reduce((sum, row) => sum + (row.inScope ? row.score : 0), 0);
+assert(pmeAirbagRows.length > 3 && pmeElectricRows.length >= 3 && pmePreview.summary.groupedScoreAdjustments >= 2 && pmeRawScore > pmePreview.summary.totalScore, '34 PME 968 fixture: airbag/emniyet ve elektrik kalemleri mükerrer puanı şişirmez', JSON.stringify({ raw: pmeRawScore, summary: pmePreview.summary.totalScore, grouped: pmePreview.summary.groupedScoreAdjustments }));
+const pmeTravers = pmePreview.rows.find((row) => row.sourcePartName === 'Ön Travers');
+const pmeSteering = pmePreview.rows.find((row) => row.sourcePartName === 'Direksiyon Mili');
+assert(pmeTravers && pmeTravers.score === 0 && pmeTravers.needsReview && !pmeTravers.inScope, '34 PME 968 fixture: Ön Travers otomatik puan uydurmaz, kontrol gerekli kalır', JSON.stringify(pmeTravers));
+assert(pmeSteering && pmeSteering.score === 0 && pmeSteering.needsReview && !pmeSteering.inScope, '34 PME 968 fixture: Direksiyon Mili tek başına puan uydurmaz, destekleyici kontrol kalır', JSON.stringify(pmeSteering));
+const pmeUnconfirmed = buildHeavyDamagePreview({
+  folderPath: 'C:/case/front-panel-review',
+  plate: '34PME968',
+  officeFileNo: '49/18303851',
+  assessedBy: 'Davranış Testi',
+  inputs: [{ name: 'Ön Göğüs', source: 'manual', operation: 'replacement', structuralConfirmed: false }]
+});
+assert(pmeUnconfirmed.rows[0].score === 0 && pmeUnconfirmed.rows[0].needsReview && pmeUnconfirmed.rows[0].questions.some((q) => q.includes('torpido/plastik')), 'Ön Göğüs teyitsizse 40 puan verilmez ve torpido/firewall sorusu sorulur', JSON.stringify(pmeUnconfirmed.rows[0]));
+const pmeConfirmedByUser = applyHeavyDamageEdits(pmeUnconfirmed, { [pmeUnconfirmed.rows[0].id]: { structuralConfirmed: true } });
+assert(pmeConfirmedByUser.rows[0].score === 40 && !pmeConfirmedByUser.rows[0].needsReview && pmeConfirmedByUser.summary.thresholdExceeded, 'Ön Göğüs UI/eksper teyidiyle firewall 40 puana geçer', JSON.stringify(pmeConfirmedByUser.rows[0]));
+const pmeNote = generateHeavyDamageAssessmentNote(pmePreview);
+assert(pmeNote.includes('34 PME 968') && pmeNote.includes('Ön Göğüs') && pmeNote.includes('40 puan') && pmeNote.includes('Nihai değerlendirme'), '34 PME 968 fixture: resmi rapor notu plaka, Ön Göğüs 40 puan ve nihai karar uyarısını içerir', pmeNote);
+const pmeMail = generateHeavyDamageAssessmentMailDraft(pmePreview);
+assert(pmeMail.includes('49/18303851') && pmeMail.includes('34 PME 968') && pmeMail.includes('%52') && pmeMail.includes('40 puan') && pmeMail.includes('görüş/onay'), '34 PME 968 fixture: kurumsal mail taslağı dosya no, plaka, oran, 40 puan ve onay talebini içerir', pmeMail);
+
+const heavyDamageRulesSource = await fs.readFile('src/shared/heavy-damage-rules.ts', 'utf-8');
+const heavyDamageTypesSource = await fs.readFile('src/shared/heavy-damage-types.ts', 'utf-8');
+const heavyDamageServiceSource = await fs.readFile('src/main/services/heavy-damage-assessment-service.ts', 'utf-8');
+const heavyDamageComponentSource = await fs.readFile('src/renderer/app/components/heavy-damage-assessment.ts', 'utf-8');
+const heavyDamageTrackingSchemaSource = await fs.readFile('src/main/tracking/tracking-schema.ts', 'utf-8');
+const heavyDamageRendererMainSource = await fs.readFile('src/renderer/main.ts', 'utf-8');
+const heavyDamageIpcContractSource = await fs.readFile('src/shared/ipc-contract.ts', 'utf-8');
+const heavyDamageMainIpcSource = await fs.readFile('src/main/ipc.ts', 'utf-8');
+const heavyDamagePreloadSource = await fs.readFile('src/preload/preload.ts', 'utf-8');
+assert(heavyDamageRulesSource.includes('HEAVY_DAMAGE_THRESHOLD = 35') && heavyDamageRulesSource.includes('HEAVY_DAMAGE_ECONOMIC_THRESHOLD = 60'), 'ağır hasar: 35 puan ve %60 ekonomik eşik sabitleri kaynakta korunur', 'eşik sabitleri eksik');
+assert(heavyDamageRulesSource.includes('Ön Göğüs Sacı') && heavyDamageRulesSource.includes('Motosiklet Ana') && heavyDamageRulesSource.includes('Traktör Blok'), 'ağır hasar: rehberde doğrudan riskli yapısal/araç tipleri var', 'rehber kuralı eksik');
+assert(heavyDamageRulesSource.includes('isUnconfirmedFrontPanel') && heavyDamageRulesSource.includes('structuralConfirmed') && heavyDamageRulesSource.includes('groupedScoreAdjustments'), 'ağır hasar: Ön Göğüs yapısal teyidi ve grup mükerrer puan koruması kaynakta var', 'structural/group guard eksik');
+assert(heavyDamageRulesSource.includes('generateHeavyDamageAssessmentMailDraft') && heavyDamageRulesSource.includes('Ekonomik eşik aşılmamakla birlikte yapısal kritik parça eşiği'), 'ağır hasar: rapor/mail metni ekonomik ve yapısal eşik ayrımını anlatır', 'rapor/mail eşik ayrımı eksik');
+assert(heavyDamageTypesSource.includes("HeavyDamageSource = 'manual'") && heavyDamageTypesSource.includes('userApproved') && heavyDamageTypesSource.includes('HeavyDamageRowEdit'), 'ağır hasar: manuel kaynak, kullanıcı onayı ve satır düzeltme tipleri tanımlı', 'tip sözleşmesi eksik');
+assert(heavyDamageServiceSource.includes('userConfirmed !== true') && heavyDamageServiceSource.includes('Kullanıcı son onayı olmadan') && heavyDamageServiceSource.includes('tracking.heavyDamageAssessment = record'), 'ağır hasar: main servis son onay olmadan takip.json içine yazmaz', 'son onay guard eksik');
+assert(heavyDamageComponentSource.includes('data-action="heavy-damage-preview"') && heavyDamageComponentSource.includes('data-action="heavy-damage-save-confirm"') && heavyDamageComponentSource.includes('Kaydetmeden Önce Son Kontrol'), 'ağır hasar: UI önizleme ve son onay modalı sunar', 'heavy damage UI eksik');
+assert(heavyDamageComponentSource.includes('data-heavy-row-score') && heavyDamageComponentSource.includes('data-heavy-row-review') && heavyDamageComponentSource.includes('data-heavy-row-structural') && heavyDamageComponentSource.includes('Mail taslağı'), 'ağır hasar: UI satır düzeltme, yapısal teyit ve mail taslağı alanlarını sunar', 'satır düzeltme/structural/mail alanı eksik');
+assert(heavyDamageRendererMainSource.includes("case 'heavy-damage-save': openHeavyDamageConfirm()") && heavyDamageRendererMainSource.includes("case 'heavy-damage-save-confirm'") && heavyDamageRendererMainSource.includes('!state.heavyDamageConfirmOpen') && heavyDamageRendererMainSource.includes('userConfirmed: true') && heavyDamageRendererMainSource.includes('heavyRowStructural'), 'ağır hasar: renderer son onay olmadan kayıt IPC çağırmaz ve yapısal teyidi işler', 'renderer kayıt/structural kapısı eksik');
+assert(heavyDamageIpcContractSource.includes('heavyDamagePreview') && heavyDamageIpcContractSource.includes('heavy-damage:save') && heavyDamageMainIpcSource.includes('IPC.heavyDamageSave') && heavyDamagePreloadSource.includes('heavyDamageSave'), 'ağır hasar: IPC contract/main/preload bağlantıları var', 'IPC bağlantısı eksik');
+assert(heavyDamageTrackingSchemaSource.includes('normalizeOptionalHeavyDamageAssessment') && heavyDamageTrackingSchemaSource.includes('heavyDamageAssessment'), 'ağır hasar: eski takip.json uyumluluğu için opsiyonel assessment normalize edilir', 'tracking schema uyumluluğu eksik');
 
 const proportional = distributeAmounts([100, 200, 300], 1200);
 assert(JSON.stringify(proportional) === JSON.stringify([200, 400, 600]), 'distributeAmounts oranlı dağıtım yapar', JSON.stringify(proportional));
@@ -536,14 +753,130 @@ for (const deadFile of [
 const detailSource = await fs.readFile('src/renderer/app/components/detail.ts', 'utf-8');
 const layoutSource = await fs.readFile('src/renderer/app/components/layout.ts', 'utf-8');
 const ipcDomainSource = await fs.readFile('src/main/services/ipc-domain-services.ts', 'utf-8');
+const rendererMainSource = await fs.readFile('src/renderer/main.ts', 'utf-8');
+const rendererStateSource = await fs.readFile('src/renderer/app/state.ts', 'utf-8');
+const rendererStylesSource = await fs.readFile('src/renderer/styles.css', 'utf-8');
+const autoLaborVmSource = await fs.readFile('src/shared/auto-labor-view-model.ts', 'utf-8');
+const settingsSource = await fs.readFile('src/renderer/app/components/settings.ts', 'utf-8');
+const ipcContractSource = await fs.readFile('src/shared/ipc-contract.ts', 'utf-8');
+const mainIpcSource = await fs.readFile('src/main/ipc.ts', 'utf-8');
+const preloadSource = await fs.readFile('src/preload/preload.ts', 'utf-8');
+const learningAdminSource = await fs.readFile('src/main/services/labor-learning-admin-service.ts', 'utf-8');
 // v0.4.1: Bağımsız "Risk Kontrolü" sekmesi "Sorunlar / Risk" sayfasına taşındı; risk etiketi
 // artık detail.ts içindeki Risk Kontrol Özeti'nde yaşar. Yapay Zekâ yasağı aşağıda korunur.
 assert(detailSource.includes('Risk Kontrol'), 'Yapay Zekâ etiketi Risk Kontrol olarak değiştirildi', 'Risk Kontrol etiketi yok');
 assert(!detailSource.includes('Yapay Zekâ') && !layoutSource.includes('Yapay Zekâ'), 'Uygulama ana UI içinde yanıltıcı Yapay Zekâ etiketi kalmadı', 'Yapay Zekâ etiketi hâlâ var');
 assert(ipcDomainSource.includes('sanitizeNoteText') && !ipcDomainSource.includes('const text = safeFileDisplayName(args.text.trim())'), 'Not metni dosya adı temizleyiciyle 180 karaktere kırpılmaz', 'Not akışı safeFileDisplayName ile kırpılıyor');
+assert(detailSource.includes('data-action="auto-labor-filter"') && detailSource.includes('Gösterilen:') && autoLaborVmSource.includes("medium: 'Orta güven'") && autoLaborVmSource.includes("low: 'Düşük güven'") && autoLaborVmSource.includes("oldCleared: 'Eski değer sıfırlanacak'") && autoLaborVmSource.includes("learning: 'Öğrenmeye aday'"), 'v0.5.0 AI işçilik önizlemesi tüm kritik filtreleri sunar', 'AI işçilik filtre UI eksik');
+assert(detailSource.includes('id="auto-labor-search"') && autoLaborVmSource.includes('autoLaborSearchMatches') && rendererMainSource.includes("target.id === 'auto-labor-search'"), 'v0.5.0 AI işçilik önizleme araması parça/grup/kod/işçilik/gerekçeyi süzer', 'AI işçilik arama akışı eksik');
+assert(rendererStateSource.includes('autoLaborFilter') && rendererStateSource.includes('autoLaborSearch') && rendererMainSource.includes("case 'auto-labor-filter'") && rendererMainSource.includes("state.autoLaborFilter = 'all'"), 'v0.5.0 AI işçilik filtre/arama state bağlantısı ve sıfırlama akışı var', 'AI işçilik filtre state/renderer bağlantısı eksik');
+assert(rendererStateSource.includes('autoLaborPage') && detailSource.includes('buildAutoLaborPageModel') && detailSource.includes('auto-labor-pagination') && rendererMainSource.includes("case 'auto-labor-page'") && rendererMainSource.includes('setAutoLaborPage') && rendererMainSource.includes('queueAutoLaborSearchUpdate') && rendererStylesSource.includes('.auto-labor-pagination'), 'v0.5.0 AI işçilik büyük Excel önizlemesi sayfalama, tek-pass sayfa modeli ve arama debounce ile korunur', 'AI işçilik büyük Excel sayfalama/page-model guard eksik');
+assert(detailSource.includes('auto-labor-summary-card') && detailSource.includes('Toplam satır') && detailSource.includes('Sıfırlanacak H-N') && rendererStylesSource.includes('.auto-labor-summary-cards'), 'v0.5.0 AI işçilik üst özet kartları tıklanabilir filtre olarak render edilir', 'AI işçilik özet kartları eksik');
+assert(rendererMainSource.includes("case 'auto-labor-save': openAutoLaborConfirm()") && rendererMainSource.includes("case 'auto-labor-save-confirm'") && rendererMainSource.includes('if (!state.autoLaborConfirmOpen)') && detailSource.includes('Kaydetmeden önce son kontrol'), 'v0.5.0 AI işçilik son onay modalı olmadan Excel yazmaz', 'AI işçilik son onay kapısı eksik');
+assert(detailSource.includes('auto-labor-confirm-card') && detailSource.includes('Geri dön ve düzenle') && detailSource.includes('Formüllü hücreler tespit edildi') && rendererMainSource.includes('preview.formulaCellsFound > 0 && !state.autoLaborAllowFormula'), 'v0.5.0 AI işçilik formül uyarısı son onay modalında ve yazma kapısında korunur', 'AI işçilik formül modal/guard eksik');
+assert(autoLaborVmSource.includes('autoLaborHasUserEdit') && autoLaborVmSource.includes('Kullanıcı tarafından düzeltildi') && autoLaborVmSource.includes('Öğrenmeye kaydedilecek') && rendererMainSource.includes('autoLaborReviewRows'), 'v0.5.0 AI işçilik kullanıcı düzeltmesi, kontrol gerekli ve öğrenme adayı state akışı var', 'AI işçilik düzeltme/öğrenme state akışı eksik');
+assert(detailSource.includes('renderAutoLaborResult') && detailSource.includes('Kullanıcı düzeltmesi') && detailSource.includes('Sıfırlanan eski H-N') && detailSource.includes('Kısmi yazma') && detailSource.includes('renderCategoryTotals') && rendererStylesSource.includes('.auto-labor-result-grid'), 'v0.5.0 AI işçilik kaydetme sonucu kategori toplamları, kullanıcı düzeltmesi ve kısmi yazma durumuyla raporlanır', 'AI işçilik sonuç raporu grid/kısmi yazma kontrolü eksik');
+assert(rendererMainSource.includes('state.autoLaborSaveError') && detailSource.includes('Excel kaydedilemedi.') && rendererMainSource.includes('Başarı onayı alınmadı; çıktı dosyası oluştuysa kullanmadan önce kontrol edin.') && rendererMainSource.includes("setToast('Excel kaydedilemedi. Orijinal dosya korunuyor.', 'warning')") && rendererMainSource.includes('setToast(`Excel başarıyla kaydedildi:'), 'v0.5.0 AI işçilik hata durumunda başarılı kayıt mesajı göstermez ve kısmi yazma şüphesini raporlar', 'AI işçilik hata/kısmi yazma raporu eksik');
+assert(rendererStylesSource.includes('.auto-labor-filter-bar') && rendererStylesSource.includes('.auto-labor-filter-button.active') && rendererStylesSource.includes('.auto-labor-confirm-grid'), 'v0.5.0 AI işçilik filtreleri ve son onay modalı kompakt UI stiliyle korunur', 'AI işçilik filtre/modal CSS eksik');
+
+assert(detailSource.includes('data-default-closed="true"') && detailSource.includes('<summary>Gerek') && !detailSource.includes('auto-labor-reason" open') && rendererStylesSource.includes('.auto-labor-reason:not([open]) small') && rendererStylesSource.includes('.auto-labor-reason[open] small'), 'v0.5.0 AI iscilik uzun gerekce alanlari varsayilan kapali ve kompakt render edilir', 'AI iscilik gerekce alani kapali/kompakt guard eksik');
+assert(autoLaborVmSource.includes('AUTO_LABOR_PAGE_SIZE_OPTIONS') && autoLaborVmSource.includes('[25, 50, 100]') && detailSource.includes('data-auto-labor-page-size') && rendererMainSource.includes('setAutoLaborPageSize') && rendererStylesSource.includes('.auto-labor-page-size'), 'v0.5.0 AI iscilik sayfa basina 25/50/100 satir secimi korunur', 'AI iscilik sayfa boyutu secimi eksik');
+assert(settingsSource.includes('AI İşçilik Öğrenme Sözlüğü') && settingsSource.includes('labor-learning-search') && settingsSource.includes('labor-learning-update') && settingsSource.includes('labor-learning-import') && rendererStylesSource.includes('.labor-learning-card'), 'v0.5.0 AI iscilik ogrenme sozlugu Ayarlar icinde yonetilebilir UI sunar', 'AI iscilik ogrenme sozlugu UI eksik');
+assert(ipcContractSource.includes('laborLearningList') && ipcContractSource.includes('labor-learning:list') && mainIpcSource.includes('IPC.laborLearningUpdate') && preloadSource.includes('laborLearningImport') && learningAdminSource.includes('importLaborLearningJson'), 'v0.5.0 AI iscilik ogrenme sozlugu IPC/import-export servisi bagli', 'AI iscilik ogrenme sozlugu IPC/servis baglantisi eksik');
+
+const autoLaborPreviewFixture = {
+  filePath: 'fixture.xlsx',
+  fileName: 'fixture.xlsx',
+  sheetName: 'Portal',
+  columns: [
+    { column: 'H', category: 'Kaporta', header: 'Kaporta' },
+    { column: 'I', category: 'Mekanik', header: 'Mekanik' },
+    { column: 'J', category: 'Elektrik', header: 'Elektrik' },
+    { column: 'K', category: 'Döşeme/Kilit', header: 'Döşeme-Kilit' },
+    { column: 'L', category: 'Cam', header: 'Cam' },
+    { column: 'M', category: 'Boya', header: 'Boya' },
+    { column: 'N', category: 'Onarım', header: 'Onarım' }
+  ],
+  partNameColumn: 'C',
+  groupColumn: 'B',
+  partCodeColumn: 'D',
+  partAmountColumn: 'F',
+  rows: [
+    { rowNumber: 2, partName: 'SOL FAR', group: 'AYDINLATMA', partCode: 'ELK-1', partAmount: 1000, categories: ['Elektrik'], amounts: { Elektrik: 1000 }, oldByColumn: { H: 400, I: 0, J: 0, K: 0, L: 0, M: 0, N: 0 }, confidence: 'Orta', needsReview: true, reason: 'Kanıt: far.', source: 'rules', hasFormula: true, changed: true },
+    { rowNumber: 3, partName: 'ALTERNATÖR', group: 'MEKANIK', partCode: 'MEK-1', partAmount: 1500, categories: ['Mekanik'], amounts: { Mekanik: 1500 }, oldByColumn: { H: 0, I: 0, J: 0, K: 0, L: 888, M: 0, N: 0 }, confidence: 'Yüksek', needsReview: false, reason: 'Kanıt: alternatör.', source: 'rules', hasFormula: false, changed: true },
+    { rowNumber: 4, partName: 'BİLİNMEYEN PARÇA', group: 'GENEL', partCode: 'UNK-1', partAmount: 500, categories: ['Onarım'], amounts: { Onarım: 500 }, oldByColumn: { H: 0, I: 0, J: 0, K: 0, L: 0, M: 0, N: 0 }, confidence: 'Düşük', needsReview: true, reason: 'Varsayılan Onarım.', source: 'fallback', hasFormula: false, changed: false }
+  ],
+  summary: { processed: 3, highConfidence: 1, needsReview: 2, changedRows: 2, totalsByCategory: { Elektrik: 1000, Mekanik: 1500, Onarım: 500 } },
+  warnings: [],
+  formulaCellsFound: 1
+};
+const autoLaborUiState = {
+  autoLaborEdits: { 3: { Mekanik: 0, Kaporta: 1250 } },
+  autoLaborApprovedRows: { 4: true },
+  autoLaborReviewRows: { 2: false, 3: true },
+  autoLaborSearch: '',
+  autoLaborFilter: 'all'
+};
+const autoStats = buildAutoLaborStats(autoLaborPreviewFixture, autoLaborUiState);
+assert(autoStats.totalRows === 3 && autoStats.rowsToWrite === 3, 'v0.5.0 AI işçilik view-model tüm yazılacak satırları sayar', JSON.stringify(autoStats));
+assert(autoStats.changedRows === 2 && autoStats.reviewRows === 2 && autoStats.highConfidenceRows === 1 && autoStats.mediumConfidenceRows === 1 && autoStats.lowConfidenceRows === 1, 'v0.5.0 AI işçilik view-model değişen/kontrol/güven sayılarını hesaplar', JSON.stringify(autoStats));
+assert(autoStats.oldClearedCells === 2 && autoStats.userEditedRows === 1 && autoStats.learningCandidateRows === 2 && autoStats.formulaRows === 1, 'v0.5.0 AI işçilik view-model eski H-N, düzeltme, öğrenme ve formül sayılarını hesaplar', JSON.stringify(autoStats));
+assert(autoStats.categoryTotals.Kaporta === 1250 && autoStats.categoryTotals.Elektrik === 1000 && !autoStats.categoryTotals.Mekanik, 'v0.5.0 AI işçilik kullanıcı düzeltmesi kategori toplamlarına uygulanır', JSON.stringify(autoStats.categoryTotals));
+const autoPageModel = buildAutoLaborPageModel(autoLaborUiState, autoLaborPreviewFixture, 1);
+assert(AUTO_LABOR_ROWS_PER_PAGE > 0 && AUTO_LABOR_ROWS_PER_PAGE <= 60 && autoPageModel.filterCounts.all === 3 && autoPageModel.filterCounts.high === 1 && autoPageModel.filterCounts.review === 2 && autoPageModel.filterCounts.learning === 2, 'v0.5.0 AI işçilik büyük Excel guard filtre sayılarını tam veri üstünden hesaplar', JSON.stringify(autoPageModel.filterCounts));
+assert(autoPageModel.visibleRows.length === 3 && autoPageModel.totalFilteredRows === 3 && autoPageModel.totalPages === 1, 'v0.5.0 AI işçilik page model sadece görünür sayfa satırlarını döndürür', JSON.stringify({ visible: autoPageModel.visibleRows.length, total: autoPageModel.totalFilteredRows, pages: autoPageModel.totalPages }));
+assert(AUTO_LABOR_DEFAULT_PAGE_SIZE === 50 && AUTO_LABOR_PAGE_SIZE_OPTIONS.join(',') === '25,50,100' && normalizeAutoLaborPageSize(25) === 25 && normalizeAutoLaborPageSize(100) === 100 && normalizeAutoLaborPageSize(999) === AUTO_LABOR_DEFAULT_PAGE_SIZE, 'v0.5.0 AI iscilik sayfa boyutu 25/50/100 ve guvenli varsayilan kullanir', JSON.stringify({ options: AUTO_LABOR_PAGE_SIZE_OPTIONS, defaultSize: AUTO_LABOR_DEFAULT_PAGE_SIZE }));
+
+const largeAutoPreviewFixture = {
+  ...autoLaborPreviewFixture,
+  rows: Array.from({ length: AUTO_LABOR_ROWS_PER_PAGE + 7 }, (_unused, index) => ({
+    ...autoLaborPreviewFixture.rows[0],
+    rowNumber: index + 2,
+    partName: `SOL FAR ${index + 1}`,
+    oldByColumn: { H: 0, I: 0, J: 0, K: 0, L: 0, M: 0, N: 0 }
+  })),
+  summary: { ...autoLaborPreviewFixture.summary, processed: AUTO_LABOR_ROWS_PER_PAGE + 7 }
+};
+const largeAutoState = { ...autoLaborUiState, autoLaborEdits: {}, autoLaborApprovedRows: {}, autoLaborReviewRows: {}, autoLaborSearch: '', autoLaborFilter: 'all' };
+const largeFirstPage = buildAutoLaborPageModel(largeAutoState, largeAutoPreviewFixture, 1);
+const largeSecondPage = buildAutoLaborPageModel(largeAutoState, largeAutoPreviewFixture, 2);
+assert(largeFirstPage.totalFilteredRows === AUTO_LABOR_ROWS_PER_PAGE + 7 && largeFirstPage.visibleRows.length === AUTO_LABOR_ROWS_PER_PAGE && largeSecondPage.visibleRows.length === 7, 'v0.5.0 AI işçilik büyük tabloda DOM satırlarını aktif sayfayla sınırlar', JSON.stringify({ first: largeFirstPage.visibleRows.length, second: largeSecondPage.visibleRows.length, total: largeFirstPage.totalFilteredRows }));
+const autoSavePlan = buildAutoLaborSavePlan(autoLaborPreviewFixture, autoLaborUiState);
+assert(autoSavePlan.rows.length === 3 && autoSavePlan.corrections.length === 2, 'v0.5.0 AI işçilik save planı kullanıcı düzeltmesi/onayını öğrenmeye aday yapar', JSON.stringify(autoSavePlan));
+assert(autoSavePlan.rows.find((row) => row.rowNumber === 3)?.amounts.Kaporta === 1250 && !autoSavePlan.rows.find((row) => row.rowNumber === 3)?.amounts.Mekanik, 'v0.5.0 AI işçilik kullanıcı düzeltmesi kaydetme planına uygulanır', JSON.stringify(autoSavePlan.rows));
+assert(autoLaborFilterMatches(autoLaborUiState, autoLaborPreviewFixture, autoLaborPreviewFixture.rows[1], 'high'), 'v0.5.0 AI işçilik yüksek güven filtresi kontrol işaretinden bağımsız çalışır', JSON.stringify(autoLaborPreviewFixture.rows[1]));
+assert(autoLaborFilterMatches(autoLaborUiState, autoLaborPreviewFixture, autoLaborPreviewFixture.rows[1], 'oldCleared') && autoLaborFilterMatches(autoLaborUiState, autoLaborPreviewFixture, autoLaborPreviewFixture.rows[2], 'learning'), 'v0.5.0 AI işçilik eski değer ve öğrenme filtreleri gerçek satırı yakalar', JSON.stringify({ oldCleared: autoLaborPreviewFixture.rows[1], learning: autoLaborPreviewFixture.rows[2] }));
+assert(autoLaborFilterMatches(autoLaborUiState, autoLaborPreviewFixture, autoLaborPreviewFixture.rows[0], 'medium') && autoLaborFilterMatches(autoLaborUiState, autoLaborPreviewFixture, autoLaborPreviewFixture.rows[2], 'low') && autoLaborFilterMatches(autoLaborUiState, autoLaborPreviewFixture, autoLaborPreviewFixture.rows[2], 'review') && autoLaborFilterMatches(autoLaborUiState, autoLaborPreviewFixture, autoLaborPreviewFixture.rows[0], 'changed'), 'v0.5.0 AI iscilik kontrol/degisen/orta/dusuk filtreleri calisir', JSON.stringify(autoPageModel.filterCounts));
+assert(!autoLaborFilterMatches(autoLaborUiState, autoLaborPreviewFixture, autoLaborPreviewFixture.rows[0], 'learning'), 'v0.5.0 AI iscilik mevcut H-N degerlerini otomatik ogrenmeye aday yapmaz', JSON.stringify(autoLaborPreviewFixture.rows[0]));
+const searchState = { ...autoLaborUiState, autoLaborSearch: 'far' };
+assert(autoLaborSearchMatches(searchState, autoLaborPreviewFixture.rows[0]) && !autoLaborSearchMatches(searchState, autoLaborPreviewFixture.rows[1]), 'v0.5.0 AI işçilik araması parça açıklamasında çalışır', JSON.stringify({ far: autoLaborPreviewFixture.rows[0].partName, other: autoLaborPreviewFixture.rows[1].partName }));
 
 
 // RC5: Per-case cache orphan dosyaları silinmiş/taşınmış dosyaları ghost case olarak geri getirmemeli.
+const hugeAutoPreviewFixture = {
+  ...autoLaborPreviewFixture,
+  rows: Array.from({ length: 257 }, (_unused, index) => ({
+    ...autoLaborPreviewFixture.rows[index % autoLaborPreviewFixture.rows.length],
+    rowNumber: index + 10,
+    partName: index % 3 === 0 ? `SOL FAR BUYUK ${index + 1}` : index % 3 === 1 ? `ALTERNATOR BUYUK ${index + 1}` : `BILINMEYEN BUYUK ${index + 1}`,
+    partCode: `BIG-${index + 1}`,
+    oldByColumn: { H: 0, I: 0, J: 0, K: 0, L: 0, M: 0, N: 0 }
+  })),
+  summary: { ...autoLaborPreviewFixture.summary, processed: 257 }
+};
+const hugeState = { ...autoLaborUiState, autoLaborEdits: { 230: { Elektrik: 0, Mekanik: 777 } }, autoLaborApprovedRows: { 230: true }, autoLaborReviewRows: {}, autoLaborSearch: '', autoLaborFilter: 'all' };
+const hugeFirst25 = buildAutoLaborPageModel(hugeState, hugeAutoPreviewFixture, 1, 25);
+const hugeLast25 = buildAutoLaborPageModel(hugeState, hugeAutoPreviewFixture, 11, 25);
+const hugeFirst100 = buildAutoLaborPageModel(hugeState, hugeAutoPreviewFixture, 1, 100);
+assert(hugeFirst25.totalFilteredRows === 257 && hugeFirst25.visibleRows.length === 25 && hugeLast25.visibleRows.length === 7 && hugeFirst100.visibleRows.length === 100 && hugeFirst100.totalPages === 3, 'v0.5.0 AI iscilik 250+ satirda sadece aktif sayfa satirlarini render modeline alir', JSON.stringify({ first25: hugeFirst25.visibleRows.length, last25: hugeLast25.visibleRows.length, first100: hugeFirst100.visibleRows.length, pages100: hugeFirst100.totalPages }));
+const hugeSearchState = { ...hugeState, autoLaborSearch: 'BIG-257', autoLaborFilter: 'all' };
+const hugeSearchPage = buildAutoLaborPageModel(hugeSearchState, hugeAutoPreviewFixture, 1, 25);
+assert(hugeSearchPage.totalFilteredRows === 1 && hugeSearchPage.visibleRows[0]?.partCode === 'BIG-257', 'v0.5.0 AI iscilik buyuk veride arama sonucu dogru satira daralir', JSON.stringify(hugeSearchPage.visibleRows));
+const hugeLearningState = { ...hugeState, autoLaborFilter: 'learning' };
+const hugeLearningPage = buildAutoLaborPageModel(hugeLearningState, hugeAutoPreviewFixture, 1, 25);
+const hugeSavePlan = buildAutoLaborSavePlan(hugeAutoPreviewFixture, hugeLearningState);
+assert(hugeLearningPage.totalFilteredRows === 1 && hugeLearningPage.visibleRows[0]?.rowNumber === 230 && hugeSavePlan.rows.length === 257 && hugeSavePlan.stats.totalRows === 257 && hugeSavePlan.rows.find((row) => row.rowNumber === 230)?.amounts.Mekanik === 777, 'v0.5.0 AI iscilik sayfa/filtre degisince kullanici duzeltmesini kaybetmez ve kaydetme tum satirlari kapsar', JSON.stringify({ learningRows: hugeLearningPage.totalFilteredRows, planRows: hugeSavePlan.rows.length, editedRow: hugeSavePlan.rows.find((row) => row.rowNumber === 230) }));
+
 const cache = new LocalCacheStore(path.join(root, 'cache-ghost'));
 await cache.ensure();
 function minimalCase(folderPath, plate, revision = 1) {

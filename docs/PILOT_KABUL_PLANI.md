@@ -1,12 +1,12 @@
 # Pilot Kabul Planı
 
-Bu plan HasarBotu v0.4.12 için sınırlı gerçek dosya ile yapılan **Saha Pilot v2** kabul sürecini tanımlar.
+Bu plan HasarBotu v0.5.0 için sınırlı gerçek dosya ile yapılan **Saha Pilot v2** kabul sürecini tanımlar.
 
 ## Pilot Hazırlığı
 
 - [ ] Pilot ay klasörü aktif veriden güvenli şekilde ayrıldı.
 - [ ] Gerekirse `npm run pilot:copy-month` ile kontrollü pilot kopyası oluşturuldu.
-- [ ] Pilot bilgisayarda v0.4.12 çalışıyor.
+- [ ] Pilot bilgisayarda v0.5.0 çalışıyor.
 - [ ] `npm run pilot:collect` ile tanı paketi alınabileceği doğrulandı.
 
 ## Kabul Alanları

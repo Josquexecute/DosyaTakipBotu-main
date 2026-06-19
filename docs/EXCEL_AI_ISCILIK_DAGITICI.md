@@ -1,6 +1,6 @@
 # Excel / AI İşçilik Dağıtıcı
 
-AI İşçilik Dağıtıcı, portal Excel dosyalarında parça açıklamalarını okuyup H-N işçilik kolonları için öneri üretir. v0.4.12 ile gerçek portal kolon yapısı sabitlenmiştir.
+AI İşçilik Dağıtıcı, portal Excel dosyalarında parça açıklamalarını okuyup H-N işçilik kolonları için öneri üretir. v0.5.0 ile gerçek portal kolon yapısı sabitlenmiştir.
 
 ## Portal Excel Kolon Yapısı
 
@@ -47,6 +47,31 @@ AI İşçilik Dağıtıcı, portal Excel dosyalarında parça açıklamalarını
 | Kontrol gerekli mi? | Kullanıcı incelemesi gereken satırlar |
 | Karar gerekçesi | Kural, öğrenme veya fiyat listesi temelli açıklama |
 | Düzenleme alanı | Kullanıcının satırı elle düzeltmesi için |
+
+## v0.5.0 Önizleme ve Kontrol Deneyimi
+
+Önizleme ekranı artık büyük portal Excel dosyalarında hızlı kontrol için tasarlanmıştır:
+
+- Tüm satırlar, değişen satırlar, kontrol gerekli satırlar, yüksek/orta/düşük güven, eski değeri sıfırlanacak satırlar ve öğrenmeye aday satırlar filtrelenebilir.
+- Arama; parça açıklaması, DVN grubu, parça kodu, işçilik türü ve karar gerekçesi üstünde çalışır.
+- Üst özet kartları toplam satır, değişecek satır, kontrol gerekli satır, güven dağılımı, sıfırlanacak H-N hücresi ve öğrenmeye aday karar sayısını gösterir.
+- Uzun karar gerekçeleri varsayılan kapalı gelir; kullanıcı gerektiğinde satır detayını açar.
+- Büyük tablolarda yalnızca aktif sayfa render edilir. Sayfa başına 25, 50 veya 100 satır seçilebilir.
+
+## Son Onay ve Kaydetme Raporu
+
+Kaydet düğmesi doğrudan Excel'e yazmaz. Önce son onay modalı açılır ve şu bilgiler gösterilir:
+
+- kaç satır işlenecek,
+- kaç satır değişecek,
+- kaç satır kontrol gerekli veya düşük güvenli,
+- kaç satır kullanıcı tarafından düzeltildi,
+- kaç öğrenme kaydı oluşacak,
+- kaç eski H-N hücresi sıfırlanacak,
+- formüllü hücre uyarısı,
+- çıktı ve yedek dosya yolları.
+
+Kaydetme tamamlanınca sonuç raporu çıktı/yedek yolu, kategori toplamları, kullanıcı düzeltmesi, öğrenme kaydı, uyarı/hata ve kısmi yazma şüphesini açıkça gösterir. Hata durumunda işlem başarılı gösterilmez.
 
 ## Öğrenme Sözlüğü
 

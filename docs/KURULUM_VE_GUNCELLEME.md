@@ -1,6 +1,6 @@
 # Kurulum ve Güncelleme
 
-Bu rehber HasarBotu v0.4.12 kaynak kodunu geliştirme ortamında çalıştırmak, kalite kontrollerini tamamlamak ve Windows EXE üretimine hazırlamak için kullanılır.
+Bu rehber HasarBotu v0.5.0 kaynak kodunu geliştirme ortamında çalıştırmak, kalite kontrollerini tamamlamak ve Windows EXE üretimine hazırlamak için kullanılır.
 
 ## Gereksinimler
 
