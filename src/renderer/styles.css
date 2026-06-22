@@ -1448,6 +1448,14 @@ html.dark .case-virtual-row.selected {
   background: var(--error-container);
 }
 
+/* v0.6.0 P4-E3: Kullanıcı kaynağı (yerel kullanıcı bilgi deposu) sonuçlarını seed sonuçlardan ayıran salt-okunur etiket. */
+.status-chip.user-source {
+  color: var(--on-primary);
+  background: var(--primary-container);
+  border: 1px solid var(--primary);
+  font-weight: 800;
+}
+
 .version-chip {
   border: 1px solid var(--outline-variant);
   color: var(--on-surface-variant);

@@ -22,6 +22,10 @@ export interface KnowledgeSearchResult {
   matchedTerms: string[];
   tags: KnownKnowledgeTag[];
   rationale: string;
+  /** v0.6.0 P4-E3: Sonucun kaynagi — yerlesik (seed) ya da read-only kullanici bilgi deposu (user). Belirtilmezse seed kabul edilir. */
+  origin?: 'seed' | 'user';
+  /** v0.6.0 P4-E3: Kullanici kaynagi sonuclari icin gosterim etiketi (or. "Kullanıcı Kaynağı"). */
+  sourceLabel?: string;
 }
 
 export interface KnowledgeSearchResponse {

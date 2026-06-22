@@ -239,6 +239,7 @@ function renderSafetyNotes(): string {
   return `<div class="knowledge-safety">
     <div class="app-alert info">${icon('info')}<span>Bu panel bilgi bankasını sadece okur. takip.json, Excel veya dosya klasörlerine yazma yapmaz.</span></div>
     <div class="app-alert info">${icon('info')}<span>Bilgi bankası sonuçları ön bilgi niteliğindedir; nihai karar kullanıcı/eksper onayına tabidir. Local-only / ücretsiz / harici API yok.</span></div>
+    <div class="app-alert info">${icon('info')}<span>Yerel kullanıcı bilgi deposundaki kayıtlar bu aramaya salt okunur olarak katılır; bu panel yalnız okuma yapar, depoyu değiştirmez.</span></div>
   </div>`;
 }
 
@@ -366,6 +367,7 @@ function renderResultRow(result: KnowledgeSearchResult, selected: boolean): stri
   return `<button class="knowledge-result-row ${selected ? 'active' : ''}" data-action="knowledge-result-select" data-knowledge-result-id="${escapeHtml(result.chunkId)}" type="button" aria-pressed="${selected ? 'true' : 'false'}" aria-label="${escapeHtml(`Sonuç seç: ${result.sourceTitle}`)}">
     <span class="knowledge-result-heading">
       <b>${escapeHtml(result.sourceTitle)}</b>
+      ${result.origin === 'user' ? `<span class="status-chip user-source">${escapeHtml(result.sourceLabel ?? 'Kullanıcı Kaynağı')}</span>` : ''}
       <span class="status-chip info">Skor: ${escapeHtml(formatScore(result.score))}</span>
     </span>
     ${location ? `<small>${escapeHtml(location)}</small>` : ''}
@@ -387,13 +389,18 @@ function renderResultDetail(result: KnowledgeSearchResult | null, fallbackSource
   }
   const sourceType = result.sourceType ?? fallbackSource?.sourceType;
   const location = [result.section, result.page !== undefined ? `Sayfa ${result.page}` : ''].filter(Boolean).join(' · ') || '-';
+  const isUserSource = result.origin === 'user';
   return `<section class="knowledge-detail-card knowledge-result-detail" aria-label="Bilgi bankası sonuç detayı">
     <div class="knowledge-subhead">
       <b>Sonuç detayı</b>
+      ${isUserSource ? `<span class="status-chip user-source">${escapeHtml(result.sourceLabel ?? 'Kullanıcı Kaynağı')}</span>` : ''}
       <span class="status-chip info">Skor: ${escapeHtml(formatScore(result.score))}</span>
     </div>
     <div class="knowledge-detail-meta">
       ${renderMeta('Kaynak', result.sourceTitle)}
+      ${isUserSource ? renderMeta('Kaynak türü', 'Kullanıcı Kaynağı') : ''}
+      ${isUserSource ? renderMeta('Depo', 'Yerel kullanıcı bilgi deposu (user-knowledge-store.json)') : ''}
+      ${isUserSource ? renderMeta('Mod', 'Salt okunur') : ''}
       ${renderMeta('sourceId', result.sourceId)}
       ${renderMeta('chunkId', result.chunkId)}
       ${renderMeta('sourceType', sourceType ?? '-')}
@@ -410,6 +417,7 @@ function renderResultDetail(result: KnowledgeSearchResult | null, fallbackSource
       <b>Gerekçe</b>
       <p>${escapeHtml(result.rationale)}</p>
     </div>
+    ${isUserSource ? `<div class="app-alert info">${icon('info')}<span>Kaynak: Yerel kullanıcı bilgi deposu. Bu kayıt salt okunur gösterilir; bu panel kullanıcı deposunu değiştirmez.</span></div>` : ''}
     <div class="app-alert info">${icon('info')}<span>Bu bilgi ön bilgi niteliğindedir; nihai karar eksper/kullanıcı onayına tabidir.</span></div>
   </section>`;
 }

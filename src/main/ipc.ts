@@ -47,10 +47,13 @@ import type {
   TrackingUpdateTodoArgs
 } from '../shared/ipc-contract';
 import { LocalCacheStore } from './local-cache/local-cache-store';
+import { UserKnowledgeStoreFile } from './local-cache/user-knowledge-store';
 import { assertSafeCasePath } from './security';
 import type { LogLevel } from './debug-logger';
+import type { KnowledgeSearchResponse, KnowledgeSearchResult } from '../shared/knowledge';
 import { AiTaskQueueService } from './services/ai/ai-task-queue-service';
 import { KnowledgeSearchService } from './services/knowledge/knowledge-search-service';
+import { searchUserKnowledgeEntries, mergeUserKnowledgeIntoResponse } from './services/knowledge/user-knowledge-search-service';
 import { buildDryRunPlan } from './services/knowledge/knowledge-import-planner';
 import { chooseFilesForKnowledgeImportDryRun } from './services/knowledge/knowledge-import-dry-run-service';
 import { previewTextFileForKnowledgeImport } from './services/knowledge/knowledge-import-text-preview-service';
@@ -138,7 +141,7 @@ export class IpcController {
     ipcMain.handle(IPC.aiQueueEnqueuePreview, (_event, args: AiQueueEnqueuePreviewArgs) => this.safe(async () => this.aiQueue.enqueue(buildSafeAiQueuePreviewRequest(args), buildSafeAiQueueOptions(args))));
     ipcMain.handle(IPC.aiQueueCancelTask, (_event, queueTaskId: string, reason?: string) => this.safe(async () => this.aiQueue.cancelTask(String(queueTaskId || ''), safeShortText(reason, 'Kullanici istegiyle iptal edildi.'))));
     ipcMain.handle(IPC.aiQueueClearFinished, () => this.safe(async () => this.aiQueue.clearFinished()));
-    ipcMain.handle(IPC.knowledgeSearch, (_event, query: KnowledgeSearchQuery | string) => this.safe(async () => this.knowledge.search(query)));
+    ipcMain.handle(IPC.knowledgeSearch, (_event, query: KnowledgeSearchQuery | string) => this.safe(async () => this.searchKnowledgeWithUserStore(query)));
     ipcMain.handle(IPC.knowledgeListSources, () => this.safe(async () => this.knowledge.listSources()));
     ipcMain.handle(IPC.knowledgeGetSource, (_event, sourceId: string) => this.safe(async () => this.knowledge.getSource(String(sourceId || ''))));
     ipcMain.handle(IPC.knowledgeGetChunk, (_event, chunkId: string) => this.safe(async () => this.knowledge.getChunk(String(chunkId || ''))));
@@ -195,6 +198,22 @@ export class IpcController {
 
     ipcMain.handle(IPC.deploymentGetStatus, () => this.safe(() => this.deployment.getStatus(false)));
     ipcMain.handle(IPC.deploymentRegisterClient, () => this.safe(() => this.deployment.getStatus(true)));
+  }
+
+  // P4-E3: Seed (yerlesik) aramaya, AppData altindaki kullanici bilgi deposunu SALT-OKUNUR dahil eder.
+  // Yalniz UserKnowledgeStoreFile.read kullanilir; bu yolda YAZMA/commit/silme yoktur. Depo yok/bos/bozuksa
+  // veya okuma hatasi olursa seed arama calismaya devam eder; kullanici sonucu 0 olur ve gerekirse uyari eklenir.
+  private async searchKnowledgeWithUserStore(query: KnowledgeSearchQuery | string): Promise<KnowledgeSearchResponse> {
+    const seed = this.knowledge.search(query);
+    let userResults: KnowledgeSearchResult[] = [];
+    let userStoreError = false;
+    try {
+      const store = await new UserKnowledgeStoreFile(this.cache.cacheRoot).read();
+      userResults = searchUserKnowledgeEntries(store.entries, query);
+    } catch {
+      userStoreError = true;
+    }
+    return mergeUserKnowledgeIntoResponse(seed, userResults, userStoreError);
   }
 
   private async safe<T>(operation: () => Promise<T>): Promise<ApiResult<T>> {

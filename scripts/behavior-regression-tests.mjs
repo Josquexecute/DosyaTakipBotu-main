@@ -40,6 +40,7 @@ import { KNOWLEDGE_IMPORT_FORBIDDEN_WRITE_TARGETS, KNOWLEDGE_IMPORT_PERSISTENT_W
 import { UserKnowledgeStoreFile, defaultUserKnowledgeStore } from '../dist-electron/main/local-cache/user-knowledge-store.js';
 import { buildKnowledgeImportCommitPlan } from '../dist-electron/shared/knowledge/knowledge-import-commit-plan.js';
 import { commitApprovedKnowledgeImportTextPreview } from '../dist-electron/main/services/knowledge/knowledge-import-commit-service.js';
+import { searchUserKnowledgeEntries, mergeUserKnowledgeIntoResponse, USER_KNOWLEDGE_RESULT_LABEL } from '../dist-electron/main/services/knowledge/user-knowledge-search-service.js';
 import { AI_FINAL_APPROVAL_WARNING_CODE, normalizeAiTaskRequest } from '../dist-electron/shared/ai/ai-safety.js';
 import { IPC_INVOKE_CHANNELS } from '../dist-electron/shared/ipc-contract.js';
 import { isForbiddenKnowledgeChannel, isKnowledgeReadOnlyChannel } from '../dist-electron/shared/knowledge/knowledge-safety.js';
@@ -1263,7 +1264,7 @@ assert(knowledgeSeedSource.includes('Agir Hasar Kritik Parca Ozet Kurali') && kn
 assert(knowledgeSearchSource.includes('KnowledgeSearchService') && knowledgeSearchSource.includes('scoreChunk') && knowledgeSearchSource.includes('sourceTypeFiltered') && knowledgeSearchSource.includes('matchedTerms') && knowledgeSearchSource.includes('PRIORITY_SCORE'), 'v0.6.0 P2-A deterministic knowledge search scoring servisi var', 'knowledge search scoring eksik');
 assert(knowledgeSafetySource.includes('KNOWLEDGE_LOCAL_ONLY') && knowledgeSafetySource.includes('KNOWLEDGE_READ_ONLY_CHANNELS') && knowledgeSafetySource.includes('KNOWLEDGE_FORBIDDEN_ACTION_PATTERN'), 'v0.6.0 P2-A knowledge local-only/read-only guvenlik sabitleri var', 'knowledge safety sabitleri eksik');
 assert(ipcContractSource.includes('knowledgeSearch') && ipcContractSource.includes('knowledge:search') && ipcContractSource.includes('knowledgeListSources') && ipcContractSource.includes('knowledgeGetSource') && ipcContractSource.includes('knowledgeGetChunk') && preloadSource.includes('searchKnowledge') && preloadSource.includes('listKnowledgeSources') && preloadSource.includes('getKnowledgeSource') && preloadSource.includes('getKnowledgeChunk'), 'v0.6.0 P2-A knowledge IPC/preload read-only metodlari bagli', 'knowledge IPC/preload baglantisi eksik');
-assert(knowledgeIpcSlice.includes('knowledge.search') && knowledgeIpcSlice.includes('knowledge.listSources') && knowledgeIpcSlice.includes('knowledge.getSource') && knowledgeIpcSlice.includes('knowledge.getChunk') && !/knowledge:(write|save|apply|import|export|delete|edit|sync|upload|download|copy|persist|provider)/i.test(ipcContractSource) && !knowledgeIpcSlice.includes('tracking.mutate') && !knowledgeIpcSlice.includes('writeCaseCache') && !knowledgeIpcSlice.includes('laborAutoSave'), 'v0.6.0 P2-A knowledge IPC katmani kalici yazma endpointi tasimaz', knowledgeIpcSlice);
+assert(knowledgeIpcSlice.includes('searchKnowledgeWithUserStore') && knowledgeIpcSlice.includes('knowledge.listSources') && knowledgeIpcSlice.includes('knowledge.getSource') && knowledgeIpcSlice.includes('knowledge.getChunk') && !/knowledge:(write|save|apply|import|export|delete|edit|sync|upload|download|copy|persist|provider)/i.test(ipcContractSource) && !knowledgeIpcSlice.includes('tracking.mutate') && !knowledgeIpcSlice.includes('writeCaseCache') && !knowledgeIpcSlice.includes('laborAutoSave'), 'v0.6.0 P2-A knowledge IPC katmani kalici yazma endpointi tasimaz (search read-only user store dahil eder)', knowledgeIpcSlice);
 assert(!/OpenAI|Claude|Gemini|paid|external|fetch\(|axios|embedding|vector database|sqlite/i.test([knowledgeNormalizerSource, knowledgeSeedSource, knowledgeSearchSource, knowledgeSafetySource].join('\n')), 'v0.6.0 P2-A knowledge servisleri ucretli/harici provider veya internet bagimliligi tasimaz', 'knowledge servislerinde yasak provider/internet izi var');
 const knowledgeRendererSlice = rendererMainSource.slice(rendererMainSource.indexOf('async function loadKnowledgeSources'), rendererMainSource.indexOf('function syncAiQueueAutoRefresh'));
 const knowledgePreloadMethods = [...preloadSource.matchAll(/^\s*(\w*Knowledge\w*)\s*:/gm)].map((match) => match[1]).sort();
@@ -1355,6 +1356,34 @@ try {
 } finally {
   await fs.rm(p4e2bRoot, { recursive: true, force: true }).catch(() => undefined);
 }
+
+// --- v0.6.0 P4-E3: User Knowledge Store'u Bilgi Bankasi aramasina read-only dahil etme ---
+const p4e3Entries = [
+  { entryId: 'uk-1', title: 'Mutabakat Sablonu', text: 'On gogus saci ve firewall hasarinda mutabakat notu ornegi.', contentHash: 'h1', sourceFileName: 'mutabakat.txt', fileExtension: '.txt', sourceType: 'office_note', tags: ['agir_hasar'], importedBy: 'import-flow', createdAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-01T00:00:00.000Z', createdBy: 'import-flow' },
+  { entryId: 'uk-2', title: 'Police Muafiyet', text: 'Police muafiyet kontrol notu; deductible hesaplari.', contentHash: 'h2', sourceFileName: 'muafiyet.md', fileExtension: '.md', sourceType: 'office_note', tags: [], importedBy: 'import-flow', createdAt: '2026-06-02T00:00:00.000Z', updatedAt: '2026-06-02T00:00:00.000Z', createdBy: 'import-flow' }
+];
+assert(searchUserKnowledgeEntries([], 'on gogus').length === 0, 'v0.6.0 P4-E3 bos/yok user store aramada cokmeden 0 sonuc doner', 'bos user store sonucu hatali');
+assert(searchUserKnowledgeEntries(p4e3Entries, '').length === 0, 'v0.6.0 P4-E3 bos arama metni user store sonucu uretmez (seed davranisiyla tutarli)', 'bos sorgu user sonuc uretti');
+const p4e3ByContent = searchUserKnowledgeEntries(p4e3Entries, 'firewall');
+const p4e3Hit = p4e3ByContent.find((r) => r.sourceId === 'user:uk-1');
+assert(!!p4e3Hit && p4e3Hit.origin === 'user' && p4e3Hit.sourceLabel === USER_KNOWLEDGE_RESULT_LABEL, 'v0.6.0 P4-E3 user store content/text uzerinden aranabilir ve Kullanici Kaynagi etiketi tasir', JSON.stringify(p4e3ByContent.map((r) => [r.sourceId, r.origin, r.sourceLabel])));
+assert(searchUserKnowledgeEntries(p4e3Entries, 'Mutabakat').some((r) => r.sourceId === 'user:uk-1'), 'v0.6.0 P4-E3 user store title uzerinden aranabilir', 'title aramasi user sonuc dondurmedi');
+assert(searchUserKnowledgeEntries(p4e3Entries, 'muafiyet.md').some((r) => r.sourceId === 'user:uk-2'), 'v0.6.0 P4-E3 user store sourceFileName uzerinden aranabilir', 'sourceFileName aramasi user sonuc dondurmedi');
+assert(searchUserKnowledgeEntries(p4e3Entries, { query: '', tags: ['agir_hasar'] }).some((r) => r.sourceId === 'user:uk-1'), 'v0.6.0 P4-E3 user store tags uzerinden filtrelenir/aranabilir', 'tag filtresi user sonuc dondurmedi');
+assert(!('filePath' in p4e3Hit) && !/C:\\\\|\/Users\/|\/home\/|pCloud/i.test(JSON.stringify(p4e3Hit)), 'v0.6.0 P4-E3 user result filePath/mutlak yol/pCloud yolu tasimaz', JSON.stringify(p4e3Hit));
+const p4e3Seed = { query: 'firewall', normalizedQuery: 'firewall', total: 2, results: [
+  { chunkId: 'seed-c1', sourceId: 'seed-s1', sourceTitle: 'On Gogus Rehberi', text: 'firewall metni', score: 11, matchedTerms: ['firewall'], tags: ['agir_hasar'], rationale: 'seed' },
+  { chunkId: 'seed-c2', sourceId: 'seed-s2', sourceTitle: 'Ikinci Seed', text: 'firewall ikinci', score: 5, matchedTerms: ['firewall'], tags: [], rationale: 'seed' }
+], warnings: [] };
+const p4e3Merged = mergeUserKnowledgeIntoResponse(p4e3Seed, [p4e3Hit], false);
+assert(p4e3Merged.results.length === 3 && p4e3Merged.total === 3 && p4e3Merged.results.filter((r) => r.origin === 'user').length === 1 && p4e3Merged.results.filter((r) => r.origin !== 'user').length === 2, 'v0.6.0 P4-E3 merge seed sonuclarini korur ve user sonucunu ekler; seed/user karismaz', JSON.stringify(p4e3Merged.results.map((r) => [r.sourceId, r.origin ?? 'seed'])));
+const p4e3SeedOrder = p4e3Merged.results.filter((r) => r.origin !== 'user').map((r) => r.sourceId);
+assert(p4e3SeedOrder[0] === 'seed-s1' && p4e3SeedOrder[1] === 'seed-s2', 'v0.6.0 P4-E3 seed sonuclarinin kendi arasindaki puanlama/siralamasi bozulmaz', JSON.stringify(p4e3SeedOrder));
+const p4e3MergedErr = mergeUserKnowledgeIntoResponse(p4e3Seed, [], true);
+assert(p4e3MergedErr.results.length === 2 && p4e3MergedErr.warnings.length === 1 && /okunamad/i.test(p4e3MergedErr.warnings[0]), 'v0.6.0 P4-E3 user store okuma hatasi seed aramayi dusurmez; yalniz uyari eklenir', JSON.stringify(p4e3MergedErr.warnings));
+const userKnowledgeSearchSource = await fs.readFile('src/main/services/knowledge/user-knowledge-search-service.ts', 'utf-8');
+assert(!/\.write\(|UserKnowledgeStoreFile|from ['"]node:fs|from ['"]fs|\bfs\.|atomicWrite|writeFile|filePath|pdf2json|tesseract|OpenAI|Claude|Gemini|fetch\(|axios|sqlite|embedding/i.test(userKnowledgeSearchSource), 'v0.6.0 P4-E3 user store arama servisi saf/read-only: yazma/fs/store-write/filePath/parser/provider yok', 'P4-E3 arama servisi yasak iz tasiyor');
+
 const knowledgeImportDisplaySource = [knowledgeImportViewModelSource, knowledgeImportPlanViewSource].join('\n');
 assert(knowledgeImportTypesSource.includes('KnowledgeImportApprovalState') && knowledgeImportTypesSource.includes('KnowledgeImportApprovalDecision') && knowledgeImportViewModelSource.includes('approved_but_not_executed'), 'v0.6.0 P3-B onay akisi sadece tip/view-model seviyesinde hazirlanir', 'P3-B approval model eksik');
 assert(knowledgeImportViewModelSource.includes('buildKnowledgeImportPlanViewModel') && knowledgeImportViewModelSource.includes('permissionLabel') && knowledgeImportViewModelSource.includes('Reddedildi') && knowledgeImportViewModelSource.includes('Sadece plan') && knowledgeImportViewModelSource.includes('Kullanici onayi gerekir') && knowledgeImportViewModelSource.includes('Gelecek import icin uygun'), 'v0.6.0 P3-B import plan view model permission durumlarini ayirir', 'P3-B permission view label eksik');
