@@ -1,6 +1,6 @@
 # Architecture
 
-Bu dosya geriye dönük dokümantasyon uyumluluğu için korunur. HasarBotu v0.5.0 teknik mimarisinin güncel ve ayrıntılı anlatımı için [TEKNIK_MIMARI.md](TEKNIK_MIMARI.md) kullanılmalıdır.
+Bu dosya geriye dönük dokümantasyon uyumluluğu için korunur. HasarBotu v0.6.0 teknik mimarisinin güncel ve ayrıntılı anlatımı için [TEKNIK_MIMARI.md](TEKNIK_MIMARI.md) kullanılmalıdır.
 
 ## Kısa Özet
 

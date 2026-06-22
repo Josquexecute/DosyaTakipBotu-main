@@ -4,6 +4,8 @@ import { AUTO_LABOR_DEFAULT_PAGE_SIZE, type AutoLaborPreviewFilter } from '../..
 import type { LaborLearningEntry } from '../../shared/labor-learning-dictionary';
 import type { HeavyDamageAssessmentPreview, HeavyDamageRowEdit } from '../../shared/heavy-damage-types';
 import type { HeavyDamageFilter } from '../../shared/heavy-damage-rules';
+import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../../shared/ai/ai-queue-types';
+import type { KnowledgeImportApprovalReducerState, KnowledgeImportCommitResult, KnowledgeImportPlan, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceType } from '../../shared/knowledge';
 
 export interface UiState {
   settings: AppSettings | null;
@@ -58,6 +60,39 @@ export interface UiState {
   laborLearningFilter: string;
   laborLearningLoading: boolean;
   laborLearningReport: string;
+  aiQueueSnapshot: AiTaskQueueSnapshot | null;
+  aiQueueEvents: AiQueueHistoryEvent[];
+  aiQueueEventsError: string;
+  aiQueueLoading: boolean;
+  aiQueueSelectedTaskId: string;
+  aiQueueError: string;
+  aiQueueLastLoadedAt: string;
+  aiQueueAutoRefreshEnabled: boolean;
+  aiQueueCancelingTaskId: string;
+  knowledgeSources: KnowledgeSource[];
+  knowledgeSourcesLoading: boolean;
+  knowledgeSourcesError: string;
+  knowledgeSearchQuery: string;
+  knowledgeSearchResponse: KnowledgeSearchResponse | null;
+  knowledgeSearchLoading: boolean;
+  knowledgeSearchError: string;
+  selectedKnowledgeTags: string[];
+  selectedKnowledgeSourceTypes: KnowledgeSourceType[];
+  selectedKnowledgeSourceId: string;
+  selectedKnowledgeResultId: string;
+  /** v0.6.0 P3-H: read-only dry-run import IPC'sinden donen plan (canli panel testi). Kalici degildir. */
+  knowledgeImportDryRunPlan: KnowledgeImportPlan | null;
+  knowledgeImportDryRunLoading: boolean;
+  knowledgeImportDryRunError: string;
+  /** v0.6.0 P4-B: bellek-ici import onay kararlari. Kalici degildir; import calistirmaz (canExecuteImport=false). */
+  knowledgeImportApprovalState: KnowledgeImportApprovalReducerState;
+  /** v0.6.0 P4-C: yalniz .txt/.md duz-metin icerik onizlemesi (bellek-ici, yazmasiz). */
+  knowledgeImportTextPreview: KnowledgeImportTextPreview | null;
+  knowledgeImportTextPreviewLoading: boolean;
+  knowledgeImportTextPreviewError: string;
+  /** v0.6.0 P4-E2-B: kalici commit sonucu (bellek-ici gosterim). */
+  knowledgeImportCommitResult: KnowledgeImportCommitResult | null;
+  knowledgeImportCommitting: boolean;
   heavyDamagePreview: HeavyDamageAssessmentPreview | null;
   heavyDamageEdits: Record<string, HeavyDamageRowEdit>;
   heavyDamageFilter: HeavyDamageFilter;
@@ -185,6 +220,35 @@ export const state: UiState = {
   laborLearningFilter: 'all',
   laborLearningLoading: false,
   laborLearningReport: '',
+  aiQueueSnapshot: null,
+  aiQueueEvents: [],
+  aiQueueEventsError: '',
+  aiQueueLoading: false,
+  aiQueueSelectedTaskId: '',
+  aiQueueError: '',
+  aiQueueLastLoadedAt: '',
+  aiQueueAutoRefreshEnabled: true,
+  aiQueueCancelingTaskId: '',
+  knowledgeSources: [],
+  knowledgeSourcesLoading: false,
+  knowledgeSourcesError: '',
+  knowledgeSearchQuery: '',
+  knowledgeSearchResponse: null,
+  knowledgeSearchLoading: false,
+  knowledgeSearchError: '',
+  selectedKnowledgeTags: [],
+  selectedKnowledgeSourceTypes: [],
+  selectedKnowledgeSourceId: '',
+  selectedKnowledgeResultId: '',
+  knowledgeImportDryRunPlan: null,
+  knowledgeImportDryRunLoading: false,
+  knowledgeImportDryRunError: '',
+  knowledgeImportApprovalState: { entries: [], canExecuteImport: false },
+  knowledgeImportTextPreview: null,
+  knowledgeImportTextPreviewLoading: false,
+  knowledgeImportTextPreviewError: '',
+  knowledgeImportCommitResult: null,
+  knowledgeImportCommitting: false,
   heavyDamagePreview: null,
   heavyDamageEdits: {},
   heavyDamageFilter: 'all',

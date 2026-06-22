@@ -1,6 +1,14 @@
 # Changelog
 
-Bu doküman HasarBotu v0.5.0 için kullanıcı ve operasyon odaklı güncel değişiklik özetidir. Ayrıntılı teknik geçmiş gerekiyorsa kök `CHANGELOG.md` arşiv olarak ayrıca incelenebilir.
+Bu doküman HasarBotu v0.6.0 için kullanıcı ve operasyon odaklı güncel değişiklik özetidir. Ayrıntılı teknik geçmiş gerekiyorsa kök `CHANGELOG.md` arşiv olarak ayrıca incelenebilir.
+
+## v0.6.0
+
+### Sürüm damgası hizalaması (hotfix)
+
+- Kaynak kod v0.6.0 seviyesindeyken `package.json`, `package-lock.json` ve `APP_VERSION` `0.5.0` gösteriyordu; bu, ofis dağıtım/güncellik kontrolünü yanlış etkileyebiliyordu.
+- Runtime sürümü, paket sürümü, final office audit sürüm kapısı ve kullanıcıya görünen doküman damgaları `v0.6.0` ile hizalandı.
+- Davranış değişmedi: `takip.json` source of truth, atomic write, revision/writeId, Excel, AppData, Bilgi Bankası, AI Queue, Gemini ve OCR tarafına dokunulmadı; yeni özellik/refactor yapılmadı.
 
 ## v0.5.0
 

@@ -1,6 +1,6 @@
 # Sorun Giderme
 
-Bu rehber HasarBotu v0.5.0 kullanımında sık görülebilecek sorunlar için ilk müdahale adımlarını özetler.
+Bu rehber HasarBotu v0.6.0 kullanımında sık görülebilecek sorunlar için ilk müdahale adımlarını özetler.
 
 ## Uygulama Açılmıyor
 

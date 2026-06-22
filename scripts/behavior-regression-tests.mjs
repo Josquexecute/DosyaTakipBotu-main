@@ -26,6 +26,24 @@ import { buildAutoLaborPreview } from '../dist-electron/main/services/labor-prev
 import { saveAutoLaborExcel } from '../dist-electron/main/services/labor-excel-writer.js';
 import { buildGenericLaborWorkbook, loadWorkbook } from '../dist-electron/main/import/excel-importer.js';
 import { applyHeavyDamageEdits, buildHeavyDamagePreview, classifyHeavyDamagePart, generateHeavyDamageAssessmentMailDraft, generateHeavyDamageAssessmentNote, heavyDamageFilterMatches, HEAVY_DAMAGE_ECONOMIC_THRESHOLD, HEAVY_DAMAGE_THRESHOLD } from '../dist-electron/shared/heavy-damage-rules.js';
+import { AiOrchestratorService } from '../dist-electron/main/services/ai/ai-orchestrator-service.js';
+import { AiProviderRegistry } from '../dist-electron/main/services/ai/ai-provider-registry.js';
+import { AiTaskQueueService } from '../dist-electron/main/services/ai/ai-task-queue-service.js';
+import { normalizeKnowledgeText, tokenizeKnowledgeText } from '../dist-electron/main/services/knowledge/knowledge-normalizer.js';
+import { KnowledgeSearchService } from '../dist-electron/main/services/knowledge/knowledge-search-service.js';
+import { KnowledgeSourceRegistry } from '../dist-electron/main/services/knowledge/knowledge-source-registry.js';
+import { buildDryRunPlan } from '../dist-electron/main/services/knowledge/knowledge-import-planner.js';
+import { buildKnowledgeImportPlanViewModel } from '../dist-electron/shared/knowledge/knowledge-import-plan-view-model.js';
+import { buildSampleKnowledgeImportApprovalState, buildSampleKnowledgeImportPlan } from '../dist-electron/shared/knowledge/knowledge-import-plan-sample.js';
+import { applyKnowledgeImportApprovalDecision, createKnowledgeImportApprovalState, getKnowledgeImportApprovalState, summarizeKnowledgeImportApprovals } from '../dist-electron/shared/knowledge/knowledge-import-approval.js';
+import { KNOWLEDGE_IMPORT_FORBIDDEN_WRITE_TARGETS, KNOWLEDGE_IMPORT_PERSISTENT_WRITE_ENABLED, assertKnowledgeImportPersistentWriteAllowed } from '../dist-electron/shared/knowledge/knowledge-import-write-lock.js';
+import { UserKnowledgeStoreFile, defaultUserKnowledgeStore } from '../dist-electron/main/local-cache/user-knowledge-store.js';
+import { buildKnowledgeImportCommitPlan } from '../dist-electron/shared/knowledge/knowledge-import-commit-plan.js';
+import { commitApprovedKnowledgeImportTextPreview } from '../dist-electron/main/services/knowledge/knowledge-import-commit-service.js';
+import { AI_FINAL_APPROVAL_WARNING_CODE, normalizeAiTaskRequest } from '../dist-electron/shared/ai/ai-safety.js';
+import { IPC_INVOKE_CHANNELS } from '../dist-electron/shared/ipc-contract.js';
+import { isForbiddenKnowledgeChannel, isKnowledgeReadOnlyChannel } from '../dist-electron/shared/knowledge/knowledge-safety.js';
+import { normalizeSettings } from '../dist-electron/main/services/settings-normalizer.js';
 
 const checks = [];
 function ok(name) { checks.push({ name, ok: true }); console.log(`TAMAM - ${name}`); }
@@ -122,7 +140,438 @@ function makeStoredZip(entries) {
   return Buffer.concat([...locals, ...centrals, eocd]);
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitUntil(predicate, label, timeoutMs = 1000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) return;
+    await wait(1);
+  }
+  throw new Error(`Zaman asimi: ${label}`);
+}
+
+function makeAiRequest(taskId, taskType = 'generic_rule_assist', input = { text: 'AI queue test' }, overrides = {}) {
+  return normalizeAiTaskRequest({ taskId, taskType, input, ...overrides });
+}
+
+function makeAiResult(request, status = 'ok', providerId = 'test-ai-runner') {
+  return {
+    taskId: request.taskId,
+    taskType: request.taskType,
+    status,
+    providerId,
+    mode: 'rule',
+    summary: status === 'ok' ? 'Test AI gorevi tamamlandi.' : 'Test AI gorevi kullanici girdisi bekliyor.',
+    confidence: status === 'ok' ? 'medium' : 'low',
+    recommendations: [],
+    warnings: [],
+    userQuestions: status === 'needs_user_input' ? [{ id: 'test-question', question: 'Test girdisi gerekli mi?', required: true }] : [],
+    rationale: [{ code: 'TEST_RUNNER', message: 'Deterministik test runner sonucu.' }],
+    sources: [{ id: providerId, label: providerId, kind: 'system' }],
+    previewWrites: [],
+    requiresUserApproval: true,
+    canWriteAutomatically: false,
+    ...(status === 'error' ? { error: { code: 'TEST_AI_ERROR', message: 'Test hatasi' } } : {}),
+    createdAt: new Date().toISOString()
+  };
+}
+
+function createDelayedAiRunner(delayMs, status = 'ok') {
+  let active = 0;
+  let maxObserved = 0;
+  return {
+    getMaxObserved() { return maxObserved; },
+    async run(request, options = {}) {
+      active += 1;
+      maxObserved = Math.max(maxObserved, active);
+      options.onProgress?.({ phase: 'running', percent: 55, message: 'Test AI gorevi calisiyor', updatedAt: new Date().toISOString() });
+      try {
+        await wait(delayMs);
+        if (options.signal?.aborted) return makeAiResult(request, 'error', 'delayed-test-runner');
+        if (status === 'throw') throw new Error('Deterministik test hatasi');
+        return makeAiResult(request, status, 'delayed-test-runner');
+      } finally {
+        active -= 1;
+      }
+    }
+  };
+}
+
+function createNeverResolvingAiRunner() {
+  return {
+    run(_request, options = {}) {
+      options.onProgress?.({ phase: 'running', percent: 50, message: 'Test AI gorevi beklemede', updatedAt: new Date().toISOString() });
+      return new Promise(() => undefined);
+    }
+  };
+}
+
+// v0.6.0 P0: Ucretsiz/local AI Orchestrator cekirdegi kalici yazma yapmadan sadece guvenli preview sonuc uretir.
+const aiOrchestrator = new AiOrchestratorService();
+const aiProviders = aiOrchestrator.listProviders();
+assert(aiProviders.length === 2 && aiProviders.every((provider) => provider.cost === 'free' && provider.locality === 'local' && provider.usesInternet === false && provider.requiresApiKey === false), 'v0.6.0 AI orchestrator yalnizca ucretsiz/local providerlari listeler', JSON.stringify(aiProviders));
+const ruleAiResult = await aiOrchestrator.run({
+  taskId: 'ai-rule-1',
+  taskType: 'generic_rule_assist',
+  input: { text: 'Dosya notunu kontrol et ve taslak oner.' },
+  privacyLevel: 'local_only',
+  providerPolicy: { allowPaidProviders: false, allowExternalProviders: false, allowLocalModel: false, preferDeterministicRules: true },
+  requiresUserApproval: false
+});
+assert(ruleAiResult.providerId === 'rule-ai-provider' && ruleAiResult.mode === 'rule' && ruleAiResult.status === 'ok', 'v0.6.0 AI orchestrator varsayilan olarak yerel kural provider kullanir', JSON.stringify(ruleAiResult));
+assert(ruleAiResult.requiresUserApproval === true && ruleAiResult.canWriteAutomatically === false, 'v0.6.0 AI sonucu kullanici onayi olmadan otomatik yazamaz', JSON.stringify({ requiresUserApproval: ruleAiResult.requiresUserApproval, canWriteAutomatically: ruleAiResult.canWriteAutomatically }));
+assert(ruleAiResult.warnings.some((warning) => warning.code === AI_FINAL_APPROVAL_WARNING_CODE), 'v0.6.0 AI sonucu nihai karar olmadigi uyarisini zorunlu tasir', JSON.stringify(ruleAiResult.warnings));
+const paidAiResult = await aiOrchestrator.run({
+  taskId: 'ai-paid-blocked',
+  taskType: 'generic_rule_assist',
+  input: { text: 'Ucretli provider denemesi' },
+  providerPolicy: { allowPaidProviders: true, allowExternalProviders: false, allowLocalModel: false, preferDeterministicRules: true }
+});
+assert(paidAiResult.status === 'blocked' && paidAiResult.providerId === 'ai-safety' && paidAiResult.error?.code === 'AI_PAID_PROVIDER_NOT_ALLOWED', 'v0.6.0 AI ucretli provider istegini guvenlikte bloke eder', JSON.stringify(paidAiResult));
+const externalAiResult = await aiOrchestrator.run({
+  taskId: 'ai-external-blocked',
+  taskType: 'generic_rule_assist',
+  input: { text: 'Harici provider denemesi' },
+  providerPolicy: { allowPaidProviders: false, allowExternalProviders: true, allowLocalModel: false, preferDeterministicRules: true }
+});
+assert(externalAiResult.status === 'blocked' && externalAiResult.error?.code === 'AI_EXTERNAL_PROVIDER_NOT_ALLOWED', 'v0.6.0 AI harici provider istegini bu asamada kapali tutar', JSON.stringify(externalAiResult));
+const aiNoopTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-ai-noop-'));
+const noopAiResult = await aiOrchestrator.run({
+  taskId: 'ai-noop-1',
+  taskType: 'document_check',
+  input: { folderPath: aiNoopTemp, trackingPath: path.join(aiNoopTemp, 'takip.json') }
+});
+assert(noopAiResult.providerId === 'noop-ai-provider' && noopAiResult.status === 'needs_user_input' && (await fs.readdir(aiNoopTemp)).length === 0, 'v0.6.0 Noop provider takip.json veya dosya yazmaz', JSON.stringify(noopAiResult));
+const aiRuleTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-ai-rule-'));
+const ruleNoWriteResult = await aiOrchestrator.run({
+  taskId: 'ai-rule-nowrite',
+  taskType: 'generic_rule_assist',
+  input: { text: 'Kural provider yazma testi', trackingPath: path.join(aiRuleTemp, 'takip.json') }
+});
+assert(ruleNoWriteResult.providerId === 'rule-ai-provider' && (await fs.readdir(aiRuleTemp)).length === 0, 'v0.6.0 Rule provider takip.json veya dosya yazmaz', JSON.stringify(ruleNoWriteResult));
+const unsafeProvider = {
+  getProviderInfo() {
+    return {
+      providerId: 'unsafe-test-provider',
+      displayName: 'Unsafe Test Provider',
+      cost: 'free',
+      locality: 'local',
+      usesInternet: false,
+      requiresApiKey: false,
+      supportsTaskTypes: ['generic_rule_assist'],
+      modes: ['rule']
+    };
+  },
+  canHandle() { return true; },
+  async run(request) {
+    return {
+      taskId: request.taskId,
+      taskType: request.taskType,
+      status: 'ok',
+      providerId: 'unsafe-test-provider',
+      mode: 'rule',
+      summary: 'Unsafe provider sonucu',
+      confidence: 'high',
+      recommendations: [],
+      warnings: [],
+      userQuestions: [],
+      rationale: [],
+      sources: [],
+      previewWrites: [{ target: 'takip.json', operation: 'update', fieldPath: 'labor.not', after: 'AI yazisi', reason: 'test', requiresUserApproval: false }],
+      requiresUserApproval: false,
+      canWriteAutomatically: true,
+      createdAt: new Date().toISOString()
+    };
+  }
+};
+const guardedAi = new AiOrchestratorService(new AiProviderRegistry([unsafeProvider]));
+const guardedAiResult = await guardedAi.run({ taskId: 'ai-guarded-1', taskType: 'generic_rule_assist', input: { text: 'guard test' } });
+assert(guardedAiResult.canWriteAutomatically === false && guardedAiResult.requiresUserApproval === true && guardedAiResult.previewWrites.every((write) => write.requiresUserApproval === true), 'v0.6.0 AI safety provider sonucundaki otomatik yazma ve onaysiz previewWrite alanlarini bastirir', JSON.stringify(guardedAiResult));
+
+// v0.6.0 P1: AI Task Queue memory-only progress/cancel/retry/timeout altyapisi.
+const aiQueueDefault = new AiTaskQueueService();
+assert(aiQueueDefault.getOptions().maxConcurrency === 1 && aiQueueDefault.getOptions().defaultTimeoutMs === 120000, 'v0.6.0 AI queue varsayilan maxConcurrency=1 ve guvenli timeout ile baslar', JSON.stringify(aiQueueDefault.getOptions()));
+const queuedOnlyTask = aiQueueDefault.enqueue(makeAiRequest('queue-default-queued'));
+assert(queuedOnlyTask.status === 'queued' && aiQueueDefault.getTask(queuedOnlyTask.queueTaskId)?.status === 'queued', 'v0.6.0 AI queue enqueue edilen gorevi queued durumuna alir', JSON.stringify(queuedOnlyTask));
+assert(aiQueueDefault.cancelTask(queuedOnlyTask.queueTaskId, 'Test temizligi') && aiQueueDefault.getTask(queuedOnlyTask.queueTaskId)?.status === 'canceled', 'v0.6.0 AI queue queued gorevi calismadan iptal eder', JSON.stringify(aiQueueDefault.getTask(queuedOnlyTask.queueTaskId)));
+
+const queueWriteGuardRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-ai-queue-write-'));
+const queueExcelPath = path.join(queueWriteGuardRoot, 'queue-test.xlsx');
+await fs.writeFile(queueExcelPath, 'ORIGINAL-XLSX-CONTENT', 'utf-8');
+const aiQueueEvents = [];
+const aiQueue = new AiTaskQueueService();
+aiQueue.onEvent((event) => aiQueueEvents.push(event));
+const queuedRuleTask = aiQueue.enqueue(makeAiRequest('queue-rule-1', 'generic_rule_assist', { text: 'Kuyruk uzerinden yerel kural testi', trackingPath: path.join(queueWriteGuardRoot, 'takip.json'), excelPath: queueExcelPath }));
+aiQueue.start();
+await aiQueue.drainForTests();
+const queuedRuleDone = aiQueue.getTask(queuedRuleTask.queueTaskId);
+assert(queuedRuleDone?.status === 'succeeded' && queuedRuleDone.result?.providerId === 'rule-ai-provider', 'v0.6.0 AI queue rule provider generic_rule_assist gorevini calistirir', JSON.stringify(queuedRuleDone));
+assert(queuedRuleDone?.result?.requiresUserApproval === true && queuedRuleDone.result.canWriteAutomatically === false, 'v0.6.0 AI queue sonucu kullanici onayi olmadan otomatik yazamaz', JSON.stringify(queuedRuleDone?.result));
+assert((await fs.readdir(queueWriteGuardRoot)).join(',') === 'queue-test.xlsx' && (await fs.readFile(queueExcelPath, 'utf-8')) === 'ORIGINAL-XLSX-CONTENT', 'v0.6.0 AI queue takip.json veya Excel dosyasi yazmaz', JSON.stringify(await fs.readdir(queueWriteGuardRoot)));
+const aiQueueCoreEvents = aiQueueEvents.map((event) => event.type).filter((type) => ['task_queued', 'task_started', 'task_succeeded'].includes(type));
+assert(aiQueueCoreEvents.join('>') === 'task_queued>task_started>task_succeeded', 'v0.6.0 AI queue event sirasi queued-started-succeeded olarak izlenir', aiQueueCoreEvents.join('>'));
+assert(aiQueueEvents.every((event) => event.task.progress.percent >= 0 && event.task.progress.percent <= 100), 'v0.6.0 AI queue progress yuzdesi 0-100 arasinda kalir', JSON.stringify(aiQueueEvents.map((event) => event.task.progress.percent)));
+const aiQueueHistory = aiQueue.getEvents(100);
+const aiQueueHistoryTypes = aiQueueHistory.map((event) => event.type);
+assert(aiQueueHistory.every((event) => event.eventId && event.queueTaskId && event.aiTaskId && event.taskType && event.message && event.createdAt), 'v0.6.0 P1-E AI queue event history okunabilir event alanlarini tasir', JSON.stringify(aiQueueHistory[0]));
+assert(aiQueueHistoryTypes.includes('task_queued') && aiQueueHistoryTypes.includes('task_started') && aiQueueHistoryTypes.includes('task_succeeded'), 'v0.6.0 P1-E AI queue event history queued/started/succeeded olaylarini memory icinde tutar', aiQueueHistoryTypes.join('>'));
+assert(aiQueueHistory.find((event) => event.type === 'task_queued')?.severity === 'info' && aiQueueHistory.find((event) => event.type === 'task_started')?.severity === 'info' && aiQueueHistory.find((event) => event.type === 'task_succeeded')?.severity === 'success', 'v0.6.0 P1-E AI queue queued/started/succeeded severity mapping dogru', JSON.stringify(aiQueueHistory));
+assert(aiQueueHistory.find((event) => event.type === 'task_progress')?.severity === 'info' && aiQueueHistory.find((event) => event.type === 'queue_drained')?.severity === 'info', 'v0.6.0 P1-E AI queue progress ve drained olaylari info severity alir', JSON.stringify(aiQueueHistory));
+assert(aiQueue.getEvents(3).length <= 3 && aiQueue.getEvents(3).every((event, index, list) => index === 0 || Date.parse(list[index - 1].createdAt) >= Date.parse(event.createdAt)), 'v0.6.0 P1-E AI queue event history en yeni ustte ve limitli doner', JSON.stringify(aiQueue.getEvents(3)));
+assert((await fs.readdir(queueWriteGuardRoot)).join(',') === 'queue-test.xlsx' && (await fs.readFile(queueExcelPath, 'utf-8')) === 'ORIGINAL-XLSX-CONTENT', 'v0.6.0 P1-E AI queue event history memory-only kalir ve disk yazmaz', JSON.stringify(await fs.readdir(queueWriteGuardRoot)));
+
+const noopQueue = new AiTaskQueueService();
+const noopQueued = noopQueue.enqueue(makeAiRequest('queue-noop-1', 'document_check', { text: 'Desteklenmeyen gorev' }));
+noopQueue.start();
+await noopQueue.drainForTests();
+const noopQueuedDone = noopQueue.getTask(noopQueued.queueTaskId);
+assert(noopQueuedDone?.status === 'needs_user_input' && noopQueuedDone.result?.providerId === 'noop-ai-provider', 'v0.6.0 AI queue desteklenmeyen task icin noop provider ile kullanici girdisi ister', JSON.stringify(noopQueuedDone));
+assert(noopQueue.getEvents(100).find((event) => event.type === 'task_needs_user_input')?.severity === 'warning', 'v0.6.0 P1-E AI queue needs_user_input olayi warning severity alir', JSON.stringify(noopQueue.getEvents(100)));
+
+const runningCancelQueue = new AiTaskQueueService(createNeverResolvingAiRunner(), { defaultTimeoutMs: 5000 });
+const runningCancelTask = runningCancelQueue.enqueue(makeAiRequest('queue-running-cancel'));
+runningCancelQueue.start();
+await waitUntil(() => runningCancelQueue.getTask(runningCancelTask.queueTaskId)?.status === 'running', 'running cancel gorevi baslamali');
+assert(runningCancelQueue.cancelTask(runningCancelTask.queueTaskId, 'Running cancel test'), 'v0.6.0 AI queue running gorev icin cancel istegini kabul eder', JSON.stringify(runningCancelQueue.getTask(runningCancelTask.queueTaskId)));
+await runningCancelQueue.drainForTests();
+assert(runningCancelQueue.getTask(runningCancelTask.queueTaskId)?.status === 'canceled', 'v0.6.0 AI queue running gorev sonucunu iptal eder ve discard eder', JSON.stringify(runningCancelQueue.getTask(runningCancelTask.queueTaskId)));
+assert(runningCancelQueue.getEvents(100).find((event) => event.type === 'task_canceled')?.severity === 'warning', 'v0.6.0 P1-E AI queue canceled olayi warning severity alir', JSON.stringify(runningCancelQueue.getEvents(100)));
+
+const timeoutQueue = new AiTaskQueueService(createNeverResolvingAiRunner(), { defaultTimeoutMs: 25 });
+const timeoutTask = timeoutQueue.enqueue(makeAiRequest('queue-timeout-1'), { timeoutMs: 25 });
+timeoutQueue.start();
+await timeoutQueue.drainForTests();
+const timeoutDone = timeoutQueue.getTask(timeoutTask.queueTaskId);
+assert(timeoutDone?.status === 'timed_out' && timeoutDone.error?.code === 'AI_QUEUE_TASK_TIMED_OUT', 'v0.6.0 AI queue zaman asimina dusen gorevi timed_out yapar', JSON.stringify(timeoutDone));
+assert(timeoutQueue.getEvents(100).find((event) => event.type === 'task_timed_out')?.severity === 'error', 'v0.6.0 P1-E AI queue timed_out olayi error severity alir', JSON.stringify(timeoutQueue.getEvents(100)));
+
+let flakyAttempts = 0;
+const flakyRunner = {
+  async run(request) {
+    flakyAttempts += 1;
+    if (flakyAttempts === 1) throw new Error('Ilk deneme hatasi');
+    return makeAiResult(request, 'ok', 'flaky-test-runner');
+  }
+};
+const retryQueue = new AiTaskQueueService(flakyRunner, { defaultMaxAttempts: 2 });
+const retryFirst = retryQueue.enqueue(makeAiRequest('queue-retry-1'), { maxAttempts: 2 });
+retryQueue.start();
+await retryQueue.drainForTests();
+assert(retryQueue.getTask(retryFirst.queueTaskId)?.status === 'failed', 'v0.6.0 AI queue failed gorevi retry oncesi failed olarak tutar', JSON.stringify(retryQueue.getTask(retryFirst.queueTaskId)));
+assert(retryQueue.getEvents(100).find((event) => event.type === 'task_failed')?.severity === 'error', 'v0.6.0 P1-E AI queue failed olayi error severity alir', JSON.stringify(retryQueue.getEvents(100)));
+const retrySecond = retryQueue.retryTask(retryFirst.queueTaskId);
+await retryQueue.drainForTests();
+const retryDone = retryQueue.getTask(retrySecond.queueTaskId);
+assert(retryDone?.status === 'succeeded' && retryDone.attempts === 2 && flakyAttempts === 2, 'v0.6.0 AI queue retry attempts sayisini guvenli yonetir', JSON.stringify(retryDone));
+
+const singleRunner = createDelayedAiRunner(10);
+const singleQueue = new AiTaskQueueService(singleRunner, { maxConcurrency: 1, defaultTimeoutMs: 1000 });
+for (let index = 0; index < 3; index += 1) singleQueue.enqueue(makeAiRequest(`queue-single-${index}`));
+singleQueue.start();
+await singleQueue.drainForTests();
+assert(singleRunner.getMaxObserved() === 1 && singleQueue.getSnapshot().succeeded === 3, 'v0.6.0 AI queue maxConcurrency=1 iken ayni anda tek gorev calistirir', JSON.stringify({ maxObserved: singleRunner.getMaxObserved(), snapshot: singleQueue.getSnapshot() }));
+
+const doubleRunner = createDelayedAiRunner(10);
+const doubleQueue = new AiTaskQueueService(doubleRunner, { maxConcurrency: 2, defaultTimeoutMs: 1000 });
+for (let index = 0; index < 4; index += 1) doubleQueue.enqueue(makeAiRequest(`queue-double-${index}`));
+doubleQueue.start();
+await doubleQueue.drainForTests();
+assert(doubleRunner.getMaxObserved() === 2 && doubleQueue.getSnapshot().succeeded === 4, 'v0.6.0 AI queue maxConcurrency=2 testinde en fazla iki gorev calistirir', JSON.stringify({ maxObserved: doubleRunner.getMaxObserved(), snapshot: doubleQueue.getSnapshot() }));
+
+const clearQueue = new AiTaskQueueService(createNeverResolvingAiRunner(), { maxConcurrency: 1, defaultTimeoutMs: 5000 });
+const clearRunning = clearQueue.enqueue(makeAiRequest('queue-clear-running'));
+clearQueue.start();
+await waitUntil(() => clearQueue.getTask(clearRunning.queueTaskId)?.status === 'running', 'clearFinished running gorevi baslamali');
+const clearQueued = clearQueue.enqueue(makeAiRequest('queue-clear-canceled'));
+clearQueue.cancelTask(clearQueued.queueTaskId, 'Clear finished test');
+const removedFinished = clearQueue.clearFinished();
+assert(removedFinished === 1 && clearQueue.getSnapshot().running === 1 && clearQueue.getTask(clearRunning.queueTaskId)?.status === 'running', 'v0.6.0 AI queue clearFinished bitmis gorevleri siler running gorevi silmez', JSON.stringify(clearQueue.getSnapshot()));
+clearQueue.cancelTask(clearRunning.queueTaskId, 'Clear test temizligi');
+await clearQueue.drainForTests();
+
+const stoppedRunner = createDelayedAiRunner(1);
+const stoppedQueue = new AiTaskQueueService(stoppedRunner);
+stoppedQueue.start();
+stoppedQueue.stop();
+const stoppedTask = stoppedQueue.enqueue(makeAiRequest('queue-stop-1'));
+await wait(5);
+assert(stoppedQueue.getTask(stoppedTask.queueTaskId)?.status === 'queued' && stoppedQueue.getSnapshot().running === 0, 'v0.6.0 AI queue stop sonrasi yeni gorev baslatmaz', JSON.stringify(stoppedQueue.getSnapshot()));
+stoppedQueue.cancelTask(stoppedTask.queueTaskId, 'Stop test temizligi');
+
+const paidQueueRequest = {
+  ...makeAiRequest('queue-paid-blocked'),
+  providerPolicy: { allowPaidProviders: true, allowExternalProviders: false, allowLocalModel: false, preferDeterministicRules: true }
+};
+const paidQueue = new AiTaskQueueService();
+const paidQueueTask = paidQueue.enqueue(paidQueueRequest);
+paidQueue.start();
+await paidQueue.drainForTests();
+assert(paidQueue.getTask(paidQueueTask.queueTaskId)?.status === 'needs_user_input' && paidQueue.getTask(paidQueueTask.queueTaskId)?.result?.error?.code === 'AI_PAID_PROVIDER_NOT_ALLOWED', 'v0.6.0 AI queue ucretli provider engelini orchestrator safety uzerinden korur', JSON.stringify(paidQueue.getTask(paidQueueTask.queueTaskId)));
+
+const externalQueueRequest = {
+  ...makeAiRequest('queue-external-blocked'),
+  providerPolicy: { allowPaidProviders: false, allowExternalProviders: true, allowLocalModel: false, preferDeterministicRules: true }
+};
+const externalQueue = new AiTaskQueueService();
+const externalQueueTask = externalQueue.enqueue(externalQueueRequest);
+externalQueue.start();
+await externalQueue.drainForTests();
+assert(externalQueue.getTask(externalQueueTask.queueTaskId)?.status === 'needs_user_input' && externalQueue.getTask(externalQueueTask.queueTaskId)?.result?.error?.code === 'AI_EXTERNAL_PROVIDER_NOT_ALLOWED', 'v0.6.0 AI queue harici provider engelini orchestrator safety uzerinden korur', JSON.stringify(externalQueue.getTask(externalQueueTask.queueTaskId)));
+
+assert(
+  IPC_INVOKE_CHANNELS.aiQueueGetSnapshot === 'aiQueue:getSnapshot'
+    && IPC_INVOKE_CHANNELS.aiQueueGetEvents === 'aiQueue:getEvents'
+    && IPC_INVOKE_CHANNELS.aiQueueGetTask === 'aiQueue:getTask'
+    && IPC_INVOKE_CHANNELS.aiQueueEnqueuePreview === 'aiQueue:enqueuePreview'
+    && IPC_INVOKE_CHANNELS.aiQueueCancelTask === 'aiQueue:cancelTask'
+    && IPC_INVOKE_CHANNELS.aiQueueClearFinished === 'aiQueue:clearFinished'
+    && !Object.values(IPC_INVOKE_CHANNELS).some((channel) => /^aiQueue:.*(save|write|apply|persist)/i.test(channel)),
+  'v0.6.0 P1-B/P1-E AI queue IPC sadece read/status/events/preview/cancel/clear kanallarini acar',
+  JSON.stringify(Object.entries(IPC_INVOKE_CHANNELS).filter(([key]) => key.startsWith('aiQueue')))
+);
+
 // v0.3.18: Para parser unit testleri Türkçe ve İngilizce formatları birlikte doğrular.
+// v0.6.0 P2-A: Ucretsiz/local bilgi bankasi cekirdegi.
+const knowledge = new KnowledgeSearchService();
+assert(normalizeKnowledgeText('ÖN GÖĞÜS SACI') === 'on gogus saci' && normalizeKnowledgeText('Ön Göğüs') === 'on gogus', 'v0.6.0 P2-A knowledge normalizer Turkce karakterleri normalize eder', normalizeKnowledgeText('ÖN GÖĞÜS SACI'));
+assert(tokenizeKnowledgeText('hava yastığı').includes('airbag') && tokenizeKnowledgeText('tenzil').includes('muafiyet') && tokenizeKnowledgeText('pert').includes('agir'), 'v0.6.0 P2-A knowledge normalizer basit synonym tokenlari uretir', JSON.stringify(tokenizeKnowledgeText('hava yastığı tenzil pert')));
+const frontSearch = knowledge.search('On Gogus');
+assert(frontSearch.results[0]?.sourceId === 'seed-front-firewall-rule' && frontSearch.results[0]?.tags.includes('on_gogus_saci'), 'v0.6.0 P2-A "On Gogus" aramasi on gogus saci chunkini bulur', JSON.stringify(frontSearch));
+const firewallSearch = knowledge.search('firewall');
+assert(firewallSearch.results[0]?.sourceId === 'seed-front-firewall-rule', 'v0.6.0 P2-A "firewall" aramasi on gogus saci kuralini bulur', JSON.stringify(firewallSearch));
+const pertSearch = knowledge.search('pert');
+assert(pertSearch.results.some((result) => result.sourceId === 'seed-heavy-damage-threshold'), 'v0.6.0 P2-A "pert" aramasi agir hasar kritik parca ozetini bulur', JSON.stringify(pertSearch));
+const deductibleSearch = knowledge.search('muafiyet');
+assert(deductibleSearch.results[0]?.sourceId === 'seed-policy-deductible-check', 'v0.6.0 P2-A "muafiyet" aramasi police muafiyet kontrol kuralini bulur', JSON.stringify(deductibleSearch));
+const heavyTagSearch = knowledge.search({ query: '', tags: ['agir_hasar'], limit: 10, minScore: 1 });
+assert(heavyTagSearch.results.length >= 3 && heavyTagSearch.results.every((result) => result.tags.includes('agir_hasar')), 'v0.6.0 P2-A tag filtresi agir_hasar sonuclarini dondurur', JSON.stringify(heavyTagSearch));
+const policyTypeSearch = knowledge.search({ query: 'muafiyet', sourceTypes: ['policy_rule'], limit: 10 });
+assert(policyTypeSearch.results.length > 0 && policyTypeSearch.results.every((result) => result.sourceId === 'seed-policy-deductible-check' || result.sourceId === 'seed-ai-safety-principle'), 'v0.6.0 P2-A source type filtresi policy_rule kaynaklariyla sinirlar', JSON.stringify(policyTypeSearch));
+const frontTagFilteredSearch = knowledge.search({ query: 'on gogus', tags: ['agir_hasar'], limit: 10 });
+assert(frontTagFilteredSearch.results[0]?.sourceId === 'seed-front-firewall-rule' && frontTagFilteredSearch.results[0]?.tags.includes('agir_hasar'), 'v0.6.0 P2-C query + tag filtresi on gogus sonucunu dondurur', JSON.stringify(frontTagFilteredSearch));
+const policySourceTypeFilteredSearch = knowledge.search({ query: 'muafiyet', sourceTypes: ['policy_rule'], tags: ['police'], limit: 10 });
+assert(policySourceTypeFilteredSearch.results[0]?.sourceId === 'seed-policy-deductible-check' && policySourceTypeFilteredSearch.results[0]?.sourceType === 'policy_rule', 'v0.6.0 P2-C query + sourceType + tag filtresi police muafiyet sonucunu dondurur', JSON.stringify(policySourceTypeFilteredSearch));
+assert(frontSearch.results[0]?.sourceType === 'heavy_damage_rule' && frontSearch.results[0]?.priority === 'critical', 'v0.6.0 P2-C search sonuclari read-only sourceType ve priority metadata tasir', JSON.stringify(frontSearch.results[0]));
+const disabledRegistry = new KnowledgeSourceRegistry({
+  sources: [{ sourceId: 'disabled-policy', title: 'Disabled Police Rule', sourceType: 'policy_rule', createdAt: '2026-06-20T00:00:00.000Z', tags: ['police', 'yanlis_tag'], isEnabled: false }],
+  chunks: [{ chunkId: 'disabled-policy:chunk-1', sourceId: 'disabled-policy', title: 'Disabled muafiyet', text: 'muafiyet bilgisi disabled kaynakta kalmali', normalizedText: '', tags: ['police'], priority: 'critical', createdAt: '2026-06-20T00:00:00.000Z' }]
+});
+const disabledSearch = new KnowledgeSearchService(disabledRegistry).search('muafiyet');
+assert(disabledSearch.total === 0, 'v0.6.0 P2-A disabled source arama sonuclarinda donmez', JSON.stringify(disabledSearch));
+const limitedKnowledge = knowledge.search({ query: 'agir hasar police ai', limit: 2, minScore: 1 });
+assert(limitedKnowledge.results.length <= 2, 'v0.6.0 P2-A search limit uygulanir', JSON.stringify(limitedKnowledge));
+const deterministicA = knowledge.search('on gogus');
+const deterministicB = knowledge.search('on gogus');
+assert(JSON.stringify(deterministicA.results.map((result) => [result.sourceId, result.chunkId, result.score])) === JSON.stringify(deterministicB.results.map((result) => [result.sourceId, result.chunkId, result.score])), 'v0.6.0 P2-A score siralamasi deterministiktir', JSON.stringify(deterministicA.results));
+assert(frontSearch.results[0]?.matchedTerms.includes('gogus') && frontSearch.results[0]?.matchedTerms.includes('on'), 'v0.6.0 P2-A matched terms doner', JSON.stringify(frontSearch.results[0]));
+assert(frontSearch.results.every((result) => result.sourceId && result.chunkId && result.sourceTitle), 'v0.6.0 P2-A sonuclar sourceId/chunkId/sourceTitle tasir', JSON.stringify(frontSearch.results));
+const knowledgeNoWriteRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-knowledge-nowrite-'));
+knowledge.search('police muafiyet');
+assert((await fs.readdir(knowledgeNoWriteRoot)).length === 0, 'v0.6.0 P2-A bilgi bankasi disk takip.json veya Excel yazmaz', JSON.stringify(await fs.readdir(knowledgeNoWriteRoot)));
+const knowledgeSource = knowledge.getSource('seed-policy-deductible-check');
+const knowledgeChunk = knowledge.getChunk('seed-policy-deductible-check:chunk-1');
+assert(knowledge.listSources().length >= 5 && knowledgeSource?.sourceType === 'policy_rule' && knowledgeChunk?.sourceId === 'seed-policy-deductible-check', 'v0.6.0 P2-A listSources/getSource/getChunk read-only calisir', JSON.stringify({ source: knowledgeSource, chunk: knowledgeChunk }));
+assert(knowledge.listSources().every((source) => Number.isInteger(source.chunkCount) && source.chunkCount >= 0) && (knowledgeSource?.chunkCount ?? 0) > 0, 'v0.6.0 P2-B kaynak listesi chunk sayisini read-only metadata olarak verir', JSON.stringify(knowledge.listSources()));
+assert(
+  IPC_INVOKE_CHANNELS.knowledgeSearch === 'knowledge:search'
+    && IPC_INVOKE_CHANNELS.knowledgeListSources === 'knowledge:listSources'
+    && IPC_INVOKE_CHANNELS.knowledgeGetSource === 'knowledge:getSource'
+    && IPC_INVOKE_CHANNELS.knowledgeGetChunk === 'knowledge:getChunk'
+    && ['knowledge:search', 'knowledge:listSources', 'knowledge:getSource', 'knowledge:getChunk'].every(isKnowledgeReadOnlyChannel)
+    && !Object.values(IPC_INVOKE_CHANNELS).some((channel) => isForbiddenKnowledgeChannel(channel)),
+  'v0.6.0 P2-A knowledge IPC sadece read-only search/list/get kanallarini acar',
+  JSON.stringify(Object.entries(IPC_INVOKE_CHANNELS).filter(([key]) => key.startsWith('knowledge')))
+);
+const expectedKnowledgeChannels = ['knowledge:getChunk', 'knowledge:getSource', 'knowledge:listSources', 'knowledge:search'];
+const actualKnowledgeChannels = Object.values(IPC_INVOKE_CHANNELS).filter((channel) => channel.startsWith('knowledge:')).sort();
+const forbiddenKnowledgeChannels = ['knowledge:write', 'knowledge:save', 'knowledge:apply', 'knowledge:import', 'knowledge:export', 'knowledge:delete', 'knowledge:edit', 'knowledge:sync', 'knowledge:upload', 'knowledge:download', 'knowledge:copy', 'knowledge:provider'];
+assert(JSON.stringify(actualKnowledgeChannels) === JSON.stringify(expectedKnowledgeChannels) && forbiddenKnowledgeChannels.every(isForbiddenKnowledgeChannel), 'v0.6.0 P2-E knowledge IPC exact allowlist ve yasak kanal patterni korunur', JSON.stringify({ actualKnowledgeChannels, forbiddenKnowledgeChannels: forbiddenKnowledgeChannels.filter(isForbiddenKnowledgeChannel) }));
+
+// v0.6.0 P3-A: Local kaynak import izin modeli gercek import yapmadan dry-run plan uretir.
+const knowledgeImportRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-knowledge-import-dryrun-'));
+const knowledgeImportTracking = path.join(knowledgeImportRoot, 'takip.json');
+const knowledgeImportExcel = path.join(knowledgeImportRoot, 'portal.xlsx');
+const knowledgeImportAppData = path.join(knowledgeImportRoot, 'appdata');
+await fs.mkdir(knowledgeImportAppData);
+await fs.writeFile(knowledgeImportTracking, 'TRACKING-ORIGINAL', 'utf-8');
+await fs.writeFile(knowledgeImportExcel, 'EXCEL-ORIGINAL', 'utf-8');
+const importDryRun = buildDryRunPlan({
+  mode: 'dry_run',
+  preferredTags: ['onay'],
+  files: [
+    { fileName: 'Agir Hasar Kritik Parca Rehberi.pdf', filePath: path.join(knowledgeImportRoot, 'Agir Hasar Kritik Parca Rehberi.pdf'), sizeBytes: 1200 },
+    { fileName: 'is notlari kaporta boya mekanik.docx' },
+    { fileName: 'KTT kaza durum senaryo.pdf' },
+    { fileName: 'kusur oranlari tablo.jpg' },
+    { fileName: 'mutabakatname taslak.docx' },
+    { fileName: 'police muafiyet indirim notu.pdf' },
+    { fileName: 'belirsiz kaynak.pdf' },
+    { fileName: 'ihbar takip listesi.xlsx', filePath: knowledgeImportExcel },
+    { fileName: 'tehlikeli.exe' },
+    { fileName: 'komut.bat' },
+    { fileName: 'arsiv.zip' },
+    { fileName: 'arsiv.rar' }
+  ]
+});
+const importCandidates = importDryRun.plan.candidates;
+const importCandidate = (fileName) => importCandidates.find((candidate) => candidate.fileName === fileName);
+assert(importCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.detectedSourceKind === 'heavy_damage_guide' && importCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.detectedSourceType === 'heavy_damage_rule' && importCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.detectedTags.includes('agir_hasar'), 'v0.6.0 P3-A PDF agir hasar rehberi sourceKind/sourceType/tag olarak taninir', JSON.stringify(importCandidate('Agir Hasar Kritik Parca Rehberi.pdf')));
+assert(importCandidate('is notlari kaporta boya mekanik.docx')?.detectedSourceKind === 'expert_note' && importCandidate('is notlari kaporta boya mekanik.docx')?.detectedSourceType === 'office_note' && importCandidate('is notlari kaporta boya mekanik.docx')?.detectedTags.includes('iscilik'), 'v0.6.0 P3-A DOCX is notlari ekspert notu olarak taninir', JSON.stringify(importCandidate('is notlari kaporta boya mekanik.docx')));
+assert(importCandidate('KTT kaza durum senaryo.pdf')?.detectedSourceKind === 'fault_scenario_guide' && importCandidate('KTT kaza durum senaryo.pdf')?.detectedTags.includes('ktt'), 'v0.6.0 P3-A PDF KTT kaza senaryolari kusur rehberi olarak taninir', JSON.stringify(importCandidate('KTT kaza durum senaryo.pdf')));
+assert(importCandidate('kusur oranlari tablo.jpg')?.detectedSourceKind === 'fault_ratio_image' && importCandidate('kusur oranlari tablo.jpg')?.detectedSourceType === 'fault_rule' && importCandidate('kusur oranlari tablo.jpg')?.detectedTags.includes('asli_kusur'), 'v0.6.0 P3-A JPG kusur oranlari gorsel adayi olarak taninir', JSON.stringify(importCandidate('kusur oranlari tablo.jpg')));
+assert(importCandidate('mutabakatname taslak.docx')?.detectedSourceKind === 'settlement_template' && importCandidate('mutabakatname taslak.docx')?.detectedSourceType === 'template' && importCandidate('mutabakatname taslak.docx')?.detectedTags.includes('mutabakat'), 'v0.6.0 P3-A DOCX mutabakatname template olarak taninir', JSON.stringify(importCandidate('mutabakatname taslak.docx')));
+assert(importCandidate('police muafiyet indirim notu.pdf')?.detectedSourceKind === 'policy_note' && importCandidate('police muafiyet indirim notu.pdf')?.detectedSourceType === 'policy_rule' && importCandidate('police muafiyet indirim notu.pdf')?.detectedTags.includes('muafiyet'), 'v0.6.0 P3-A police/muafiyet dosya adi policy_note olarak taninir', JSON.stringify(importCandidate('police muafiyet indirim notu.pdf')));
+assert(importCandidate('belirsiz kaynak.pdf')?.detectedSourceKind === 'unknown' && importCandidate('belirsiz kaynak.pdf')?.permission === 'dry_run_only' && importCandidate('belirsiz kaynak.pdf')?.warnings.some((warning) => warning.includes('manuel eslestirme')), 'v0.6.0 P3-A unknown dosya guvenli manuel eslestirme uyarisi doner', JSON.stringify(importCandidate('belirsiz kaynak.pdf')));
+assert(importCandidate('ihbar takip listesi.xlsx')?.detectedSourceKind === 'claim_tracking_sheet' && importCandidate('ihbar takip listesi.xlsx')?.permission === 'dry_run_only' && importCandidate('ihbar takip listesi.xlsx')?.warnings.some((warning) => warning.includes('Excel import/parsing')), 'v0.6.0 P3-A ihbar takip Excel sadece dry-run adayi olur ve parse edilmez', JSON.stringify(importCandidate('ihbar takip listesi.xlsx')));
+assert(importCandidate('tehlikeli.exe')?.permission === 'not_allowed' && importCandidate('komut.bat')?.permission === 'not_allowed' && importCandidate('arsiv.zip')?.permission === 'not_allowed' && importCandidate('arsiv.rar')?.permission === 'not_allowed', 'v0.6.0 P3-A exe/bat/zip/rar tehlikeli uzantilari not_allowed olur', JSON.stringify(importCandidates.filter((candidate) => candidate.permission === 'not_allowed')));
+assert(importDryRun.plan.mode === 'dry_run' && importDryRun.plan.canWrite === false && importCandidates.every((candidate) => candidate.canWrite === false) && importDryRun.plan.totals.totalCandidates === 12 && importDryRun.plan.totals.notAllowed === 4 && importDryRun.plan.totals.requiresApproval === 6 && importDryRun.plan.totals.allowedForDryRun === 8, 'v0.6.0 P3-A dry-run plan canWrite=false ve toplamlari guvenli hesaplar', JSON.stringify(importDryRun.plan.totals));
+assert((await fs.readFile(knowledgeImportTracking, 'utf-8')) === 'TRACKING-ORIGINAL' && (await fs.readFile(knowledgeImportExcel, 'utf-8')) === 'EXCEL-ORIGINAL' && (await fs.readdir(knowledgeImportAppData)).length === 0, 'v0.6.0 P3-A dry-run takip.json Excel AppData yazmaz', JSON.stringify(await fs.readdir(knowledgeImportRoot)));
+let nonDryRunBlocked = false;
+try {
+  buildDryRunPlan({ mode: 'write', files: [{ fileName: 'agir hasar.pdf' }] });
+} catch {
+  nonDryRunBlocked = true;
+}
+assert(nonDryRunBlocked, 'v0.6.0 P3-A planlayici sadece dry_run modunu kabul eder', 'dry_run disi mod kabul edildi');
+const knowledgeImportChannels = Object.values(IPC_INVOKE_CHANNELS).filter((channel) => channel.startsWith('knowledge-import:')).sort();
+assert(JSON.stringify(knowledgeImportChannels) === JSON.stringify(['knowledge-import:choose-files-dry-run', 'knowledge-import:commit-approved-text-preview', 'knowledge-import:dry-run-plan', 'knowledge-import:preview-text-file']), 'v0.6.0 P4-E2-B knowledge-import IPC kanallari: dry-run/dosya-secici/metin-onizleme + dar commit; baska yazma kanali yok', JSON.stringify(knowledgeImportChannels));
+
+// v0.6.0 P3-B: Dry-run import plan goruntuleme modeli pasif/read-only kalir.
+const importDisplayPlan = clone(importDryRun.plan);
+importDisplayPlan.candidates = [
+  importCandidate('Agir Hasar Kritik Parca Rehberi.pdf'),
+  importCandidate('is notlari kaporta boya mekanik.docx'),
+  importCandidate('KTT kaza durum senaryo.pdf'),
+  importCandidate('belirsiz kaynak.pdf'),
+  importCandidate('tehlikeli.exe'),
+  {
+    ...importCandidate('Agir Hasar Kritik Parca Rehberi.pdf'),
+    candidateId: 'knowledge-import-candidate-future-approved',
+    fileName: 'gelecek import uygun kaynak.md',
+    fileExtension: '.md',
+    permission: 'approved_for_future_import',
+    warnings: ['Bu karar kalici olarak kaydedilmez.'],
+    reasons: ['Gelecek import icin uygun model ornegi.'],
+    canWrite: false
+  }
+].filter(Boolean);
+importDisplayPlan.totals = { totalCandidates: importDisplayPlan.candidates.length, allowedForDryRun: 5, requiresApproval: 3, notAllowed: 1 };
+const importPlanView = buildKnowledgeImportPlanViewModel(importDisplayPlan);
+const viewCandidate = (fileName) => importPlanView.candidates.find((candidate) => candidate.fileName === fileName);
+assert(importPlanView.planId === importDisplayPlan.planId && importPlanView.modeLabel === 'dry_run' && importPlanView.canWrite === false && importPlanView.canWriteLabel.includes('Yazma kapali'), 'v0.6.0 P3-B import plan view modeli dry-run/canWrite=false bilgisini gosterir', JSON.stringify({ planId: importPlanView.planId, mode: importPlanView.modeLabel, canWrite: importPlanView.canWriteLabel }));
+assert(importPlanView.metrics.some((metric) => metric.label === 'Toplam aday' && metric.value === 6) && importPlanView.metrics.some((metric) => metric.label === 'Dry-run adayi' && metric.value === 5) && importPlanView.metrics.some((metric) => metric.label === 'Onay gerektirir' && metric.value === 3) && importPlanView.metrics.some((metric) => metric.label === 'Reddedildi' && metric.value === 1), 'v0.6.0 P3-B import plan view modeli toplam/izin/onay/red sayilarini gosterir', JSON.stringify(importPlanView.metrics));
+assert(viewCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.fileExtension === '.pdf' && viewCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.detectedSourceType === 'heavy_damage_rule' && viewCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.detectedTags.includes('agir_hasar'), 'v0.6.0 P3-B candidate fileName/extension/sourceType/tags view modelde gorunur', JSON.stringify(viewCandidate('Agir Hasar Kritik Parca Rehberi.pdf')));
+assert(viewCandidate('tehlikeli.exe')?.permissionLabel === 'Reddedildi' && viewCandidate('tehlikeli.exe')?.approvalState === 'rejected', 'v0.6.0 P3-B not_allowed candidate Reddedildi olarak gorunur', JSON.stringify(viewCandidate('tehlikeli.exe')));
+assert(viewCandidate('belirsiz kaynak.pdf')?.permissionLabel === 'Sadece plan' && viewCandidate('belirsiz kaynak.pdf')?.approvalState === 'preview_only', 'v0.6.0 P3-B dry_run_only candidate Sadece plan olarak gorunur', JSON.stringify(viewCandidate('belirsiz kaynak.pdf')));
+assert(viewCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.permissionLabel === 'Kullanici onayi gerekir' && viewCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.approvalState === 'user_review_required', 'v0.6.0 P3-B requires_user_approval candidate Kullanici onayi gerekir olarak gorunur', JSON.stringify(viewCandidate('Agir Hasar Kritik Parca Rehberi.pdf')));
+assert(viewCandidate('gelecek import uygun kaynak.md')?.permissionLabel === 'Gelecek import icin uygun' && viewCandidate('gelecek import uygun kaynak.md')?.approvalState === 'approved_but_not_executed', 'v0.6.0 P3-B approved_for_future_import candidate calismadan sadece uygun gorunur', JSON.stringify(viewCandidate('gelecek import uygun kaynak.md')));
+assert(viewCandidate('belirsiz kaynak.pdf')?.warnings.some((warning) => warning.includes('manuel eslestirme')) && viewCandidate('belirsiz kaynak.pdf')?.reasons.some((reason) => reason.includes('Kaynak tipi')), 'v0.6.0 P3-B candidate warnings ve reasons view modelde gorunur', JSON.stringify(viewCandidate('belirsiz kaynak.pdf')));
+assert(importPlanView.safetyNotes.some((note) => note.includes('dosya icerigi okunmaz')) && importPlanView.safetyNotes.some((note) => note.includes('kalici kaynak eklenmez')) && importPlanView.safetyNotes.some((note) => note.includes('takip.json, Excel veya AppData yazilmaz')) && importPlanView.safetyNotes.some((note) => note.includes('import calistirilmaz')), 'v0.6.0 P3-B guvenlik metinleri read-only/no-write/no-import anlamini tasir', JSON.stringify(importPlanView.safetyNotes));
+assert(importPlanView.safetyNotes.some((note) => note.includes('canWrite=false')), 'v0.6.0 P3-B guvenlik metni planin canWrite=false uretildigini bildirir', JSON.stringify(importPlanView.safetyNotes));
+
 const moneyCases = [
   ['1.234,56 TL', 1234.56],
   ['₺ 1,234.56', 1234.56],
@@ -758,10 +1207,30 @@ const rendererStateSource = await fs.readFile('src/renderer/app/state.ts', 'utf-
 const rendererStylesSource = await fs.readFile('src/renderer/styles.css', 'utf-8');
 const autoLaborVmSource = await fs.readFile('src/shared/auto-labor-view-model.ts', 'utf-8');
 const settingsSource = await fs.readFile('src/renderer/app/components/settings.ts', 'utf-8');
+const aiQueuePanelSource = await fs.readFile('src/renderer/app/components/ai-queue-panel.ts', 'utf-8');
+const knowledgePanelSource = await fs.readFile('src/renderer/app/components/knowledge-panel.ts', 'utf-8');
 const ipcContractSource = await fs.readFile('src/shared/ipc-contract.ts', 'utf-8');
 const mainIpcSource = await fs.readFile('src/main/ipc.ts', 'utf-8');
 const preloadSource = await fs.readFile('src/preload/preload.ts', 'utf-8');
 const learningAdminSource = await fs.readFile('src/main/services/labor-learning-admin-service.ts', 'utf-8');
+const casesQuerySource = await fs.readFile('src/main/services/cases-query-service.ts', 'utf-8');
+const settingsNormalizerSource = await fs.readFile('src/main/services/settings-normalizer.ts', 'utf-8');
+const sharedTypesSource = await fs.readFile('src/shared/types.ts', 'utf-8');
+const knowledgeTypesSource = await fs.readFile('src/shared/knowledge/knowledge-types.ts', 'utf-8');
+const knowledgeSearchTypesSource = await fs.readFile('src/shared/knowledge/knowledge-search-types.ts', 'utf-8');
+const knowledgeSafetySource = await fs.readFile('src/shared/knowledge/knowledge-safety.ts', 'utf-8');
+const knowledgeImportTypesSource = await fs.readFile('src/shared/knowledge/knowledge-import-types.ts', 'utf-8');
+const knowledgeImportPermissionsSource = await fs.readFile('src/shared/knowledge/knowledge-import-permissions.ts', 'utf-8');
+const knowledgeImportSafetySource = await fs.readFile('src/shared/knowledge/knowledge-import-safety.ts', 'utf-8');
+const knowledgeImportViewModelSource = await fs.readFile('src/shared/knowledge/knowledge-import-plan-view-model.ts', 'utf-8');
+const knowledgeImportPlannerSource = await fs.readFile('src/main/services/knowledge/knowledge-import-planner.ts', 'utf-8');
+const knowledgeImportPermissionServiceSource = await fs.readFile('src/main/services/knowledge/knowledge-import-permission-service.ts', 'utf-8');
+const knowledgeImportSafetyServiceSource = await fs.readFile('src/main/services/knowledge/knowledge-import-safety-service.ts', 'utf-8');
+const knowledgeImportPlanViewSource = await fs.readFile('src/renderer/app/components/knowledge-import-plan-view.ts', 'utf-8');
+const knowledgeNormalizerSource = await fs.readFile('src/main/services/knowledge/knowledge-normalizer.ts', 'utf-8');
+const knowledgeSeedSource = await fs.readFile('src/main/services/knowledge/knowledge-seed-service.ts', 'utf-8');
+const knowledgeSearchSource = await fs.readFile('src/main/services/knowledge/knowledge-search-service.ts', 'utf-8');
+const knowledgeRegistrySource = await fs.readFile('src/main/services/knowledge/knowledge-source-registry.ts', 'utf-8');
 // v0.4.1: Bağımsız "Risk Kontrolü" sekmesi "Sorunlar / Risk" sayfasına taşındı; risk etiketi
 // artık detail.ts içindeki Risk Kontrol Özeti'nde yaşar. Yapay Zekâ yasağı aşağıda korunur.
 assert(detailSource.includes('Risk Kontrol'), 'Yapay Zekâ etiketi Risk Kontrol olarak değiştirildi', 'Risk Kontrol etiketi yok');
@@ -783,6 +1252,208 @@ assert(detailSource.includes('data-default-closed="true"') && detailSource.inclu
 assert(autoLaborVmSource.includes('AUTO_LABOR_PAGE_SIZE_OPTIONS') && autoLaborVmSource.includes('[25, 50, 100]') && detailSource.includes('data-auto-labor-page-size') && rendererMainSource.includes('setAutoLaborPageSize') && rendererStylesSource.includes('.auto-labor-page-size'), 'v0.5.0 AI iscilik sayfa basina 25/50/100 satir secimi korunur', 'AI iscilik sayfa boyutu secimi eksik');
 assert(settingsSource.includes('AI İşçilik Öğrenme Sözlüğü') && settingsSource.includes('labor-learning-search') && settingsSource.includes('labor-learning-update') && settingsSource.includes('labor-learning-import') && rendererStylesSource.includes('.labor-learning-card'), 'v0.5.0 AI iscilik ogrenme sozlugu Ayarlar icinde yonetilebilir UI sunar', 'AI iscilik ogrenme sozlugu UI eksik');
 assert(ipcContractSource.includes('laborLearningList') && ipcContractSource.includes('labor-learning:list') && mainIpcSource.includes('IPC.laborLearningUpdate') && preloadSource.includes('laborLearningImport') && learningAdminSource.includes('importLaborLearningJson'), 'v0.5.0 AI iscilik ogrenme sozlugu IPC/import-export servisi bagli', 'AI iscilik ogrenme sozlugu IPC/servis baglantisi eksik');
+const aiQueueIpcSlice = mainIpcSource.slice(mainIpcSource.indexOf('IPC.aiQueueGetSnapshot'), mainIpcSource.indexOf('IPC.heavyDamagePreview'));
+const knowledgeIpcSlice = mainIpcSource.slice(mainIpcSource.indexOf('IPC.knowledgeSearch'), mainIpcSource.indexOf('IPC.heavyDamagePreview'));
+assert(ipcContractSource.includes('AiQueueEnqueuePreviewArgs') && preloadSource.includes('enqueueAiPreview') && mainIpcSource.includes('buildSafeAiQueuePreviewRequest') && mainIpcSource.includes('allowPaidProviders: false') && mainIpcSource.includes('allowExternalProviders: false'), 'v0.6.0 P1-B AI queue IPC/preload/main guvenli preview katmani bagli', 'AI queue IPC/preload/main guard eksik');
+assert(ipcContractSource.includes('aiQueueGetEvents') && ipcContractSource.includes('aiQueue:getEvents') && preloadSource.includes('getAiQueueEvents') && mainIpcSource.includes('aiQueue.getEvents'), 'v0.6.0 P1-E AI queue event gecmisi read-only IPC/preload hattindan okunur', 'AI queue event IPC/preload baglantisi eksik');
+assert(aiQueueIpcSlice.includes('aiQueue.getSnapshot') && aiQueueIpcSlice.includes('aiQueue.getEvents') && aiQueueIpcSlice.includes('aiQueue.getTask') && aiQueueIpcSlice.includes('aiQueue.enqueue') && aiQueueIpcSlice.includes('aiQueue.cancelTask') && aiQueueIpcSlice.includes('aiQueue.clearFinished') && !aiQueueIpcSlice.includes('laborAutoSave') && !aiQueueIpcSlice.includes('tracking.mutate') && !aiQueueIpcSlice.includes('writeCaseCache'), 'v0.6.0 P1-B/P1-E AI queue IPC katmani kalici yazma endpointi tasimaz', aiQueueIpcSlice);
+assert(knowledgeTypesSource.includes('KnowledgeSource') && knowledgeTypesSource.includes('KnowledgeChunk') && knowledgeSearchTypesSource.includes('KnowledgeSearchResponse') && knowledgeSearchTypesSource.includes('matchedTerms'), 'v0.6.0 P2-A knowledge shared source/chunk/search tipleri tanimli', 'knowledge shared tipleri eksik');
+assert(knowledgeNormalizerSource.includes('normalizeKnowledgeText') && knowledgeNormalizerSource.includes('tokenizeKnowledgeText') && knowledgeNormalizerSource.includes('hava yastigi') && knowledgeNormalizerSource.includes('firewall'), 'v0.6.0 P2-A knowledge normalizer Turkce/synonym destegi tasir', 'knowledge normalizer eksik');
+assert(knowledgeSeedSource.includes('Agir Hasar Kritik Parca Ozet Kurali') && knowledgeSeedSource.includes('On Gogus Saci Degisim Kurali') && knowledgeSeedSource.includes('Airbag ve Emniyet Sistemi Kurali') && knowledgeSeedSource.includes('Police Muafiyet Genel Kontrol') && knowledgeSeedSource.includes('AI Guvenlik Ilkesi'), 'v0.6.0 P2-A built-in seed kaynaklari ekli', 'knowledge seed kaynaklari eksik');
+assert(knowledgeSearchSource.includes('KnowledgeSearchService') && knowledgeSearchSource.includes('scoreChunk') && knowledgeSearchSource.includes('sourceTypeFiltered') && knowledgeSearchSource.includes('matchedTerms') && knowledgeSearchSource.includes('PRIORITY_SCORE'), 'v0.6.0 P2-A deterministic knowledge search scoring servisi var', 'knowledge search scoring eksik');
+assert(knowledgeSafetySource.includes('KNOWLEDGE_LOCAL_ONLY') && knowledgeSafetySource.includes('KNOWLEDGE_READ_ONLY_CHANNELS') && knowledgeSafetySource.includes('KNOWLEDGE_FORBIDDEN_ACTION_PATTERN'), 'v0.6.0 P2-A knowledge local-only/read-only guvenlik sabitleri var', 'knowledge safety sabitleri eksik');
+assert(ipcContractSource.includes('knowledgeSearch') && ipcContractSource.includes('knowledge:search') && ipcContractSource.includes('knowledgeListSources') && ipcContractSource.includes('knowledgeGetSource') && ipcContractSource.includes('knowledgeGetChunk') && preloadSource.includes('searchKnowledge') && preloadSource.includes('listKnowledgeSources') && preloadSource.includes('getKnowledgeSource') && preloadSource.includes('getKnowledgeChunk'), 'v0.6.0 P2-A knowledge IPC/preload read-only metodlari bagli', 'knowledge IPC/preload baglantisi eksik');
+assert(knowledgeIpcSlice.includes('knowledge.search') && knowledgeIpcSlice.includes('knowledge.listSources') && knowledgeIpcSlice.includes('knowledge.getSource') && knowledgeIpcSlice.includes('knowledge.getChunk') && !/knowledge:(write|save|apply|import|export|delete|edit|sync|upload|download|copy|persist|provider)/i.test(ipcContractSource) && !knowledgeIpcSlice.includes('tracking.mutate') && !knowledgeIpcSlice.includes('writeCaseCache') && !knowledgeIpcSlice.includes('laborAutoSave'), 'v0.6.0 P2-A knowledge IPC katmani kalici yazma endpointi tasimaz', knowledgeIpcSlice);
+assert(!/OpenAI|Claude|Gemini|paid|external|fetch\(|axios|embedding|vector database|sqlite/i.test([knowledgeNormalizerSource, knowledgeSeedSource, knowledgeSearchSource, knowledgeSafetySource].join('\n')), 'v0.6.0 P2-A knowledge servisleri ucretli/harici provider veya internet bagimliligi tasimaz', 'knowledge servislerinde yasak provider/internet izi var');
+const knowledgeRendererSlice = rendererMainSource.slice(rendererMainSource.indexOf('async function loadKnowledgeSources'), rendererMainSource.indexOf('function syncAiQueueAutoRefresh'));
+const knowledgePreloadMethods = [...preloadSource.matchAll(/^\s*(\w*Knowledge\w*)\s*:/gm)].map((match) => match[1]).sort();
+const expectedKnowledgePreloadMethods = ['chooseFilesForKnowledgeImportDryRun', 'commitApprovedKnowledgeImportTextPreview', 'dryRunKnowledgeImportPlan', 'getKnowledgeChunk', 'getKnowledgeSource', 'listKnowledgeSources', 'previewTextFileForKnowledgeImport', 'searchKnowledge'];
+const knowledgeRuntimeScopeSource = [knowledgeNormalizerSource, knowledgeSeedSource, knowledgeSearchSource, knowledgeRegistrySource, knowledgePanelSource, knowledgeRendererSlice].join('\n');
+assert(JSON.stringify(knowledgePreloadMethods) === JSON.stringify(expectedKnowledgePreloadMethods), 'v0.6.0 P2-E knowledge preload sadece read-only metodlari sunar', JSON.stringify(knowledgePreloadMethods));
+assert(!/fs\.|writeFile|appendFile|createWriteStream|mkdir|localStorage|sessionStorage|indexedDB|queuePersistUiPreferences|saveSettings|writeCaseCache|tracking\.mutate|laborAutoSave/i.test(knowledgeRuntimeScopeSource), 'v0.6.0 P2-E knowledge servis/panel/renderer scope kalici storage yazimi tasimaz', 'knowledge runtime scope yazma izi tasiyor');
+assert(!/OpenAI|Claude|Gemini|API key|Cloud|OCR|paid|external|hosted|fetch\(|axios|embedding|vector database|sqlite|provider se[cç]|sa[gğ]lay[iı]c[iı] se[cç]/i.test(knowledgeRuntimeScopeSource), 'v0.6.0 P2-E knowledge runtime scope ucretli/harici provider izi tasimaz', 'knowledge runtime scope provider izi tasiyor');
+const knowledgeImportSource = [knowledgeImportTypesSource, knowledgeImportPermissionsSource, knowledgeImportSafetySource, knowledgeImportPlannerSource, knowledgeImportPermissionServiceSource, knowledgeImportSafetyServiceSource].join('\n');
+assert(knowledgeImportTypesSource.includes('KnowledgeImportPermissionLevel') && knowledgeImportTypesSource.includes('KnowledgeImportSourceKind') && knowledgeImportTypesSource.includes('KnowledgeImportPlan') && knowledgeImportTypesSource.includes('canWrite: false'), 'v0.6.0 P3-A knowledge import izin modeli ve canWrite=false plan tipi tanimli', 'P3-A import tipleri eksik');
+assert(knowledgeImportPermissionsSource.includes("'.pdf'") && knowledgeImportPermissionsSource.includes("'.docx'") && knowledgeImportPermissionsSource.includes("'.xlsx'") && knowledgeImportPermissionsSource.includes("'.exe'") && knowledgeImportPermissionsSource.includes("'.bat'") && knowledgeImportPermissionsSource.includes("'.zip'"), 'v0.6.0 P3-A allowed/dangerous uzanti politikasi tanimli', 'P3-A uzanti politikasi eksik');
+assert(knowledgeImportPlannerSource.includes('buildDryRunPlan') && knowledgeImportPlannerSource.includes('heavy_damage_guide') && knowledgeImportPlannerSource.includes('fault_scenario_guide') && knowledgeImportPlannerSource.includes('fault_ratio_image') && knowledgeImportPlannerSource.includes('policy_note') && knowledgeImportPlannerSource.includes('claim_tracking_sheet'), 'v0.6.0 P3-A dry-run planlayici sourceKind mappinglerini tasir', 'P3-A mapping eksik');
+assert(knowledgeImportPermissionServiceSource.includes('requires_user_approval') && knowledgeImportPermissionServiceSource.includes('dry_run_only') && knowledgeImportPermissionServiceSource.includes('not_allowed') && knowledgeImportPermissionServiceSource.includes('Excel import/parsing bu gorevde yapilmaz'), 'v0.6.0 P3-A permission servisi onay/dry-run/red kararlarini ayirir', 'P3-A permission karar mantigi eksik');
+assert(!/from ['"]node:fs|from ['"]fs|fs\.|writeFile|appendFile|createWriteStream|mkdir|LocalCacheStore|TrackingFileService|tracking\.mutate|writeCaseCache|laborAutoSave|distributeLaborExcel|saveAutoLaborExcel/i.test(knowledgeImportSource), 'v0.6.0 P3-A import planlayici kalici storage veya Excel/takip yazma API tasimaz', 'P3-A import planner yazma izi tasiyor');
+assert(!/from ['"][^'"]*(pdf2json|xlsx|mammoth|tesseract)|createWorker|loadWorkbook|readFile\(|parsePdf|extractText|analyzeDocuments/i.test(knowledgeImportSource), 'v0.6.0 P3-A PDF/DOCX/XLSX parser veya OCR calistirma yolu eklemez', 'P3-A parser/OCR izi tasiyor');
+assert(!/OpenAI|Claude|Gemini|API key|fetch\(|axios|embedding|vector database|sqlite|requiresApiKey|allowPaidProviders|allowExternalProviders/i.test(knowledgeImportSource), 'v0.6.0 P3-A import katmani ucretli/harici provider veya internet bagimliligi tasimaz', 'P3-A provider/internet izi tasiyor');
+assert(ipcContractSource.includes('knowledgeImportDryRunPlan') && preloadSource.includes('dryRunKnowledgeImportPlan') && mainIpcSource.includes('IPC.knowledgeImportDryRunPlan') && mainIpcSource.includes('buildDryRunPlan') && !/knowledgeImport(Save|Apply|Execute|Write|Delete|Persist|Upload)/i.test(ipcContractSource + preloadSource + mainIpcSource) && !/data-action="[^"]*(knowledge-import|knowledge-export|knowledge-save|knowledge-apply|knowledge-delete|knowledge-write)/i.test(knowledgePanelSource), 'v0.6.0 P3-G/P4-E2-B dry-run + dar commit disinda save/apply/execute/delete/write import endpoint yok', 'P3-G/P4-E2-B import endpoint guard ihlali');
+const p3gDryRunResponse = buildDryRunPlan({ mode: 'dry_run', files: [{ fileName: 'Agir Hasar Kritik Parca Rehberi.pdf' }, { fileName: 'tehlikeli.exe' }] });
+assert(p3gDryRunResponse.plan.canWrite === false && p3gDryRunResponse.plan.mode === 'dry_run' && p3gDryRunResponse.plan.candidates.length === 2 && p3gDryRunResponse.plan.candidates.every((candidate) => candidate.canWrite === false), 'v0.6.0 P3-G dry-run IPC planlayicisi yalniz dosya-adi metadata ile canWrite=false plan uretir', JSON.stringify(p3gDryRunResponse.plan.totals));
+assert(rendererStateSource.includes('knowledgeImportDryRunPlan') && rendererStateSource.includes('knowledgeImportDryRunLoading') && rendererStateSource.includes('knowledgeImportDryRunError'), 'v0.6.0 P3-H canli dry-run plan renderer state alanlari mevcut', 'P3-H state alanlari eksik');
+assert(rendererMainSource.includes('loadKnowledgeImportDryRunPlan') && rendererMainSource.includes('window.hasarbotu.dryRunKnowledgeImportPlan') && knowledgePanelSource.includes('knowledgeImportDryRunPlan') && knowledgePanelSource.includes('Canli Dry-run IPC Testi'), 'v0.6.0 P3-H panel read-only dry-run IPC sonucunu canli gosterir; dosya secici/yazma yok', 'P3-H canli IPC paneli baglanmadi');
+const knowledgeImportDryRunServiceSource = await fs.readFile('src/main/services/knowledge/knowledge-import-dry-run-service.ts', 'utf-8');
+assert(knowledgeImportDryRunServiceSource.includes('showOpenDialog') && knowledgeImportDryRunServiceSource.includes('fs.stat') && knowledgeImportDryRunServiceSource.includes('buildDryRunPlan') && !/readFile|createReadStream|writeFile|appendFile|createWriteStream|mkdir|\bunlink\b|rename\(|pdf2json|loadWorkbook|extractText|parsePdf|tesseract|mammoth|fs\.open|fs\.read\b|OpenAI|Claude|Gemini|fetch\(|axios|\bOCR\b|sqlite|embedding/i.test(knowledgeImportDryRunServiceSource), 'v0.6.0 P4-A dosya secici servisi yalniz ad+boyut(stat) metadata kullanir; icerik okuma/parser/yazma/provider yok', 'P4-A dosya secici servisi icerik/yazma/provider izi tasiyor');
+assert(ipcContractSource.includes('knowledgeImportChooseFilesDryRun') && ipcContractSource.includes("'knowledge-import:choose-files-dry-run'") && preloadSource.includes('chooseFilesForKnowledgeImportDryRun') && mainIpcSource.includes('IPC.knowledgeImportChooseFilesDryRun') && rendererMainSource.includes('chooseKnowledgeImportDryRunFiles') && knowledgePanelSource.includes('data-action="knowledge-dryrun-choose-files"'), 'v0.6.0 P4-A dosya secici + metadata dry-run kontrat/preload/handler/renderer/panel ile bagli', 'P4-A dosya secici baglantisi eksik');
+assert(rendererStateSource.includes('knowledgeImportApprovalState'), 'v0.6.0 P4-B bellek-ici onay karari renderer state alani mevcut', 'P4-B onay state alani eksik');
+assert(rendererMainSource.includes('applyKnowledgeImportApprovalDecision') && rendererMainSource.includes("case 'knowledge-approve-candidate'") && rendererMainSource.includes("case 'knowledge-approval-reset'") && knowledgePanelSource.includes('data-action="knowledge-approve-candidate"') && knowledgePanelSource.includes('Onay Kararlari') && knowledgePanelSource.includes('canExecuteImport'), 'v0.6.0 P4-B bellek-ici onay karari UI reducer ile baglanir ve canExecuteImport gosterilir', 'P4-B onay UI baglantisi eksik');
+const knowledgeApprovalRendererSlice = rendererMainSource.slice(rendererMainSource.indexOf('function setKnowledgeImportApprovalDecision'), rendererMainSource.indexOf('function resetKnowledgeImportApprovalDecisions'));
+assert(knowledgeApprovalRendererSlice.includes('applyKnowledgeImportApprovalDecision') && !/window\.hasarbotu\.|saveSettings|writeFile|localStorage|sessionStorage|tracking\.mutate|knowledgeImport(Save|Apply|Execute|Commit|Persist|Write)/i.test(knowledgeApprovalRendererSlice), 'v0.6.0 P4-B onay karari fonksiyonu yalniz bellek-ici reducer kullanir; IPC/yazma/execute yok', 'P4-B onay fonksiyonu yazma/execute izi tasiyor');
+const knowledgeImportTextPreviewServiceSource = await fs.readFile('src/main/services/knowledge/knowledge-import-text-preview-service.ts', 'utf-8');
+assert(knowledgeImportTextPreviewServiceSource.includes("'.txt'") && knowledgeImportTextPreviewServiceSource.includes("'.md'") && knowledgeImportTextPreviewServiceSource.includes('ALLOWED_EXTENSIONS') && knowledgeImportTextPreviewServiceSource.includes('canWrite: false') && !/writeFile|appendFile|createWriteStream|mkdir|\bunlink\b|rename\(|pdf2json|loadWorkbook|extractText|parsePdf|tesseract|mammoth|OpenAI|Claude|Gemini|fetch\(|axios|\bOCR\b|sqlite|embedding|tracking\.mutate|saveSettings/i.test(knowledgeImportTextPreviewServiceSource), 'v0.6.0 P4-C metin onizleme servisi yalniz .txt/.md okur; parser/OCR/provider/yazma yok', 'P4-C metin onizleme servisi parser/yazma/provider izi tasiyor');
+assert(ipcContractSource.includes('knowledgeImportPreviewTextFile') && ipcContractSource.includes("'knowledge-import:preview-text-file'") && ipcContractSource.includes('KnowledgeImportTextPreview') && preloadSource.includes('previewTextFileForKnowledgeImport') && mainIpcSource.includes('IPC.knowledgeImportPreviewTextFile') && rendererMainSource.includes('previewKnowledgeImportTextFile') && knowledgePanelSource.includes('data-action="knowledge-preview-text"'), 'v0.6.0 P4-C txt/md icerik onizleme kontrat/preload/handler/renderer/panel ile bagli (yazmasiz)', 'P4-C metin onizleme baglantisi eksik');
+const knowledgeImportWriteLockSource = await fs.readFile('src/shared/knowledge/knowledge-import-write-lock.ts', 'utf-8');
+assert(KNOWLEDGE_IMPORT_PERSISTENT_WRITE_ENABLED === true, 'v0.6.0 P4-E2-B kalici import yazma kilidi ETKIN ama dar (true)', JSON.stringify(KNOWLEDGE_IMPORT_PERSISTENT_WRITE_ENABLED));
+let p4dAllowedThrew = false;
+try { assertKnowledgeImportPersistentWriteAllowed('user-knowledge-store', 'commit-approved-text-preview'); } catch { p4dAllowedThrew = true; }
+let p4dWrongTargetThrew = false;
+try { assertKnowledgeImportPersistentWriteAllowed('takip-dosyasi', 'commit-approved-text-preview'); } catch { p4dWrongTargetThrew = true; }
+let p4dWrongOpThrew = false;
+try { assertKnowledgeImportPersistentWriteAllowed('user-knowledge-store', 'overwrite-seed'); } catch { p4dWrongOpThrew = true; }
+assert(p4dAllowedThrew === false && p4dWrongTargetThrew === true && p4dWrongOpThrew === true, 'v0.6.0 P4-E2-B kilit yalniz (user-knowledge-store, commit-approved-text-preview) gecer; yanlis hedef/operasyon throw eder', JSON.stringify({ allowed: p4dAllowedThrew, wrongTarget: p4dWrongTargetThrew, wrongOp: p4dWrongOpThrew }));
+assert(KNOWLEDGE_IMPORT_FORBIDDEN_WRITE_TARGETS.includes('takip.json') && KNOWLEDGE_IMPORT_FORBIDDEN_WRITE_TARGETS.includes('Excel'), 'v0.6.0 P4-D yasak yazma hedefleri (takip.json/Excel) hala listelenir', JSON.stringify(KNOWLEDGE_IMPORT_FORBIDDEN_WRITE_TARGETS));
+const knowledgeImportSurfaceSource = [knowledgeImportTypesSource, knowledgeImportPermissionsSource, knowledgeImportSafetySource, knowledgeImportPlannerSource, knowledgeImportPermissionServiceSource, knowledgeImportSafetyServiceSource, knowledgeImportViewModelSource, knowledgeImportPlanViewSource, knowledgeImportDryRunServiceSource, knowledgeImportTextPreviewServiceSource, knowledgeImportWriteLockSource, knowledgePanelSource, knowledgeRendererSlice].join('\n');
+assert(!/atomicWrite|writeJson\b|writeFile|appendFile|createWriteStream|\bmkdir\b|tracking\.mutate|writeCaseCache|saveSettings|LocalCacheStore|addUserPartTerm|addLaborLearning|writeHumanSummary|\.unlink\(|fs\.rm\b|writeFileSync/i.test(knowledgeImportSurfaceSource), 'v0.6.0 P4-D kalici import mimari kilidi: tum import yuzeyinde kalici yazma API yok', 'P4-D import yuzeyinde kalici yazma izi var');
+const userKnowledgeStoreSource = await fs.readFile('src/main/local-cache/user-knowledge-store.ts', 'utf-8');
+assert(userKnowledgeStoreSource.includes('atomicWriteJson') && userKnowledgeStoreSource.includes('user-knowledge-store.json') && userKnowledgeStoreSource.includes('defaultUserKnowledgeStore') && !/takip\.json|TRACKING_FILE_NAME|loadBuiltInKnowledgeSeeds|KnowledgeSourceRegistry|writeCategoryLaborExcel|tracking\.mutate|\.xlsx|writeHumanSummary/i.test(userKnowledgeStoreSource), 'v0.6.0 P4-E1 kullanici bilgi deposu yalniz kendi AppData dosyasina atomic yazar; takip.json/seed/Excel/tracking dokunmaz', 'P4-E1 store izolasyon ihlali');
+assert(!knowledgeImportSurfaceSource.includes('UserKnowledgeStoreFile') && !/\.write\(\s*next|atomicWriteJson/i.test(knowledgeImportSurfaceSource), 'v0.6.0 P4-E2-B import yuzeyi store yazma sinifini (UserKnowledgeStoreFile) DOGRUDAN cagirmaz; kalici yazma yalniz ayri commit servisinden gecer', 'P4-E2-B import yuzeyi store yazimina dogrudan baglanmis');
+const userKnowledgeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-user-knowledge-'));
+try {
+  const userKnowledgeStoreFile = new UserKnowledgeStoreFile(userKnowledgeRoot);
+  const emptyStore = await userKnowledgeStoreFile.read();
+  assert(emptyStore.schemaVersion === 1 && emptyStore.entries.length === 0 && emptyStore.metadata.revision === 0, 'v0.6.0 P4-E1 kullanici bilgi deposu yokken bos varsayilan doner', JSON.stringify(emptyStore));
+  const writtenStore = await userKnowledgeStoreFile.write({ ...defaultUserKnowledgeStore(), entries: [{ entryId: 'e1', title: 'Ornek', text: 'Ornek metin', sourceFileName: 'ornek.txt', fileExtension: '.txt', tags: [], createdAt: '2026-06-21T00:00:00.000Z', createdBy: 'Test' }] });
+  assert(writtenStore.metadata.revision === 1 && writtenStore.metadata.writeId.length > 0, 'v0.6.0 P4-E1 atomic write revision ve writeId damgalar', JSON.stringify(writtenStore.metadata));
+  const reread = await userKnowledgeStoreFile.read();
+  assert(reread.entries.length === 1 && reread.entries[0].entryId === 'e1' && reread.entries[0].text === 'Ornek metin' && reread.metadata.revision === 1, 'v0.6.0 P4-E1 atomic write sonrasi depo geri okunur (roundtrip)', JSON.stringify(reread));
+} finally {
+  await fs.rm(userKnowledgeRoot, { recursive: true, force: true }).catch(() => undefined);
+}
+const knowledgeImportCommitPlanSource = await fs.readFile('src/shared/knowledge/knowledge-import-commit-plan.ts', 'utf-8');
+assert(knowledgeImportCommitPlanSource.includes('willWrite') && knowledgeImportCommitPlanSource.includes('KNOWLEDGE_IMPORT_PERSISTENT_WRITE_ENABLED') && knowledgeImportCommitPlanSource.includes('lockOpen') && !/atomicWrite|writeJson\b|writeFile|appendFile|createWriteStream|\bmkdir\b|UserKnowledgeStoreFile|ipcRenderer|window\.hasarbotu|tracking\.mutate|saveSettings|from ['"]node:fs|from ['"]fs|\bfs\./i.test(knowledgeImportCommitPlanSource), 'v0.6.0 P4-E2-A commit plani saf: kilit referansli ve dosya/IPC/depo yazma yok', 'P4-E2-A commit plani yazma/yan-etki izi tasiyor');
+assert(knowledgePanelSource.includes('buildKnowledgeImportCommitPlan') && knowledgePanelSource.includes('Import Commit On Izleme'), 'v0.6.0 P4-E2-A panel commit on izleme bolumu mevcut (buildKnowledgeImportCommitPlan ile)', 'P4-E2-A commit on izleme paneli eksik');
+const p4e2aPlan = buildSampleKnowledgeImportPlan();
+let p4e2aApproval = createKnowledgeImportApprovalState();
+p4e2aApproval = applyKnowledgeImportApprovalDecision(p4e2aApproval, { planId: p4e2aPlan.planId, candidateId: 'ornek-aday-2-gelecek-uygun', decision: 'approve_for_future_import', decidedAt: '2026-06-21T00:00:00.000Z' });
+p4e2aApproval = applyKnowledgeImportApprovalDecision(p4e2aApproval, { planId: p4e2aPlan.planId, candidateId: 'ornek-aday-4-yasakli', decision: 'approve_for_future_import', decidedAt: '2026-06-21T00:00:00.000Z' });
+const p4e2aCommit = buildKnowledgeImportCommitPlan(p4e2aPlan, p4e2aApproval);
+assert(p4e2aCommit.lockOpen === true && p4e2aCommit.willWrite === true && p4e2aCommit.totals.willCommit === 1, 'v0.6.0 P4-E2-B commit plani kilit dar-acik: lockOpen/willWrite true, willCommit=1', JSON.stringify(p4e2aCommit.totals));
+assert(p4e2aCommit.totals.approved === 2 && p4e2aCommit.totals.wouldCommit === 1 && p4e2aCommit.targetStore === 'user-knowledge-store.json', 'v0.6.0 P4-E2-A onaylanan .md uygun (wouldCommit=1), onaylanan .exe degil; hedef ayri depo', JSON.stringify(p4e2aCommit.totals));
+const p4e2aCommitCandidate = (id) => p4e2aCommit.candidates.find((candidate) => candidate.candidateId === id);
+assert(p4e2aCommitCandidate('ornek-aday-2-gelecek-uygun')?.eligible === true && p4e2aCommitCandidate('ornek-aday-2-gelecek-uygun')?.willCommit === true && p4e2aCommitCandidate('ornek-aday-4-yasakli')?.eligible === false && p4e2aCommitCandidate('ornek-aday-4-yasakli')?.willCommit === false, 'v0.6.0 P4-E2-B onaylanan .md commit edilebilir (willCommit=true); onaylanan .exe (not_allowed) degil', JSON.stringify(p4e2aCommit.candidates.map((candidate) => [candidate.fileName, candidate.eligible, candidate.willCommit])));
+const knowledgeImportCommitServiceSource = await fs.readFile('src/main/services/knowledge/knowledge-import-commit-service.ts', 'utf-8');
+assert(knowledgeImportCommitServiceSource.includes('assertKnowledgeImportPersistentWriteAllowed') && knowledgeImportCommitServiceSource.includes('KNOWLEDGE_IMPORT_ALLOWED_WRITE_TARGET') && knowledgeImportCommitServiceSource.includes('UserKnowledgeStoreFile') && knowledgeImportCommitServiceSource.includes('contentHash') && !/\bfilePath\b|readFile|createReadStream|pdf2json|loadWorkbook|extractText|parsePdf|tesseract|mammoth|OpenAI|Claude|Gemini|fetch\(|axios|\bOCR\b|sqlite|embedding|writeCategoryLaborExcel|tracking\.mutate|takip\.json/i.test(knowledgeImportCommitServiceSource), 'v0.6.0 P4-E2-B commit service narrow kilit+store kullanir; filePath/readFile/parser/provider/forbidden-write yok', 'P4-E2-B commit service yasak iz tasiyor');
+assert(ipcContractSource.includes('knowledgeImportCommitApprovedTextPreview') && ipcContractSource.includes("'knowledge-import:commit-approved-text-preview'") && preloadSource.includes('commitApprovedKnowledgeImportTextPreview') && mainIpcSource.includes('IPC.knowledgeImportCommitApprovedTextPreview') && mainIpcSource.includes('commitApprovedKnowledgeImportTextPreview(this.cache.cacheRoot') && knowledgePanelSource.includes('data-action="knowledge-commit-text-preview"') && rendererMainSource.includes('window.confirm') && rendererMainSource.includes('commitApprovedKnowledgeImportTextPreview'), 'v0.6.0 P4-E2-B commit kontrat/preload/handler/panel butonu/renderer confirm ile bagli', 'P4-E2-B commit baglantisi eksik');
+const p4e2bRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-commit-'));
+try {
+  const p4e2bInput = { candidateId: 'c1', fileName: 'ornek.txt', fileExtension: '.txt', content: 'Ornek bilgi icerigi', title: 'Ornek', tags: [], sourceType: 'office_note', approvalState: 'approved_but_not_executed' };
+  const p4e2bResult = await commitApprovedKnowledgeImportTextPreview(p4e2bRoot, p4e2bInput);
+  assert(p4e2bResult.ok === true && p4e2bResult.committed === 1 && p4e2bResult.skippedDuplicate === 0 && p4e2bResult.storeRevision === 1 && typeof p4e2bResult.writeId === 'string' && p4e2bResult.writeId.length > 0 && p4e2bResult.entryIds.length === 1, 'v0.6.0 P4-E2-B tek .txt commit atomic write ile yapilir; revision/writeId artar', JSON.stringify(p4e2bResult));
+  const p4e2bStore = await new UserKnowledgeStoreFile(p4e2bRoot).read();
+  assert(p4e2bStore.entries.length === 1 && p4e2bStore.entries[0].sourceFileName === 'ornek.txt' && p4e2bStore.entries[0].text === 'Ornek bilgi icerigi' && typeof p4e2bStore.entries[0].contentHash === 'string' && p4e2bStore.entries[0].contentHash.length > 0 && !('filePath' in p4e2bStore.entries[0]) && p4e2bStore.entries[0].importedBy === 'import-flow', 'v0.6.0 P4-E2-B commit entry icerik+contentHash tasir, dosya yolu SAKLAMAZ', JSON.stringify(p4e2bStore.entries[0]));
+  const p4e2bDup = await commitApprovedKnowledgeImportTextPreview(p4e2bRoot, p4e2bInput);
+  assert(p4e2bDup.committed === 0 && p4e2bDup.skippedDuplicate === 1, 'v0.6.0 P4-E2-B ayni icerik+kaynak duplicate olarak atlanir', JSON.stringify(p4e2bDup));
+  const p4e2bPdf = await commitApprovedKnowledgeImportTextPreview(p4e2bRoot, { ...p4e2bInput, fileName: 'x.pdf', fileExtension: '.pdf' });
+  assert(p4e2bPdf.ok === false && p4e2bPdf.rejected === 1 && p4e2bPdf.committed === 0, 'v0.6.0 P4-E2-B .pdf commit reddedilir', JSON.stringify(p4e2bPdf));
+  const p4e2bEmpty = await commitApprovedKnowledgeImportTextPreview(p4e2bRoot, { ...p4e2bInput, fileName: 'bos.txt', content: '   ' });
+  assert(p4e2bEmpty.ok === false && p4e2bEmpty.rejected === 1, 'v0.6.0 P4-E2-B bos icerik commit reddedilir', JSON.stringify(p4e2bEmpty));
+  const p4e2bUnapproved = await commitApprovedKnowledgeImportTextPreview(p4e2bRoot, { ...p4e2bInput, fileName: 'onaysiz.txt', approvalState: 'preview_only' });
+  assert(p4e2bUnapproved.ok === false && p4e2bUnapproved.rejected === 1, 'v0.6.0 P4-E2-B onaysiz aday commit reddedilir', JSON.stringify(p4e2bUnapproved));
+} finally {
+  await fs.rm(p4e2bRoot, { recursive: true, force: true }).catch(() => undefined);
+}
+const knowledgeImportDisplaySource = [knowledgeImportViewModelSource, knowledgeImportPlanViewSource].join('\n');
+assert(knowledgeImportTypesSource.includes('KnowledgeImportApprovalState') && knowledgeImportTypesSource.includes('KnowledgeImportApprovalDecision') && knowledgeImportViewModelSource.includes('approved_but_not_executed'), 'v0.6.0 P3-B onay akisi sadece tip/view-model seviyesinde hazirlanir', 'P3-B approval model eksik');
+assert(knowledgeImportViewModelSource.includes('buildKnowledgeImportPlanViewModel') && knowledgeImportViewModelSource.includes('permissionLabel') && knowledgeImportViewModelSource.includes('Reddedildi') && knowledgeImportViewModelSource.includes('Sadece plan') && knowledgeImportViewModelSource.includes('Kullanici onayi gerekir') && knowledgeImportViewModelSource.includes('Gelecek import icin uygun'), 'v0.6.0 P3-B import plan view model permission durumlarini ayirir', 'P3-B permission view label eksik');
+assert(knowledgeImportPlanViewSource.includes('renderKnowledgeImportPlanView') && knowledgeImportPlanViewSource.includes('Import Plan Hazirlik') && knowledgeImportPlanViewSource.includes('canWrite') && knowledgeImportPlanViewSource.includes('dosya icerigi okunmaz') && knowledgeImportPlanViewSource.includes('kalici kaynak eklenmez') && knowledgeImportPlanViewSource.includes('takip.json, Excel veya AppData yazilmaz'), 'v0.6.0 P3-B pasif import plan component dry-run/canWrite/guvenlik metinlerini render eder', 'P3-B passive component eksik');
+assert(!/data-action=|<button|type="button"|Dosya Sec|Dosya Se[cç]|Import Et|Iceri Aktar|İçeri Aktar|\bOnayla\b|\bReddet\b|\bKaydet\b|\bUygula\b|\bSil\b|\bDuzenle\b|\bDüzenle\b|Excel'e yaz|takip\.json'a yaz|AppData'ya kaydet|\bSync\b|\bUpload\b|\bDownload\b|Provider sec|Provider se[cç]|\bKopyala\b|\bCopy\b/i.test(knowledgeImportPlanViewSource), 'v0.6.0 P3-B pasif import plan component aktif aksiyon veya buton sunmaz', 'P3-B component aktif aksiyon izi tasiyor');
+assert(!/localStorage|sessionStorage|indexedDB|queuePersistUiPreferences|saveSettings|writeCaseCache|tracking\.mutate|laborAutoSave|fs\.writeFile|appendFile|createWriteStream|mkdir/i.test(knowledgeImportDisplaySource), 'v0.6.0 P3-B import plan view/model AppData localStorage sessionStorage takip Excel yazma izi tasimaz', 'P3-B view/model storage yazma izi tasiyor');
+assert(!/OpenAI|Claude|Gemini|API key|Cloud|OCR|fetch\(|axios|embedding|vector database|sqlite|provider se[cç]|sa[gğ]lay[iı]c[iı] se[cç]/i.test(knowledgeImportDisplaySource), 'v0.6.0 P3-B import plan view/model ucretli harici provider veya OCR izi tasimaz', 'P3-B view/model provider/OCR izi tasiyor');
+assert(knowledgePanelSource.includes("from './knowledge-import-plan-view'") && knowledgePanelSource.includes('renderKnowledgeImportPlanView(buildSampleKnowledgeImportPlan()') && knowledgePanelSource.includes('buildSampleKnowledgeImportPlan') && !/data-action="[^"]*(knowledge-import|knowledge-save|knowledge-apply|knowledge-delete|knowledge-write)/i.test(knowledgePanelSource), 'v0.6.0 P3-D Bilgi Bankasi paneli statik ornek dry-run plani read-only baglar', 'P3-D panel statik ornek plan baglama eksik');
+const p3dSamplePlan = buildSampleKnowledgeImportPlan();
+const p3dSampleView = buildKnowledgeImportPlanViewModel(p3dSamplePlan);
+const p3dSampleCandidate = (fileName) => p3dSampleView.candidates.find((candidate) => candidate.fileName === fileName);
+assert(p3dSamplePlan.mode === 'dry_run' && p3dSamplePlan.canWrite === false && p3dSampleView.canWrite === false && p3dSampleView.candidates.length === 4, 'v0.6.0 P3-D statik ornek plan dry_run/canWrite=false ve 4 aday uretir', JSON.stringify({ mode: p3dSamplePlan.mode, canWrite: p3dSamplePlan.canWrite, count: p3dSampleView.candidates.length }));
+assert(p3dSampleCandidate('tehlikeli.exe')?.permissionLabel === 'Reddedildi' && p3dSampleCandidate('belirsiz kaynak.pdf')?.permissionLabel === 'Sadece plan' && p3dSampleCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.permissionLabel === 'Kullanici onayi gerekir' && p3dSampleCandidate('gelecek import uygun kaynak.md')?.permissionLabel === 'Gelecek import icin uygun', 'v0.6.0 P3-D ornek plan dort izin durumunu okunabilir etiketle ayirir', JSON.stringify(p3dSampleView.candidates.map((candidate) => [candidate.fileName, candidate.permissionLabel])));
+assert(p3dSampleView.candidates.every((candidate) => candidate.canWrite === false) && p3dSampleView.warnings.some((warning) => warning.includes('statik bir ornek')) && p3dSamplePlan.totals.totalCandidates === 4 && p3dSamplePlan.totals.notAllowed === 1 && p3dSamplePlan.totals.requiresApproval === 1, 'v0.6.0 P3-D ornek plan her adayda canWrite=false, statik uyari ve dogru toplamlari tasir', JSON.stringify({ warnings: p3dSampleView.warnings, totals: p3dSamplePlan.totals }));
+const p3eEmptyApproval = createKnowledgeImportApprovalState();
+assert(p3eEmptyApproval.entries.length === 0 && p3eEmptyApproval.canExecuteImport === false && getKnowledgeImportApprovalState(p3eEmptyApproval, 'plan-1', 'aday-1') === 'not_requested', 'v0.6.0 P3-E onay reducer bos baslar ve bilinmeyen aday not_requested doner', JSON.stringify(p3eEmptyApproval));
+const p3eApproved = applyKnowledgeImportApprovalDecision(p3eEmptyApproval, { planId: 'plan-1', candidateId: 'aday-1', decision: 'approve_for_future_import', decidedAt: '2026-06-21T00:00:00.000Z' });
+assert(p3eApproved.canExecuteImport === false && getKnowledgeImportApprovalState(p3eApproved, 'plan-1', 'aday-1') === 'approved_but_not_executed' && p3eEmptyApproval.entries.length === 0, 'v0.6.0 P3-E approve karari approved_but_not_executed olur, import calismaz ve girdi state degismez', JSON.stringify(p3eApproved));
+const p3eRejected = applyKnowledgeImportApprovalDecision(p3eApproved, { planId: 'plan-1', candidateId: 'aday-2', decision: 'reject', decidedAt: '2026-06-21T00:00:00.000Z' });
+const p3eReview = applyKnowledgeImportApprovalDecision(p3eRejected, { planId: 'plan-1', candidateId: 'aday-3', decision: 'needs_manual_review', decidedAt: '2026-06-21T00:00:00.000Z' });
+assert(getKnowledgeImportApprovalState(p3eReview, 'plan-1', 'aday-2') === 'rejected' && getKnowledgeImportApprovalState(p3eReview, 'plan-1', 'aday-3') === 'user_review_required', 'v0.6.0 P3-E reject ve needs_manual_review kararlari dogru duruma esler', JSON.stringify(p3eReview.entries));
+const p3eReapproved = applyKnowledgeImportApprovalDecision(p3eReview, { planId: 'plan-1', candidateId: 'aday-1', decision: 'reject', decidedAt: '2026-06-21T00:00:01.000Z' });
+const p3eSummary = summarizeKnowledgeImportApprovals(p3eReapproved);
+assert(p3eReapproved.entries.length === 3 && getKnowledgeImportApprovalState(p3eReapproved, 'plan-1', 'aday-1') === 'rejected' && p3eSummary.executed === 0 && p3eSummary.canExecuteImport === false && p3eSummary.rejected === 2 && p3eSummary.userReviewRequired === 1 && p3eSummary.approvedButNotExecuted === 0, 'v0.6.0 P3-E ayni aday kararini gunceller, mukerrer eklemez ve ozet executed=0/canExecuteImport=false tutar', JSON.stringify(p3eSummary));
+const p3fSamplePlan = buildSampleKnowledgeImportPlan();
+const p3fApprovalState = buildSampleKnowledgeImportApprovalState();
+const p3fView = buildKnowledgeImportPlanViewModel(p3fSamplePlan, p3fApprovalState);
+const p3fCandidate = (fileName) => p3fView.candidates.find((candidate) => candidate.fileName === fileName);
+assert(knowledgePanelSource.includes('buildSampleKnowledgeImportApprovalState') && knowledgePanelSource.includes('renderKnowledgeImportPlanView(buildSampleKnowledgeImportPlan(), buildSampleKnowledgeImportApprovalState())'), 'v0.6.0 P3-F panel ornek onay durumunu plan gorunumune read-only gecirir', 'P3-F panel onay durumu baglamasi eksik');
+assert(p3fCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.approvalState === 'approved_but_not_executed' && p3fCandidate('Agir Hasar Kritik Parca Rehberi.pdf')?.approvalDecided === true && p3fCandidate('belirsiz kaynak.pdf')?.approvalState === 'user_review_required' && p3fCandidate('belirsiz kaynak.pdf')?.approvalDecided === true && p3fCandidate('tehlikeli.exe')?.approvalState === 'rejected' && p3fCandidate('tehlikeli.exe')?.approvalDecided === true, 'v0.6.0 P3-F onay durumu bellek-ici kararlardan read-only turetilir', JSON.stringify(p3fView.candidates.map((candidate) => [candidate.fileName, candidate.approvalState, candidate.approvalDecided])));
+assert(p3fCandidate('gelecek import uygun kaynak.md')?.approvalDecided === false && p3fCandidate('gelecek import uygun kaynak.md')?.approvalState === 'approved_but_not_executed' && p3fView.canWrite === false && buildKnowledgeImportPlanViewModel(p3fSamplePlan).candidates.every((candidate) => candidate.approvalDecided === false), 'v0.6.0 P3-F karar verilmeyen aday izin-varsayilani gosterir; onay state verilmezse tum adaylar varsayilan kalir', JSON.stringify(p3fCandidate('gelecek import uygun kaynak.md')));
+assert(knowledgeTypesSource.includes('chunkCount?: number') && knowledgeRegistrySource.includes('chunkCountForSource') && knowledgeRegistrySource.includes('cloneSource(source, this.chunkCountForSource'), 'v0.6.0 P2-B bilgi bankasi kaynak listesi chunk sayisini hesaplanan read-only metadata olarak tasir', 'knowledge chunkCount metadata eksik');
+assert(settingsSource.includes("from './knowledge-panel'") && settingsSource.includes('renderKnowledgePanel(state)') && knowledgePanelSource.includes('Bilgi Bankası'), 'v0.6.0 P2-B Bilgi Bankasi paneli Ayarlar ekranina baglanir', 'Bilgi Bankasi panel settings baglantisi eksik');
+assert(rendererStateSource.includes('knowledgeSources') && rendererStateSource.includes('knowledgeSearchQuery') && rendererStateSource.includes('knowledgeSearchResponse') && rendererStateSource.includes('selectedKnowledgeSourceId') && rendererStateSource.includes('selectedKnowledgeResultId'), 'v0.6.0 P2-B Bilgi Bankasi renderer state alanlari oturum icinde tutulur', 'Bilgi Bankasi renderer state eksik');
+assert(knowledgePanelSource.includes('Local-only / ücretsiz / salt okunur') && knowledgePanelSource.includes('Kaynak sayısı') && knowledgePanelSource.includes('Chunk sayısı') && knowledgePanelSource.includes('Ücretli servis') && knowledgePanelSource.includes('Harici API') && knowledgePanelSource.includes('Yazma modu'), 'v0.6.0 P2-B panel local-only/ucretsiz/salt okunur durum ozeti gosterir', 'Bilgi Bankasi durum ozeti eksik');
+assert(knowledgePanelSource.includes('Bilgi bankasında kaynak bulunamadı.') && knowledgePanelSource.includes('Eşleşen bilgi bulunamadı.') && knowledgePanelSource.includes('Arama yapmak için') && knowledgePanelSource.includes('Default limit 10'), 'v0.6.0 P2-B panel kaynak yok, sonuc yok ve bos arama durumlarini gosterir', 'Bilgi Bankasi bos durumlari eksik');
+assert(knowledgePanelSource.includes('sourceTitle') && knowledgePanelSource.includes('result.score') && knowledgePanelSource.includes('matchedTerms') && knowledgePanelSource.includes('result.tags') && knowledgePanelSource.includes('result.text') && knowledgePanelSource.includes('result.rationale'), 'v0.6.0 P2-B arama sonucu sourceTitle/score/matchedTerms/tags/text/rationale alanlarini render eder', 'Bilgi Bankasi sonuc alanlari eksik');
+assert(knowledgePanelSource.includes('data-action="knowledge-refresh"') && knowledgePanelSource.includes('data-action="knowledge-search"') && knowledgePanelSource.includes('data-action="knowledge-clear-search"') && knowledgePanelSource.includes('data-action="knowledge-source-select"') && knowledgePanelSource.includes('data-action="knowledge-result-select"'), 'v0.6.0 P2-B panel yalnizca okuma/arama/secim aksiyonlari sunar', 'Bilgi Bankasi panel aksiyonlari eksik');
+assert(rendererMainSource.includes("target.id === 'knowledge-search'") && rendererMainSource.includes("case 'knowledge-refresh'") && rendererMainSource.includes("case 'knowledge-search'") && rendererMainSource.includes("case 'knowledge-clear-search'") && rendererMainSource.includes("case 'knowledge-source-select'") && rendererMainSource.includes("case 'knowledge-result-select'") && rendererMainSource.includes('void loadKnowledgeSources(false)'), 'v0.6.0 P2-B renderer Bilgi Bankasi input/action/lazy-load akislarini baglar', 'Bilgi Bankasi renderer baglantisi eksik');
+assert(knowledgeRendererSlice.includes('window.hasarbotu.listKnowledgeSources') && knowledgeRendererSlice.includes('window.hasarbotu.searchKnowledge') && knowledgeRendererSlice.includes("state.knowledgeSearchError = 'Arama metni girin.'") && knowledgeRendererSlice.includes('limit: 10'), 'v0.6.0 P2-B renderer mevcut read-only preload ile kaynak okur ve bos queryde arama yapmaz', 'Bilgi Bankasi read-only renderer akisi eksik');
+assert(knowledgePanelSource.includes('takip.json, Excel veya dosya klasörlerine yazma yapmaz') && knowledgePanelSource.includes('nihai karar kullanıcı/eksper onayına tabidir'), 'v0.6.0 P2-B panel guvenlik notunu net gosterir', 'Bilgi Bankasi guvenlik notu eksik');
+assert(!/data-action="[^"]*(import|export|delete|edit|save|write|apply|sync|upload|download|provider)|İçe Aktar|Dışa Aktar|Yükle|Sil|Düzenle|Kaydet|Uygula|Provider seç|OpenAI|Claude|Gemini/i.test(knowledgePanelSource), 'v0.6.0 P2-B panel import/export/delete/edit/save/apply/sync/upload/provider secimi sunmaz', 'Bilgi Bankasi panelinde yasak aksiyon/provider metni var');
+assert(!/saveSettings|updateField|updateChecklist|updateTodo|updateNote|tracking\.mutate|writeCaseCache|laborAutoSave|autoLaborSaveAction|fs\.writeFile/i.test(knowledgeRendererSlice) && !sharedTypesSource.includes('knowledgeSearchQuery'), 'v0.6.0 P2-B Bilgi Bankasi takip.json/Excel/AppData is verisine yazma veya kalici arama state tasimaz', knowledgeRendererSlice);
+assert(knowledgeSearchTypesSource.includes('sourceType?: KnowledgeSourceType') && knowledgeSearchTypesSource.includes('priority?: KnowledgeChunkPriority') && knowledgeSearchSource.includes('sourceType: args.source.sourceType') && knowledgeSearchSource.includes('priority: args.chunk.priority'), 'v0.6.0 P2-C search sonucu sourceType ve priority metadata ile genisletilir', 'P2-C search metadata eksik');
+assert(rendererStateSource.includes('selectedKnowledgeTags') && rendererStateSource.includes('selectedKnowledgeSourceTypes') && !settingsNormalizerSource.includes('selectedKnowledgeTags') && !settingsNormalizerSource.includes('selectedKnowledgeSourceTypes'), 'v0.6.0 P2-C tag/sourceType filtreleri sadece renderer memory state icinde tutulur', 'P2-C filtre state kaliciliga siziyor');
+assert(knowledgePanelSource.includes('knowledge-tag-toggle') && knowledgePanelSource.includes('knowledge-source-type-toggle') && knowledgePanelSource.includes('data-action="knowledge-filter-clear"') && knowledgePanelSource.includes('renderKnowledgeFilters') && knowledgePanelSource.includes('Filtreleri temizle'), 'v0.6.0 P2-C Bilgi Bankasi tag ve sourceType filtre UI sunar', 'P2-C filtre UI eksik');
+assert(rendererMainSource.includes("case 'knowledge-tag-toggle'") && rendererMainSource.includes("case 'knowledge-source-type-toggle'") && rendererMainSource.includes("case 'knowledge-filter-clear'") && rendererMainSource.includes('toggleKnowledgeTag') && rendererMainSource.includes('toggleKnowledgeSourceType') && rendererMainSource.includes('clearKnowledgeFilters'), 'v0.6.0 P2-C renderer filtre toggle/temizleme aksiyonlarini baglar', 'P2-C filtre action baglantisi eksik');
+assert(knowledgeRendererSlice.includes('tags: state.selectedKnowledgeTags') && knowledgeRendererSlice.includes('sourceTypes: state.selectedKnowledgeSourceTypes') && knowledgeRendererSlice.includes('limit: 10') && knowledgeRendererSlice.includes("state.knowledgeSearchError = 'Arama metni girin.'"), 'v0.6.0 P2-C searchKnowledge params imzasi query/tags/sourceTypes/limit ile kullanilir ve bos query guard korunur', 'P2-C search params/bos query guard eksik');
+assert(knowledgePanelSource.includes('knowledge-result-detail') && knowledgePanelSource.includes('sourceId') && knowledgePanelSource.includes('chunkId') && knowledgePanelSource.includes('sourceType') && knowledgePanelSource.includes('result.priority') && knowledgePanelSource.includes('result.rationale') && knowledgePanelSource.includes('result.text'), 'v0.6.0 P2-C secilen sonuc detayi source/chunk/skor/terim/tag/metin/gerekce alanlarini read-only gosterir', 'P2-C sonuc detayi eksik');
+assert(knowledgePanelSource.includes('knowledge-source-detail') && knowledgePanelSource.includes('source.chunkCount') && knowledgePanelSource.includes('source.owner') && knowledgePanelSource.includes('source.version') && knowledgePanelSource.includes('source.isEnabled'), 'v0.6.0 P2-C secilen kaynak detayi metadata alanlarini read-only gosterir', 'P2-C kaynak detayi eksik');
+assert(knowledgePanelSource.includes('knowledge-badge') && knowledgePanelSource.includes('knowledge-chip') && rendererStylesSource.includes('.knowledge-chip') && rendererStylesSource.includes('.knowledge-badge') && rendererStylesSource.includes('.knowledge-detail-meta'), 'v0.6.0 P2-C matchedTerms ve tags badge/chip olarak render edilir', 'P2-C chip/badge CSS eksik');
+assert(!/data-action="[^"]*(import|export|delete|edit|save|write|apply|sync|upload|download|provider|copy)|Ä°Ã§e Aktar|DÄ±ÅŸa Aktar|YÃ¼kle|Sil|DÃ¼zenle|Kaydet|Uygula|Provider seÃ§|OpenAI|Claude|Gemini|API key|Cloud|OCR|Kopyala|Copy/i.test(knowledgePanelSource), 'v0.6.0 P2-C Bilgi Bankasi paneli import/export/delete/write/copy veya ucretli/harici secim sunmaz', 'P2-C panelinde yasak aksiyon/provider/copy izi var');
+assert(!/queuePersistUiPreferences|saveSettings|updateField|updateChecklist|updateTodo|updateNote|tracking\.mutate|writeCaseCache|laborAutoSave|autoLaborSaveAction|fs\.writeFile/i.test(knowledgeRendererSlice), 'v0.6.0 P2-C Bilgi Bankasi filtre/arama akisi takip.json Excel AppData yazmaz', knowledgeRendererSlice);
+assert(rendererMainSource.includes("target.id === 'knowledge-search' && event.key === 'Enter'") && rendererMainSource.includes('void searchKnowledgeAction()'), 'v0.6.0 P2-D Bilgi Bankasi arama inputunda Enter aramayi tetikler', 'P2-D Enter arama baglantisi eksik');
+assert(rendererMainSource.includes("event.key === 'Escape'") && rendererMainSource.includes("target.closest('.knowledge-panel')") && rendererMainSource.includes('clearKnowledgePanelSelection'), 'v0.6.0 P2-D Esc sadece Bilgi Bankasi panelindeki secili detaylari temizler', 'P2-D Esc secim temizleme eksik');
+assert(knowledgePanelSource.includes('role="search"') && knowledgePanelSource.includes('aria-label="Bilgi bankası arama metni"') && knowledgePanelSource.includes('aria-live="polite"') && knowledgePanelSource.includes('role="status"'), 'v0.6.0 P2-D Bilgi Bankasi paneli temel ARIA/search/status etiketlerini tasir', 'P2-D ARIA etiketleri eksik');
+assert(knowledgePanelSource.includes('aria-pressed="${active ?') && knowledgePanelSource.includes('aria-pressed="${selected ?') && knowledgePanelSource.includes('data-action="${escapeHtml(action)}"'), 'v0.6.0 P2-D tag/sourceType chipleri ve sonuc/kaynak satirlari erisilebilir button durumunu tasir', 'P2-D aria-pressed button durumu eksik');
+assert(knowledgePanelSource.includes('knowledge-search-controls') && knowledgePanelSource.indexOf('renderSearchBar(state)') < knowledgePanelSource.indexOf('renderSourceList(sources') && knowledgePanelSource.indexOf('renderSourceList(sources') < knowledgePanelSource.indexOf('renderSearchResults(state)'), 'v0.6.0 P2-D Tab sirasi arama/filtre, kaynak listesi, sonuc listesi akisini izler', 'P2-D panel DOM sirasi eksik');
+assert(knowledgePanelSource.includes('knowledge-filter-title') && knowledgePanelSource.includes('selectedKnowledgeTags.length') && knowledgePanelSource.includes('selectedKnowledgeSourceTypes.length') && knowledgePanelSource.includes('Seçili etiket') && knowledgePanelSource.includes('Seçili kaynak tipi'), 'v0.6.0 P2-D filtre UX secili tag/sourceType sayisini gorunur tutar', 'P2-D filtre sayilari eksik');
+assert(knowledgePanelSource.includes('knowledge-result-preview') && knowledgePanelSource.includes('shortText(result.text, 160)') && knowledgePanelSource.includes('shortText(result.rationale, 140)') && knowledgePanelSource.includes('formatScore(result.score)') && rendererStylesSource.includes('.knowledge-result-preview'), 'v0.6.0 P2-D sonuc karti kisa preview/skor ve detay ayrimini korur', 'P2-D sonuc okunabilirlik guard eksik');
+assert(rendererMainSource.includes('normalizeKnowledgeSelectionsForRender') && rendererMainSource.includes('!state.knowledgeSearchResponse?.results.some') && rendererMainSource.includes('!state.knowledgeSources.some'), 'v0.6.0 P2-D stale secili sonuc/kaynak render oncesi temizlenir', 'P2-D stale secim temizleme eksik');
+assert(knowledgeRendererSlice.includes('state.selectedKnowledgeResultId = \'\';') && knowledgeRendererSlice.includes("state.knowledgeSearchError = 'Bilgi bankası araması şu anda tamamlanamadı.'") && knowledgePanelSource.includes('Bilgi bankası kaynakları okunuyor...') && knowledgePanelSource.includes('Eşleşen bilgi bulunamadı.'), 'v0.6.0 P2-D loading/error/bos sonuc durumlari guvenli mesajlarla render edilir', 'P2-D loading/error/bos durum guard eksik');
+assert(rendererStylesSource.includes('.knowledge-search-controls') && rendererStylesSource.includes('.knowledge-results-panel') && rendererStylesSource.includes(':focus-visible') && rendererStylesSource.includes('.knowledge-filter-title'), 'v0.6.0 P2-D Bilgi Bankasi CSS klavye odagi ve yeni panel duzenini tasir', 'P2-D CSS guard eksik');
+assert(!/queuePersistUiPreferences|saveSettings|updateField|updateChecklist|updateTodo|updateNote|tracking\.mutate|writeCaseCache|laborAutoSave|autoLaborSaveAction|fs\.writeFile/i.test(knowledgeRendererSlice) && !settingsNormalizerSource.includes('knowledgeSearchQuery') && !settingsNormalizerSource.includes('selectedKnowledgeTags') && !settingsNormalizerSource.includes('selectedKnowledgeSourceTypes'), 'v0.6.0 P2-D Bilgi Bankasi arama/filtre/secim state AppData takip.json Excel yazimina sizmaz', knowledgeRendererSlice);
+assert(settingsSource.includes("from './ai-queue-panel'") && settingsSource.includes('renderAiQueuePanel(state)'), 'v0.6.0 P1-C AI queue paneli Ayarlar ekranina baglanir', 'AI queue panel settings baglantisi eksik');
+assert(rendererStateSource.includes('aiQueueSnapshot') && rendererStateSource.includes('aiQueueEvents') && rendererStateSource.includes('aiQueueEventsError') && rendererStateSource.includes('aiQueueLoading') && rendererStateSource.includes('aiQueueSelectedTaskId') && rendererStateSource.includes('aiQueueError') && rendererStateSource.includes('aiQueueAutoRefreshEnabled') && rendererStateSource.includes('aiQueueCancelingTaskId'), 'v0.6.0 P1-C/P1-D/P1-E AI queue panel state alanlari sadece renderer oturumunda tutulur', 'AI queue renderer state eksik');
+assert(rendererMainSource.includes("case 'ai-queue-refresh'") && rendererMainSource.includes('window.hasarbotu.getAiQueueSnapshot') && rendererMainSource.includes('window.hasarbotu.getAiQueueEvents') && rendererMainSource.includes('AI_QUEUE_EVENT_PANEL_LIMIT = 20') && rendererMainSource.includes("case 'ai-queue-cancel'") && rendererMainSource.includes('window.hasarbotu.cancelAiQueueTask') && rendererMainSource.includes("case 'ai-queue-clear-finished'") && rendererMainSource.includes('window.hasarbotu.clearAiQueueFinished'), 'v0.6.0 P1-C/P1-E AI queue panel snapshot/events/cancel/clear IPC metotlarini kullanir', 'AI queue renderer action baglantisi eksik');
+assert(rendererMainSource.includes('AI_QUEUE_ACTIVE_REFRESH_MS = 5000') && rendererMainSource.includes('AI_QUEUE_IDLE_REFRESH_MS = 15000') && rendererMainSource.includes('syncAiQueueAutoRefresh') && rendererMainSource.includes('clearAiQueueAutoRefreshTimer') && rendererMainSource.includes('aiQueueAutoRefreshTimer = window.setTimeout') && rendererMainSource.includes('if (aiQueueAutoRefreshTimer !== null && aiQueueAutoRefreshDelayMs === nextDelay) return'), 'v0.6.0 P1-D AI queue auto-refresh 5sn aktif/15sn idle tek timer ve cleanup ile calisir', 'AI queue auto-refresh timer guard eksik');
+assert(rendererMainSource.includes("case 'ai-queue-toggle-auto-refresh'") && rendererMainSource.includes('toggleAiQueueAutoRefresh') && rendererMainSource.includes('!state.aiQueueAutoRefreshEnabled') && rendererMainSource.includes('clearAiQueueAutoRefreshTimer()'), 'v0.6.0 P1-D AI queue auto-refresh kullanici tarafindan kapatilabilir ve timer temizlenir', 'AI queue auto-refresh toggle/cleanup eksik');
+assert(aiQueuePanelSource.includes('AI Görev Durumu') && aiQueuePanelSource.includes('Şu anda AI görevi yok.') && aiQueuePanelSource.includes('AI görevleri çalıştığında durumları burada görünecek.') && aiQueuePanelSource.includes('Sırada') && aiQueuePanelSource.includes('Çalışıyor') && aiQueuePanelSource.includes('Zaman aşımı'), 'v0.6.0 P1-D AI queue panel bos durum ve yeni status etiketlerini gosterir', 'AI queue panel status/bos durum eksik');
+assert(aiQueuePanelSource.includes('sortAiQueueTasks') && aiQueuePanelSource.includes('taskGroupRank') && aiQueuePanelSource.includes('taskTimestamp(b) - taskTimestamp(a)') && aiQueuePanelSource.includes('MAX_VISIBLE_TASKS = 50'), 'v0.6.0 P1-D AI queue panel gorevleri en yeni ustte ve son 50 gorevle sinirli siralar', 'AI queue siralama/gecmis siniri eksik');
+assert(aiQueuePanelSource.includes('Aktif görevler') && aiQueuePanelSource.includes('Dikkat isteyenler') && aiQueuePanelSource.includes('Tamamlanan son görevler') && aiQueuePanelSource.includes('ACTIVE_STATUSES') && aiQueuePanelSource.includes('ATTENTION_STATUSES') && aiQueuePanelSource.includes('COMPLETED_STATUSES'), 'v0.6.0 P1-D AI queue panel aktif/dikkat/tamamlanan gorevleri ayirir', 'AI queue gorev gruplari eksik');
+assert(aiQueuePanelSource.includes('data-action="ai-queue-cancel"') && aiQueuePanelSource.includes('aiQueueCancelingTaskId') && aiQueuePanelSource.includes('İptal ediliyor') && aiQueuePanelSource.includes('data-action="ai-queue-clear-finished"') && aiQueuePanelSource.includes('Bitmiş görevleri temizle') && aiQueuePanelSource.includes('FINISHED_STATUSES'), 'v0.6.0 P1-D AI queue panel cancel pending ve clear finished UX guardlarini sunar', 'AI queue cancel/clear UX eksik');
+assert(aiQueuePanelSource.includes('progressPercent') && aiQueuePanelSource.includes('Math.max(0, Math.min(100, Math.round(value)))') && rendererStylesSource.includes('.ai-queue-progress') && rendererStylesSource.includes('.ai-queue-group'), 'v0.6.0 P1-D AI queue progress normalize edilir ve grup UI stili korunur', 'AI queue progress/grup CSS eksik');
+assert(aiQueuePanelSource.includes('renderQueueEvents') && aiQueuePanelSource.includes('Son olay') && aiQueuePanelSource.includes('Son olaylar') && aiQueuePanelSource.includes('Henuz AI olayi yok.') && aiQueuePanelSource.includes('renderQueueEventHistory') && aiQueuePanelSource.includes('eventSeverityClass') && rendererStylesSource.includes('.ai-queue-last-event') && rendererStylesSource.includes('.ai-queue-event-row'), 'v0.6.0 P1-E AI queue panel son olay satiri ve read-only event gecmisini render eder', 'AI queue event panel UI eksik');
+assert(aiQueuePanelSource.includes('AI olay gecmisi okunamadi') && aiQueuePanelSource.includes('event.taskType') && aiQueuePanelSource.includes('event.message'), 'v0.6.0 P1-E AI queue event fetch hatasi paneli kirmadan gosterilir ve event listesi taskType/message icerir', 'AI queue event hata/taskType/message guard eksik');
+assert(aiQueuePanelSource.includes('PreviewWrites salt okunur') && aiQueuePanelSource.includes('<pre>') && aiQueuePanelSource.includes('canWriteAutomatically') && aiQueuePanelSource.includes('requiresUserApproval'), 'v0.6.0 P1-C AI queue previewWrites sadece salt okunur ve onay guvenligiyle render edilir', 'AI queue previewWrites read-only guard eksik');
+assert(aiQueuePanelSource.includes('AI sonuçları ön değerlendirmedir') && aiQueuePanelSource.includes("takip.json veya Excel'e yazmaz"), 'v0.6.0 P1-D AI queue panel sabit guvenlik uyarisini render eder', 'AI queue guvenlik uyarisi eksik');
+assert(!/data-action="[^"]*(save|write|apply|persist)|Kaydet|Uygula|Excel'e aktar|takip\.json'a yaz/i.test(aiQueuePanelSource) && !rendererMainSource.includes('enqueueAiPreview('), 'v0.6.0 P1-C AI queue paneli kalici yazma veya yeni gorev baslatma aksiyonu tasimaz', 'AI queue panelinde kalici yazma veya enqueue aksiyonu var');
+assert(!/OpenAI|Claude|Gemini|provider seç|sağlayıcı seç/i.test(aiQueuePanelSource), 'v0.6.0 P1-C AI queue paneli ucretli/harici provider secimi sunmaz', 'AI queue panelinde provider secimi izi var');
+assert(casesQuerySource.includes("readExistingWithIssue(caseIdentityFromIndexItem(analyzed), 'tracking')") && casesQuerySource.includes('issues.filter((issue) => !TRACKING_READ_ISSUE_TYPES.includes(issue.type))') && casesQuerySource.includes('missingPreviouslySeenTrackingIssue(analyzed, writeIndex)'), 'v0.6.0 P1-B Tek Dosyayi Yenile gercek takip.json varsa sahte kayip uyarisi temizler, gercek kaybi korur', 'single refresh takip okuma guard eksik');
+assert(sharedTypesSource.includes('UiFilterPreferences') && settingsNormalizerSource.includes('normalizeUiPreferences') && rendererMainSource.includes('queuePersistUiPreferences') && rendererMainSource.includes('state.settings.uiPreferences = captureUiPreferences()') && rendererMainSource.includes('resetPersistentUiFilters') && !rendererMainSource.includes('statusBoardSearch: state.statusBoardSearch') && !rendererMainSource.includes('search: state.search'), 'v0.6.0 P1-B filtreler AppData settings uiPreferences ile kalici, arama metni kalici degil', 'filtre kaliciligi/aramanin kalici olmamasi guard eksik');
+assert(detailSource.includes('labor-excel-card" hidden aria-hidden="true"') && detailSource.includes('data-action="choose-labor-excel"') && detailSource.includes('AI Otomatik İşçilik Dağıtıcı'), 'v0.6.0 P1-B eski Portal Excel UI gizli, manuel kod korunur ve AI otomatik iscilik gorunur', 'Portal Excel gizleme veya AI kart korumasi eksik');
+
+const normalizedUiSettings = normalizeSettings({
+  rootPath: path.join(os.tmpdir(), 'hasarbotu-ui-prefs'),
+  rootPathConfirmed: true,
+  theme: 'light',
+  zoom: 1,
+  activeUser: 'UI Test',
+  activeComputer: 'TEST-PC',
+  users: ['UI Test'],
+  scanIntervals: { fullYearLightMs: 300000 },
+  uiPreferences: {
+    caseList: { quickFilter: 'risk', responsibleFilter: 'Baran', serviceFilter: 'Servis A', statusFilter: 'Onarımda', sortMode: 'followup-asc', advancedOpen: true },
+    statusBoard: { sort: 'durum', statusFilter: 'Portal Kontrol', showClosed: true, advancedOpen: true, responsibleFilter: 'Baran', missingOnly: true, openTodoOnly: true }
+  }
+});
+assert(normalizedUiSettings.uiPreferences?.caseList.quickFilter === 'risk' && normalizedUiSettings.uiPreferences.statusBoard.sort === 'durum' && !JSON.stringify(normalizedUiSettings.uiPreferences).includes('search'), 'v0.6.0 P1-B uiPreferences normalize edilir ve arama metni saklanmaz', JSON.stringify(normalizedUiSettings.uiPreferences));
 
 const autoLaborPreviewFixture = {
   filePath: 'fixture.xlsx',

@@ -1,10 +1,10 @@
 # Ofis Dağıtım Kontrol Listesi
 
-Bu kontrol listesi HasarBotu v0.5.0'nin Baran Global Ekspertiz ofis bilgisayarlarına güvenli ve tutarlı şekilde dağıtılması için kullanılır.
+Bu kontrol listesi HasarBotu v0.6.0'nin Baran Global Ekspertiz ofis bilgisayarlarına güvenli ve tutarlı şekilde dağıtılması için kullanılır.
 
 ## 1. Sürüm Hazırlığı
 
-- [ ] `package.json`, `package-lock.json` ve `APP_VERSION` v0.5.0 ile uyumlu.
+- [ ] `package.json`, `package-lock.json` ve `APP_VERSION` v0.6.0 ile uyumlu.
 - [ ] `npm run typecheck` geçti.
 - [ ] `npm run build` geçti.
 - [ ] `npm run ci` geçti.
@@ -21,10 +21,10 @@ Bu kontrol listesi HasarBotu v0.5.0'nin Baran Global Ekspertiz ofis bilgisayarla
 
 ## 3. Ofis Sürüm Hizalaması
 
-Ofis hedef sürümü v0.5.0 olarak kaydedin:
+Ofis hedef sürümü v0.6.0 olarak kaydedin:
 
 ```powershell
-npm run live:version-check -- -RootPath "D:\BARAN_GLOBAL_EKSPERTIZ\2026" -ExpectedVersion 0.5.0 -SetExpected -RegisterThisPC
+npm run live:version-check -- -RootPath "D:\BARAN_GLOBAL_EKSPERTIZ\2026" -ExpectedVersion 0.6.0 -SetExpected -RegisterThisPC
 ```
 
 - [ ] Her bilgisayar "Bu PC'yi Kaydet" akışıyla kayıt altına alındı.
@@ -62,5 +62,5 @@ npm run live:version-check -- -RootPath "D:\BARAN_GLOBAL_EKSPERTIZ\2026" -Expect
 - [ ] En az bir açık dosyada not/görev ekleme testi yapıldı.
 - [ ] Tek dosya yenileme çalıştı.
 - [ ] Filtrelenmiş dosya listesi Excel export çalıştı.
-- [ ] Portal Excel işçilik önizleme ve ayrı çıktı kaydetme akışı test edildi.
+- [ ] AI Otomatik İşçilik Dağıtıcı önizleme, son onay ve ayrı çıktı kaydetme akışı test edildi.
 - [ ] Geri dönüş planı ve önceki stabil EXE hazır.

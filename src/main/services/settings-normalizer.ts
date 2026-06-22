@@ -1,6 +1,7 @@
-import type { AppSettings } from '../../shared/types';
+import type { AppSettings, UiCaseListSortMode, UiFilterPreferences, UiStatusBoardSortMode } from '../../shared/types';
 import { DEFAULT_PCLOUD_ROOT } from '../../shared/constants';
 import { safeFileDisplayName } from '../../shared/turkish';
+import { WORKFLOW_STATUSES } from '../../shared/workflow';
 
 /**
  * Ayarlar / dağıtım (deployment) normalize ve sürüm karşılaştırma yardımcıları.
@@ -61,6 +62,64 @@ export function normalizeSettings(input: AppSettings): AppSettings {
     scanIntervals: {
       fullYearLightMs: clampInterval(rest.scanIntervals?.fullYearLightMs, 300000, 3600000, 300000)
     },
+    uiPreferences: normalizeUiPreferences(rest.uiPreferences),
     ...(geminiApiKey ? { geminiApiKey } : {})
   };
+}
+
+export function normalizeUiPreferences(input: unknown): UiFilterPreferences {
+  const raw = typeof input === 'object' && input !== null ? input as Partial<UiFilterPreferences> : {};
+  const caseList: Partial<UiFilterPreferences['caseList']> = typeof raw.caseList === 'object' && raw.caseList !== null ? raw.caseList : {};
+  const statusBoard: Partial<UiFilterPreferences['statusBoard']> = typeof raw.statusBoard === 'object' && raw.statusBoard !== null ? raw.statusBoard : {};
+  return {
+    caseList: {
+      quickFilter: allowedString(caseList.quickFilter, CASE_LIST_FILTERS, 'all'),
+      responsibleFilter: safeFilterValue(caseList.responsibleFilter),
+      serviceFilter: safeFilterValue(caseList.serviceFilter),
+      statusFilter: safeFilterValue(caseList.statusFilter),
+      sortMode: allowedString(caseList.sortMode, CASE_LIST_SORTS, 'plate-az') as UiCaseListSortMode,
+      advancedOpen: caseList.advancedOpen === true
+    },
+    statusBoard: {
+      sort: allowedString(statusBoard.sort, STATUS_BOARD_SORTS, 'dosya-az') as UiStatusBoardSortMode,
+      statusFilter: allowedString(statusBoard.statusFilter, ['all', ...WORKFLOW_STATUSES], 'all'),
+      showClosed: statusBoard.showClosed === true,
+      advancedOpen: statusBoard.advancedOpen === true,
+      responsibleFilter: safeFilterValue(statusBoard.responsibleFilter),
+      missingOnly: statusBoard.missingOnly === true,
+      openTodoOnly: statusBoard.openTodoOnly === true
+    }
+  };
+}
+
+const CASE_LIST_FILTERS = [
+  'all',
+  'mine',
+  'overdue',
+  'today',
+  'week',
+  'risk',
+  'unassigned',
+  'stale',
+  'quality',
+  'open',
+  'closed',
+  'missing-docs',
+  'missing-photos',
+  'photo-format',
+  'portal',
+  'rucu'
+] as const;
+const CASE_LIST_SORTS = ['plate-az', 'plate-za', 'office-az', 'notice-az', 'updated-desc', 'followup-asc'] as const;
+const STATUS_BOARD_SORTS = ['dosya-az', 'plate-az', 'updated-desc', 'durum'] as const;
+
+function allowedString<T extends readonly string[]>(value: unknown, allowed: T, fallback: T[number]): T[number] {
+  return typeof value === 'string' && allowed.includes(value) ? value : fallback;
+}
+
+function safeFilterValue(value: unknown): string {
+  const cleaned = typeof value === 'string'
+    ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)
+    : '';
+  return cleaned || 'all';
 }

@@ -152,6 +152,7 @@ function renderFilterSelects(state: UiState): string {
   const responsibleOptions = buildResponsibleOptions(state.cases);
   const serviceOptions = buildServiceOptions(state.cases);
   const statusOptions = buildStatusOptions(state.cases);
+  const filterActive = isCaseFilterActive(state);
   return `<div class="filter-selects compact-filter-selects">
     <label>Sorumlu<select data-list-filter="responsible">${selectOptions(['all', ...responsibleOptions], state.responsibleFilter, 'Tümü')}</select></label>
     <label>Servis<select data-list-filter="service">${selectOptions(['all', ...serviceOptions], state.serviceFilter, 'Tümü')}</select></label>
@@ -165,7 +166,18 @@ function renderFilterSelects(state: UiState): string {
       <option value="followup-asc" ${state.sortMode === 'followup-asc' ? 'selected' : ''}>Takip Tarihi</option>
     </select></label>
     <button class="secondary compact advanced-filters-toggle ${state.advancedFiltersOpen ? 'active' : ''}" data-action="toggle-advanced-filters" aria-expanded="${state.advancedFiltersOpen ? 'true' : 'false'}" title="Gelişmiş filtreleri ${state.advancedFiltersOpen ? 'gizle' : 'göster'}">${icon('details')}<span>Gelişmiş Filtreler</span></button>
+    ${filterActive ? `<button class="ghost compact" data-action="clear-case-filters" title="Dosya listesi filtrelerini temizle">${icon('refresh')}<span>Temizle</span></button>` : ''}
   </div>`;
+}
+
+function isCaseFilterActive(state: UiState): boolean {
+  return state.search.trim() !== ''
+    || state.filter !== 'all'
+    || state.responsibleFilter !== 'all'
+    || state.serviceFilter !== 'all'
+    || state.statusFilter !== 'all'
+    || state.sortMode !== 'plate-az'
+    || state.advancedFiltersOpen;
 }
 
 function buildResponsibleOptions(cases: CaseIndexItem[]): string[] {

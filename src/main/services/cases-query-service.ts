@@ -274,11 +274,29 @@ export class CasesQueryService {
 
   private async applySingleRefreshSafety(previous: CaseIndexItem | undefined, analyzed: CaseIndexItem, rootPath: string): Promise<CaseIndexItem> {
     const writeIndex = await this.context.cache.readTrackingWriteIndex(rootPath);
-    const issues: CaseTrackingIssue[] = [...(analyzed.caseIssues ?? [])];
-    const missing = missingPreviouslySeenTrackingIssue(analyzed, writeIndex);
-    const regression = revisionRegressionIssue(analyzed, analyzed.tracking, writeIndex);
-    const divergence = sameRevisionDifferentWriteIssue(analyzed, analyzed.tracking, writeIndex);
-    const conflictCopy = pcloudConflictCopyIssue(analyzed);
+    let safeAnalyzed = analyzed;
+    let issues: CaseTrackingIssue[] = [...(analyzed.caseIssues ?? [])];
+    let missing: CaseTrackingIssue | null = null;
+
+    try {
+      const read = await this.context.tracking.readExistingWithIssue(caseIdentityFromIndexItem(analyzed), 'tracking');
+      if (read.issue) {
+        issues.push(read.issue);
+      } else if (read.tracking) {
+        safeAnalyzed = hasTrackingCacheDifference(analyzed, read.tracking)
+          ? applyTrackingToCaseIndexItem(analyzed, read.tracking)
+          : { ...analyzed, tracking: read.tracking };
+        issues = issues.filter((issue) => !TRACKING_READ_ISSUE_TYPES.includes(issue.type));
+      } else {
+        missing = missingPreviouslySeenTrackingIssue(analyzed, writeIndex);
+      }
+    } catch {
+      missing = missingPreviouslySeenTrackingIssue(analyzed, writeIndex);
+    }
+
+    const regression = revisionRegressionIssue(safeAnalyzed, safeAnalyzed.tracking, writeIndex);
+    const divergence = sameRevisionDifferentWriteIssue(safeAnalyzed, safeAnalyzed.tracking, writeIndex);
+    const conflictCopy = pcloudConflictCopyIssue(safeAnalyzed);
     for (const issue of [missing, regression, divergence, conflictCopy]) {
       if (issue) issues.push(issue);
     }
@@ -287,13 +305,13 @@ export class CasesQueryService {
     let output = blocking && previous
       ? {
           ...previous,
-          documentAnalysis: analyzed.documentAnalysis,
-          photoAnalysis: analyzed.photoAnalysis,
-          folderContents: analyzed.folderContents,
-          fingerprint: analyzed.fingerprint,
-          searchText: analyzed.searchText
+          documentAnalysis: safeAnalyzed.documentAnalysis,
+          photoAnalysis: safeAnalyzed.photoAnalysis,
+          folderContents: safeAnalyzed.folderContents,
+          fingerprint: safeAnalyzed.fingerprint,
+          searchText: safeAnalyzed.searchText
         }
-      : analyzed;
+      : safeAnalyzed;
 
     if (issues.length > 0) {
       for (const issue of issues) output = upsertCaseIssue(output, issue);

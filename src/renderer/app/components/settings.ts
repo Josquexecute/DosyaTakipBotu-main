@@ -2,6 +2,8 @@ import type { UiState } from '../state';
 import { escapeHtml } from '../validation';
 import { APP_VERSION } from '../../../shared/constants';
 import { icon } from '../icons';
+import { renderAiQueuePanel } from './ai-queue-panel';
+import { renderKnowledgePanel } from './knowledge-panel';
 import { LABOR_CATEGORIES, type LaborCategory } from '../../../shared/labor-rules';
 import { normalizeSearch } from '../../../shared/turkish';
 import type { LaborLearningEntry } from '../../../shared/labor-learning-dictionary';
@@ -79,6 +81,10 @@ export function renderSettingsPage(state: UiState): string {
           </label>
         </div>
       </div>
+
+      ${renderAiQueuePanel(state)}
+
+      ${renderKnowledgePanel(state)}
 
       ${renderLaborLearningCard(state)}
 

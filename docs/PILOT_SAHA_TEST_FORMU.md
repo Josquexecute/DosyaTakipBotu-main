@@ -1,6 +1,6 @@
 # Pilot Saha Test Formu
 
-HasarBotu v0.5.0 Saha Pilot v2 sırasında doldurulur.
+HasarBotu v0.6.0 Saha Pilot v2 sırasında doldurulur.
 
 ## Bilgi
 
@@ -10,7 +10,7 @@ HasarBotu v0.5.0 Saha Pilot v2 sırasında doldurulur.
 | Bilgisayar | |
 | Kullanıcı | |
 | Test edilen klasör | |
-| Uygulama sürümü | v0.5.0 |
+| Uygulama sürümü | v0.6.0 |
 
 ## Dashboard ve Liste
 
@@ -37,7 +37,7 @@ HasarBotu v0.5.0 Saha Pilot v2 sırasında doldurulur.
 
 ## Excel ve AI İşçilik
 
-- [ ] Portal Excel önizleme oluşturdu.
+- [ ] AI Otomatik İşçilik önizlemesi oluşturdu.
 - [ ] Giriş dosyası üzerine doğrudan yazma engellendi.
 - [ ] AI İşçilik Dağıtıcı C sütununu ana açıklama olarak kullandı.
 - [ ] A sütunu parça adı kabul edilmedi.

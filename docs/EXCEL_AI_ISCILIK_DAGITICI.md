@@ -1,6 +1,6 @@
 # Excel / AI İşçilik Dağıtıcı
 
-AI İşçilik Dağıtıcı, portal Excel dosyalarında parça açıklamalarını okuyup H-N işçilik kolonları için öneri üretir. v0.5.0 ile gerçek portal kolon yapısı sabitlenmiştir.
+AI İşçilik Dağıtıcı, portal Excel dosyalarında parça açıklamalarını okuyup H-N işçilik kolonları için öneri üretir. v0.6.0 ile gerçek portal kolon yapısı sabitlenmiştir.
 
 ## Portal Excel Kolon Yapısı
 
@@ -48,7 +48,7 @@ AI İşçilik Dağıtıcı, portal Excel dosyalarında parça açıklamalarını
 | Karar gerekçesi | Kural, öğrenme veya fiyat listesi temelli açıklama |
 | Düzenleme alanı | Kullanıcının satırı elle düzeltmesi için |
 
-## v0.5.0 Önizleme ve Kontrol Deneyimi
+## v0.6.0 Önizleme ve Kontrol Deneyimi
 
 Önizleme ekranı artık büyük portal Excel dosyalarında hızlı kontrol için tasarlanmıştır:
 

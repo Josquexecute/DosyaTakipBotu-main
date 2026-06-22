@@ -390,6 +390,29 @@ export interface DashboardSummary {
   rootAvailable: boolean;
 }
 
+export type UiCaseListSortMode = 'plate-az' | 'plate-za' | 'office-az' | 'notice-az' | 'updated-desc' | 'followup-asc';
+export type UiStatusBoardSortMode = 'dosya-az' | 'plate-az' | 'updated-desc' | 'durum';
+
+export interface UiFilterPreferences {
+  caseList: {
+    quickFilter: string;
+    responsibleFilter: string;
+    serviceFilter: string;
+    statusFilter: string;
+    sortMode: UiCaseListSortMode;
+    advancedOpen: boolean;
+  };
+  statusBoard: {
+    sort: UiStatusBoardSortMode;
+    statusFilter: string;
+    showClosed: boolean;
+    advancedOpen: boolean;
+    responsibleFilter: string;
+    missingOnly: boolean;
+    openTodoOnly: boolean;
+  };
+}
+
 export interface AppSettings {
   rootPath: string;
   /** Ana klasör kullanıcı tarafından açıkça seçildiyse true olur. Eski kurulumlarda false kabul edilir. */
@@ -405,6 +428,8 @@ export interface AppSettings {
   };
   /** Parça listesi fotoğrafı analizi için Google Gemini API anahtarı. Yalnızca bu bilgisayarın yerel ayarında tutulur. */
   geminiApiKey?: string;
+  /** v0.6.0 P1-B: Yalnizca AppData ayarlarinda tutulan UI filtre tercihleri; takip.json semasina yazilmaz. */
+  uiPreferences?: UiFilterPreferences;
 }
 
 export interface AnalyzedPartRow {

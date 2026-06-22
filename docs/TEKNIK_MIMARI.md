@@ -1,6 +1,6 @@
 # Teknik Mimari
 
-HasarBotu v0.5.0 Electron, TypeScript ve local-first dosya sistemi yaklaşımıyla geliştirilmiş bir masaüstü uygulamasıdır.
+HasarBotu v0.6.0 Electron, TypeScript ve local-first dosya sistemi yaklaşımıyla geliştirilmiş bir masaüstü uygulamasıdır.
 
 ## Katmanlar
 

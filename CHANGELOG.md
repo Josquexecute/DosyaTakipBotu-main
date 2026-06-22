@@ -2,6 +2,16 @@
 
 Tüm önemli değişiklikler bu dosyada tutulur. Sürümleme [SemVer](https://semver.org/lang/tr/) yaklaşımına yakındır.
 
+## [0.6.0] — 2026-06-21
+
+### Düzeltildi — Sürüm damgası hizalaması (hotfix)
+- Kaynak kod v0.6.0 seviyesinde olmasına rağmen `package.json`, `package-lock.json` ve `APP_VERSION` hâlâ `0.5.0` raporluyordu. Bu, `DeploymentService` üzerinden yapılan ofis dağıtım/güncellik (`compareVersions(APP_VERSION, expectedVersion)`) kontrolünü yanlış etkileyebiliyordu.
+- Runtime sürümü (`APP_VERSION`), `package.json`/`package-lock.json` sürümü ve final office audit sürüm kapısı (`scripts/final-office-audit.mjs`) `0.6.0` olarak hizalandı.
+- README, `docs/` dokümanları ve docs changelog'undaki kullanıcıya görünen `v0.5.0` damgaları `v0.6.0` ile uyumlu hâle getirildi.
+
+### Değişmedi
+- Yeni özellik eklenmedi, refactor yapılmadı. `takip.json` şeması, atomic write / revision / writeId davranışı; Excel, AppData, Bilgi Bankası, AI Queue, Gemini, OCR ve ücretli sağlayıcı tarafı **değiştirilmedi**. Yalnızca sürüm damgaları ve doküman uyumu güncellendi.
+
 ## [0.5.0] — 2026-06-19
 
 ### Eklendi — Ağır Hasar AI ön değerlendirme

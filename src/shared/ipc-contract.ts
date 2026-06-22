@@ -25,10 +25,16 @@ import type {
 import type { UserPartTerm } from './parca-sozlugu';
 import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from './labor-learning-dictionary';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageClearArgs, HeavyDamageGenerateNoteArgs, HeavyDamageGetArgs, HeavyDamagePreviewArgs, HeavyDamageSaveArgs } from './heavy-damage-types';
+import type { AiQueueHistoryEvent, AiQueuedTask, AiTaskQueuePriority, AiTaskQueueSnapshot } from './ai/ai-queue-types';
+import type { AiPrivacyLevel, AiTaskType } from './ai/ai-task-types';
+import type { KnowledgeChunk, KnowledgeImportCommitInput, KnowledgeImportCommitResult, KnowledgeImportDryRunResponse, KnowledgeImportTextPreview, KnowledgeSearchQuery, KnowledgeSearchResponse, KnowledgeSource } from './knowledge';
 
 export type { ApiResult };
 export type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from './labor-learning-dictionary';
 export type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageClearArgs, HeavyDamageGenerateNoteArgs, HeavyDamageGetArgs, HeavyDamagePreviewArgs, HeavyDamageSaveArgs } from './heavy-damage-types';
+export type { AiQueueHistoryEvent, AiQueuedTask, AiTaskQueuePriority, AiTaskQueueSnapshot } from './ai/ai-queue-types';
+export type { AiPrivacyLevel, AiTaskType } from './ai/ai-task-types';
+export type { KnowledgeChunk, KnowledgeImportCommitInput, KnowledgeImportCommitResult, KnowledgeImportDryRunResponse, KnowledgeImportTextPreview, KnowledgeSearchQuery, KnowledgeSearchResponse, KnowledgeSource } from './knowledge';
 
 export const IPC_INVOKE_CHANNELS = {
   settingsGet: 'settings:get',
@@ -58,6 +64,20 @@ export const IPC_INVOKE_CHANNELS = {
   laborLearningDelete: 'labor-learning:delete',
   laborLearningExport: 'labor-learning:export',
   laborLearningImport: 'labor-learning:import',
+  aiQueueGetSnapshot: 'aiQueue:getSnapshot',
+  aiQueueGetEvents: 'aiQueue:getEvents',
+  aiQueueGetTask: 'aiQueue:getTask',
+  aiQueueEnqueuePreview: 'aiQueue:enqueuePreview',
+  aiQueueCancelTask: 'aiQueue:cancelTask',
+  aiQueueClearFinished: 'aiQueue:clearFinished',
+  knowledgeSearch: 'knowledge:search',
+  knowledgeListSources: 'knowledge:listSources',
+  knowledgeGetSource: 'knowledge:getSource',
+  knowledgeGetChunk: 'knowledge:getChunk',
+  knowledgeImportDryRunPlan: 'knowledge-import:dry-run-plan',
+  knowledgeImportChooseFilesDryRun: 'knowledge-import:choose-files-dry-run',
+  knowledgeImportPreviewTextFile: 'knowledge-import:preview-text-file',
+  knowledgeImportCommitApprovedTextPreview: 'knowledge-import:commit-approved-text-preview',
   heavyDamagePreview: 'heavy-damage:preview',
   heavyDamageGet: 'heavy-damage:get',
   heavyDamageSave: 'heavy-damage:save',
@@ -129,6 +149,20 @@ export interface PartsExportLaborArgs {
   rows: Array<{ description: string; partAmount: number; laborAmount: number }>;
 }
 
+/** v0.6.0 P1-B: read-only/preview AI queue IPC argümanları. Kalıcı yazma endpoint'i değildir. */
+export interface AiQueueEnqueuePreviewArgs {
+  taskId?: string;
+  taskType: AiTaskType;
+  caseId?: string;
+  plate?: string;
+  claimNo?: string;
+  input?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+  privacyLevel?: AiPrivacyLevel;
+  timeoutMs?: number;
+  priority?: AiTaskQueuePriority;
+}
+
 /** v0.4.7: Parça fotoğrafı okumada aktif dosya bağlamı — yanlış plakalı fotoğrafı engellemek için. */
 export interface PartsAnalyzePhotoArgs {
   activePlate?: string;
@@ -149,6 +183,13 @@ export interface LaborAutoSaveArgs {
 
 export interface CaseListExportExcelArgs {
   rows: CaseListExportRow[];
+}
+
+/** v0.6.0 P3-G: read-only dry-run import plan IPC argumanlari. Yalniz dosya-adi metadata; icerik okunmaz, canWrite=false. */
+export interface KnowledgeImportDryRunPlanArgs {
+  files: Array<{ fileName: string; sizeBytes?: number }>;
+  preferredSourceKind?: string;
+  preferredTags?: string[];
 }
 
 export type TrackingUpdateChecklistArgs = TrackingMutationArgsBase & { key: string; completed: boolean };
@@ -185,6 +226,20 @@ export interface HasarbotuApi {
   laborLearningDelete<T = LaborLearningEntry[]>(args: LaborLearningAdminKey): Promise<ApiResult<T>>;
   laborLearningExport<T = LaborLearningExportResult>(): Promise<ApiResult<T>>;
   laborLearningImport<T = LaborLearningImportResult>(): Promise<ApiResult<T>>;
+  getAiQueueSnapshot<T = AiTaskQueueSnapshot>(): Promise<ApiResult<T>>;
+  getAiQueueEvents<T = AiQueueHistoryEvent[]>(limit?: number): Promise<ApiResult<T>>;
+  getAiQueueTask<T = AiQueuedTask | null>(queueTaskId: string): Promise<ApiResult<T>>;
+  enqueueAiPreview<T = AiQueuedTask>(args: AiQueueEnqueuePreviewArgs): Promise<ApiResult<T>>;
+  cancelAiQueueTask<T = boolean>(queueTaskId: string, reason?: string): Promise<ApiResult<T>>;
+  clearAiQueueFinished<T = number>(): Promise<ApiResult<T>>;
+  searchKnowledge<T = KnowledgeSearchResponse>(query: KnowledgeSearchQuery | string): Promise<ApiResult<T>>;
+  listKnowledgeSources<T = KnowledgeSource[]>(): Promise<ApiResult<T>>;
+  getKnowledgeSource<T = KnowledgeSource | null>(sourceId: string): Promise<ApiResult<T>>;
+  getKnowledgeChunk<T = KnowledgeChunk | null>(chunkId: string): Promise<ApiResult<T>>;
+  dryRunKnowledgeImportPlan<T = KnowledgeImportDryRunResponse>(args: KnowledgeImportDryRunPlanArgs): Promise<ApiResult<T>>;
+  chooseFilesForKnowledgeImportDryRun<T = KnowledgeImportDryRunResponse | null>(): Promise<ApiResult<T>>;
+  previewTextFileForKnowledgeImport<T = KnowledgeImportTextPreview | null>(): Promise<ApiResult<T>>;
+  commitApprovedKnowledgeImportTextPreview<T = KnowledgeImportCommitResult>(args: KnowledgeImportCommitInput): Promise<ApiResult<T>>;
   heavyDamagePreview<T = HeavyDamageAssessmentPreview>(args: HeavyDamagePreviewArgs): Promise<ApiResult<T>>;
   heavyDamageGet<T = HeavyDamageAssessmentRecord | null>(args: HeavyDamageGetArgs): Promise<ApiResult<T>>;
   heavyDamageSave<T = TrackingWriteResult>(args: HeavyDamageSaveArgs): Promise<ApiResult<T>>;

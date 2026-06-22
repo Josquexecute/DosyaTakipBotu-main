@@ -1,6 +1,6 @@
 # Veri Güvenliği
 
-HasarBotu v0.5.0 local-first çalışır. Uygulamanın ana veri güvenliği hedefi, canlı dosya klasörlerinde kullanıcı verisini sessizce ezmemek ve riskli senaryoları görünür hale getirmektir.
+HasarBotu v0.6.0 local-first çalışır. Uygulamanın ana veri güvenliği hedefi, canlı dosya klasörlerinde kullanıcı verisini sessizce ezmemek ve riskli senaryoları görünür hale getirmektir.
 
 ## Source of Truth
 
@@ -94,7 +94,7 @@ Aynı araç/plaka birden fazla hasar dosyasında bulunabilir. HasarBotu yalnızc
 
 ## Excel Güvenliği
 
-- Portal Excel önizleme olmadan yazılmaz.
+- AI işçilik Excel akışı önizleme ve son onay olmadan yazmaz.
 - Giriş dosyasıyla aynı çıktı yolu engellenir.
 - Formüllü hücrelerin ezilmesi açık onay gerektirir.
 - AI İşçilik Dağıtıcı orijinal dosyayı korur ve ayrı çıktı dosyası üretir.

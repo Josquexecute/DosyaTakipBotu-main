@@ -1,6 +1,6 @@
 # HasarBotu Dokümantasyon Merkezi
 
-Bu klasör HasarBotu v0.5.0 için kullanım, kurulum, veri güvenliği, Excel/AI işçilik dağıtımı ve ofis release süreçlerini tek merkezde toplar.
+Bu klasör HasarBotu v0.6.0 için kullanım, kurulum, veri güvenliği, Excel/AI işçilik dağıtımı ve ofis release süreçlerini tek merkezde toplar.
 
 ## Ana Dokümanlar
 
@@ -16,11 +16,11 @@ Bu klasör HasarBotu v0.5.0 için kullanım, kurulum, veri güvenliği, Excel/AI
 | [KULLANIM_KILAVUZU.md](KULLANIM_KILAVUZU.md#ağır-hasar-ai-ön-değerlendirme) | Ağır Hasar AI ön değerlendirme, yapısal eşik ve firewall teyidi | Operasyon / geliştirici |
 | [SORUN_GIDERME.md](SORUN_GIDERME.md) | Sık karşılaşılan sorunlar ve ilk müdahale | Operasyon / destek |
 | [TEKNIK_MIMARI.md](TEKNIK_MIMARI.md) | Katmanlar, veri akışı, test ve kalite kapıları | Geliştirici |
-| [CHANGELOG.md](CHANGELOG.md) | v0.5.0 dokümantasyon ve ürün özeti | Tüm ekip |
+| [CHANGELOG.md](CHANGELOG.md) | v0.6.0 dokümantasyon ve ürün özeti | Tüm ekip |
 
 ## Uyumluluk İçin Korunan Dokümanlar
 
-Bazı eski dosya adları audit ve saha kabul komutları tarafından beklenir. Bu dosyalar silinmez; içerikleri v0.5.0 ile uyumlu tutulur.
+Bazı eski dosya adları audit ve saha kabul komutları tarafından beklenir. Bu dosyalar silinmez; içerikleri v0.6.0 ile uyumlu tutulur.
 
 | Dosya | Durum |
 | --- | --- |
@@ -30,11 +30,11 @@ Bazı eski dosya adları audit ve saha kabul komutları tarafından beklenir. Bu
 | [PILOT_KABUL_PLANI.md](PILOT_KABUL_PLANI.md) | Saha Pilot v2 kabul planı |
 | [PILOT_SAHA_TEST_FORMU.md](PILOT_SAHA_TEST_FORMU.md) | Pilot saha test formu |
 | [STITCH_UI_INTEGRATION.md](STITCH_UI_INTEGRATION.md) | UI entegrasyon notları |
-| [V0.4.0_PRODUCTION_CANDIDATE.md](V0.4.0_PRODUCTION_CANDIDATE.md) | Audit uyumlu üretim adayı notu; içerik v0.5.0'ye göre günceldir |
+| [V0.4.0_PRODUCTION_CANDIDATE.md](V0.4.0_PRODUCTION_CANDIDATE.md) | Audit uyumlu üretim adayı notu; içerik v0.6.0'ye göre günceldir |
 
 ## Dokümantasyon İlkeleri
 
 - Dokümanlarda yalnızca mevcut ürün davranışı anlatılır.
 - Kod, script, test veya `takip.json` şeması bu klasörden değiştirilmez.
-- Sürüm referansı v0.5.0 olarak tutulur.
+- Sürüm referansı v0.6.0 olarak tutulur.
 - Detaylı rehberler ana dokümanlara taşınır; eski dosyalar kısa ve yönlendirici kalır.

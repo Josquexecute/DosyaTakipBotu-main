@@ -1,6 +1,6 @@
 # Canlı Geçiş Kararı
 
-Bu doküman HasarBotu v0.5.0'nin ofis kullanımına alınması için kısa karar kaydıdır.
+Bu doküman HasarBotu v0.6.0'nin ofis kullanımına alınması için kısa karar kaydıdır.
 
 ## Kabul Kapıları
 
@@ -10,7 +10,7 @@ Bu doküman HasarBotu v0.5.0'nin ofis kullanımına alınması için kısa karar
 - [ ] `npm run final-office-audit` geçti.
 - [ ] `npm audit` temiz.
 - [ ] Windows EXE üretildi ve SHA-256 çıktısı alındı.
-- [ ] Ofis hedef sürümü v0.5.0 olarak kaydedildi.
+- [ ] Ofis hedef sürümü v0.6.0 olarak kaydedildi.
 - [ ] Önceki stabil EXE ve takip yedeği saklandı.
 
 ## Canlı Kullanım Şartları

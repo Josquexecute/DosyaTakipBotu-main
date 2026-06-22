@@ -18,11 +18,15 @@ import type {
   PartsPhotoAnalysis,
   ThumbnailResult,
   TrackingFile,
-  TrackingWriteResult
+  TrackingWriteResult,
+  UiFilterPreferences
 } from '../shared/types';
 import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from '../shared/ipc-contract';
 import type { LaborCategory } from '../shared/labor-rules';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageDamageType, HeavyDamageRepairSeverity, HeavyDamageRowEdit } from '../shared/heavy-damage-types';
+import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../shared/ai/ai-queue-types';
+import type { KnowledgeImportCommitInput, KnowledgeImportCommitResult, KnowledgeImportDryRunResponse, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceType } from '../shared/knowledge';
+import { applyKnowledgeImportApprovalDecision, buildKnowledgeImportCommitPlan, createKnowledgeImportApprovalState } from '../shared/knowledge';
 import { applyHeavyDamageEdits, generateHeavyDamageAssessmentNote, HEAVY_DAMAGE_FILTERS, type HeavyDamageFilter } from '../shared/heavy-damage-rules';
 import { renderApp } from './app/components/layout';
 import { getFilteredCases, getVirtualListTotalHeight, renderCaseVirtualRows } from './app/components/cases';
@@ -52,9 +56,16 @@ let autoLaborSearchDebounceTimer: number | null = null;
 let scanRequestInFlight = false;
 let toastAutoDismissTimer: number | null = null;
 let errorAutoDismissTimer: number | null = null;
+let uiPreferencesPersistTimer: number | null = null;
+let aiQueueAutoRefreshTimer: number | null = null;
+let aiQueueAutoRefreshDelayMs: number | null = null;
 const SEARCH_DEBOUNCE_MS = 200;
 const ERROR_AUTO_DISMISS_MS = 12000;
+const AI_QUEUE_ACTIVE_REFRESH_MS = 5000;
+const AI_QUEUE_IDLE_REFRESH_MS = 15000;
+const AI_QUEUE_EVENT_PANEL_LIMIT = 20;
 const THUMBNAIL_LOAD_CONCURRENCY = 4;
+const KNOWLEDGE_SOURCE_TYPES: KnowledgeSourceType[] = ['guide', 'note', 'template', 'policy_rule', 'fault_rule', 'heavy_damage_rule', 'labor_rule', 'document_rule', 'office_note'];
 const mutationQueue = createMutationQueue();
 
 // v0.4.2: Açılışta beklenmeyen bir hata olursa beyaz ekran yerine kompakt bir bilgilendirme gösterilir.
@@ -91,6 +102,8 @@ async function boot(): Promise<void> {
     state.activeTab = 'settings';
     setToast('İlk kullanım için ana klasörü siz seçmelisiniz.', 'warning');
     render();
+    void loadAiQueueSnapshot(false);
+    void loadKnowledgeSources(false);
     return;
   }
 
@@ -103,7 +116,10 @@ async function boot(): Promise<void> {
 
 async function loadSettings(): Promise<void> {
   const result = await window.hasarbotu.getSettings<AppSettings>();
-  if (result.ok) state.settings = result.data;
+  if (result.ok) {
+    state.settings = result.data;
+    applyUiPreferences(result.data.uiPreferences);
+  }
   else state.error = result.error.message;
 }
 
@@ -116,6 +132,359 @@ async function loadDeploymentStatus(): Promise<void> {
   }
 }
 
+async function loadAiQueueSnapshot(showToast = false): Promise<void> {
+  if (state.aiQueueLoading) return;
+  state.aiQueueLoading = true;
+  state.aiQueueError = '';
+  state.aiQueueEventsError = '';
+  render();
+  const [snapshotResult, eventsResult] = await Promise.all([
+    window.hasarbotu.getAiQueueSnapshot<AiTaskQueueSnapshot>(),
+    window.hasarbotu.getAiQueueEvents<AiQueueHistoryEvent[]>(AI_QUEUE_EVENT_PANEL_LIMIT)
+  ]);
+  state.aiQueueLoading = false;
+  state.aiQueueLastLoadedAt = new Date().toISOString();
+  if (snapshotResult.ok) {
+    state.aiQueueSnapshot = snapshotResult.data;
+    const selectedStillExists = snapshotResult.data.tasks.some((task) => task.queueTaskId === state.aiQueueSelectedTaskId);
+    state.aiQueueSelectedTaskId = selectedStillExists ? state.aiQueueSelectedTaskId : (snapshotResult.data.tasks[0]?.queueTaskId ?? '');
+    if (showToast) setToast('AI görev durumu yenilendi.', 'success');
+  } else {
+    state.aiQueueError = snapshotResult.error.message;
+    if (showToast) setToast('AI görev durumu okunamadı.', 'warning');
+  }
+  if (eventsResult.ok) state.aiQueueEvents = eventsResult.data;
+  else state.aiQueueEventsError = eventsResult.error.message;
+  render();
+}
+
+function selectAiQueueTask(queueTaskId?: string): void {
+  state.aiQueueSelectedTaskId = queueTaskId ?? '';
+  render();
+}
+
+function toggleAiQueueAutoRefresh(): void {
+  state.aiQueueAutoRefreshEnabled = !state.aiQueueAutoRefreshEnabled;
+  if (!state.aiQueueAutoRefreshEnabled) clearAiQueueAutoRefreshTimer();
+  setToast(state.aiQueueAutoRefreshEnabled ? 'AI görev paneli otomatik yenileme açık.' : 'AI görev paneli otomatik yenileme kapalı.', 'info');
+  render();
+}
+
+async function cancelAiQueueTask(queueTaskId?: string): Promise<void> {
+  if (!queueTaskId || state.aiQueueCancelingTaskId) return;
+  state.aiQueueCancelingTaskId = queueTaskId;
+  state.aiQueueLoading = true;
+  render();
+  const result = await window.hasarbotu.cancelAiQueueTask<boolean>(queueTaskId, 'Kullanıcı panelinden iptal edildi.');
+  if (result.ok) {
+    setToast(result.data ? 'AI görevi iptal edildi.' : 'AI görevi zaten tamamlanmış veya bulunamadı.', result.data ? 'warning' : 'info');
+  } else {
+    reportOperationError(result.error.message);
+  }
+  state.aiQueueCancelingTaskId = '';
+  state.aiQueueLoading = false;
+  await loadAiQueueSnapshot(false);
+}
+
+async function clearAiQueueFinished(): Promise<void> {
+  state.aiQueueLoading = true;
+  render();
+  const result = await window.hasarbotu.clearAiQueueFinished<number>();
+  if (result.ok) {
+    setToast(`${result.data} bitmiş AI görevi listeden temizlendi.`, result.data > 0 ? 'success' : 'info');
+  } else {
+    reportOperationError(result.error.message);
+  }
+  state.aiQueueLoading = false;
+  await loadAiQueueSnapshot(false);
+}
+
+async function loadKnowledgeSources(showToast = false): Promise<void> {
+  if (state.knowledgeSourcesLoading) return;
+  state.knowledgeSourcesLoading = true;
+  state.knowledgeSourcesError = '';
+  render();
+  const result = await window.hasarbotu.listKnowledgeSources<KnowledgeSource[]>();
+  state.knowledgeSourcesLoading = false;
+  if (result.ok) {
+    state.knowledgeSources = result.data;
+    if (state.selectedKnowledgeSourceId && !result.data.some((source) => source.sourceId === state.selectedKnowledgeSourceId)) {
+      state.selectedKnowledgeSourceId = '';
+    }
+    if (showToast) setToast('Bilgi bankası kaynakları yenilendi.', 'success');
+  } else {
+    state.knowledgeSourcesError = result.error.message;
+    if (showToast) setToast('Bilgi bankası kaynakları okunamadı.', 'warning');
+  }
+  render();
+}
+
+// v0.6.0 P3-H: read-only dry-run import IPC'sini canli panelde test eder. Sabit ornek dosya ADLARI gonderilir;
+// dosya secici yoktur, icerik okunmaz, ayristirma yok, kalici yazma yok. Donen plan canWrite=false olmalidir.
+const KNOWLEDGE_IMPORT_DRY_RUN_SAMPLE_FILES = [
+  { fileName: 'Agir Hasar Kritik Parca Rehberi.pdf' },
+  { fileName: 'gelecek import uygun kaynak.md' },
+  { fileName: 'belirsiz kaynak.pdf' },
+  { fileName: 'tehlikeli.exe' }
+];
+
+async function loadKnowledgeImportDryRunPlan(): Promise<void> {
+  if (state.knowledgeImportDryRunLoading) return;
+  state.knowledgeImportDryRunLoading = true;
+  state.knowledgeImportDryRunError = '';
+  render();
+  const result = await window.hasarbotu.dryRunKnowledgeImportPlan<KnowledgeImportDryRunResponse>({ files: KNOWLEDGE_IMPORT_DRY_RUN_SAMPLE_FILES });
+  state.knowledgeImportDryRunLoading = false;
+  if (result.ok) {
+    state.knowledgeImportDryRunPlan = result.data.plan;
+  } else {
+    state.knowledgeImportDryRunError = result.error.message;
+  }
+  render();
+}
+
+// v0.6.0 P4-A: Dosya secici + SADECE metadata dry-run. Kullanici dosya secer; yalniz ad+boyut metadata ile
+// dry-run plan uretilir (canWrite=false). Icerik okuma, ayristirma veya kalici yazma yoktur.
+async function chooseKnowledgeImportDryRunFiles(): Promise<void> {
+  if (state.knowledgeImportDryRunLoading) return;
+  state.knowledgeImportDryRunLoading = true;
+  state.knowledgeImportDryRunError = '';
+  render();
+  const result = await window.hasarbotu.chooseFilesForKnowledgeImportDryRun<KnowledgeImportDryRunResponse | null>();
+  state.knowledgeImportDryRunLoading = false;
+  if (result.ok) {
+    if (result.data) state.knowledgeImportDryRunPlan = result.data.plan;
+  } else {
+    state.knowledgeImportDryRunError = result.error.message;
+  }
+  render();
+}
+
+// v0.6.0 P4-B: Bellek-ici onay karari. P3-E reducer'i ile uygulanir; import calistirmaz, kalici yazma yok.
+// "Onayla" karari approved_but_not_executed olur; canExecuteImport her zaman false kalir.
+function setKnowledgeImportApprovalDecision(candidateId?: string, decision?: string): void {
+  const plan = state.knowledgeImportDryRunPlan;
+  const id = String(candidateId || '');
+  if (!plan || !id) return;
+  const decisionType = decision === 'approve'
+    ? 'approve_for_future_import'
+    : decision === 'reject'
+      ? 'reject'
+      : decision === 'review'
+        ? 'needs_manual_review'
+        : null;
+  if (!decisionType) return;
+  state.knowledgeImportApprovalState = applyKnowledgeImportApprovalDecision(state.knowledgeImportApprovalState, {
+    planId: plan.planId,
+    candidateId: id,
+    decision: decisionType,
+    decidedAt: new Date().toISOString()
+  });
+  render();
+}
+
+function resetKnowledgeImportApprovalDecisions(): void {
+  state.knowledgeImportApprovalState = createKnowledgeImportApprovalState();
+  render();
+}
+
+// v0.6.0 P4-C: SADECE .txt/.md duz-metin icerik onizleme (bellek-ici, yazmasiz). Ayristirma/gorsel-okuma yok.
+async function previewKnowledgeImportTextFile(): Promise<void> {
+  if (state.knowledgeImportTextPreviewLoading) return;
+  state.knowledgeImportTextPreviewLoading = true;
+  state.knowledgeImportTextPreviewError = '';
+  render();
+  const result = await window.hasarbotu.previewTextFileForKnowledgeImport<KnowledgeImportTextPreview | null>();
+  state.knowledgeImportTextPreviewLoading = false;
+  if (result.ok) {
+    if (result.data) state.knowledgeImportTextPreview = result.data;
+  } else {
+    state.knowledgeImportTextPreviewError = result.error.message;
+  }
+  render();
+}
+
+// v0.6.0 P4-E2-B: Commit edilebilir TEK aday — onizlenmis .txt/.md icerik + onaylanmis & uygun aday eslesmesi.
+function knowledgeImportCommittableItem(): KnowledgeImportCommitInput | null {
+  const plan = state.knowledgeImportDryRunPlan;
+  const preview = state.knowledgeImportTextPreview;
+  if (!plan || !preview) return null;
+  if (preview.fileExtension !== '.txt' && preview.fileExtension !== '.md') return null;
+  if (!preview.text || !preview.text.trim()) return null;
+  const commit = buildKnowledgeImportCommitPlan(plan, state.knowledgeImportApprovalState);
+  const eligible = commit.candidates.find((candidate) => candidate.willCommit && candidate.fileName === preview.fileName);
+  if (!eligible) return null;
+  const planned = plan.candidates.find((candidate) => candidate.candidateId === eligible.candidateId);
+  return {
+    candidateId: eligible.candidateId,
+    fileName: preview.fileName,
+    fileExtension: preview.fileExtension,
+    content: preview.text,
+    title: planned?.detectedTitle || preview.fileName,
+    tags: planned?.detectedTags ?? [],
+    sourceType: planned?.detectedSourceType ?? 'office_note',
+    approvalState: 'approved_but_not_executed'
+  };
+}
+
+async function commitApprovedKnowledgeImportTextPreviewAction(): Promise<void> {
+  if (state.knowledgeImportCommitting) return;
+  const item = knowledgeImportCommittableItem();
+  if (!item) return;
+  const confirmed = window.confirm('Bu islem secili TXT/MD icerigini yerel kullanici bilgi deposuna kalici olarak yazacak.\ntakip.json, Excel ve dosya klasorlerine dokunulmayacak.\nDevam etmek istiyor musunuz?');
+  if (!confirmed) return;
+  state.knowledgeImportCommitting = true;
+  render();
+  const result = await window.hasarbotu.commitApprovedKnowledgeImportTextPreview<KnowledgeImportCommitResult>(item);
+  state.knowledgeImportCommitting = false;
+  if (result.ok) {
+    state.knowledgeImportCommitResult = result.data;
+    if (result.data.committed > 0) setToast('Icerik kullanici bilgi deposuna kaydedildi.', 'success');
+    else if (result.data.skippedDuplicate > 0) setToast('Ayni icerik zaten vardi; kaydedilmedi.', 'info');
+    else setToast('Commit yapilmadi.', 'warning');
+  } else {
+    state.knowledgeImportCommitResult = { ok: false, committed: 0, skippedDuplicate: 0, rejected: 1, message: result.error.message, entryIds: [] };
+    setToast('Commit basarisiz.', 'warning');
+  }
+  render();
+}
+
+async function searchKnowledgeAction(): Promise<void> {
+  const query = state.knowledgeSearchQuery.trim();
+  if (!query) {
+    state.knowledgeSearchResponse = null;
+    state.selectedKnowledgeResultId = '';
+    state.knowledgeSearchError = 'Arama metni girin.';
+    render();
+    return;
+  }
+  state.knowledgeSearchLoading = true;
+  state.knowledgeSearchError = '';
+  state.selectedKnowledgeResultId = '';
+  render();
+  const result = await window.hasarbotu.searchKnowledge<KnowledgeSearchResponse>({
+    query,
+    tags: state.selectedKnowledgeTags,
+    sourceTypes: state.selectedKnowledgeSourceTypes,
+    limit: 10
+  });
+  state.knowledgeSearchLoading = false;
+  if (result.ok) {
+    state.knowledgeSearchResponse = result.data;
+    state.selectedKnowledgeResultId = result.data.results[0]?.chunkId ?? '';
+  } else {
+    state.knowledgeSearchResponse = null;
+    state.selectedKnowledgeResultId = '';
+    state.knowledgeSearchError = 'Bilgi bankası araması şu anda tamamlanamadı.';
+  }
+  render();
+}
+
+function clearKnowledgeSearch(): void {
+  state.knowledgeSearchQuery = '';
+  state.knowledgeSearchResponse = null;
+  state.knowledgeSearchError = '';
+  state.selectedKnowledgeResultId = '';
+  render();
+}
+
+async function toggleKnowledgeTag(tag?: string): Promise<void> {
+  if (!tag) return;
+  state.selectedKnowledgeTags = toggleStringValue(state.selectedKnowledgeTags, tag);
+  state.selectedKnowledgeResultId = '';
+  if (state.knowledgeSearchQuery.trim()) await searchKnowledgeAction();
+  else render();
+}
+
+async function toggleKnowledgeSourceType(sourceType?: string): Promise<void> {
+  if (!isKnowledgeSourceType(sourceType)) return;
+  state.selectedKnowledgeSourceTypes = toggleStringValue(state.selectedKnowledgeSourceTypes, sourceType) as KnowledgeSourceType[];
+  state.selectedKnowledgeResultId = '';
+  if (state.knowledgeSearchQuery.trim()) await searchKnowledgeAction();
+  else render();
+}
+
+async function clearKnowledgeFilters(): Promise<void> {
+  state.selectedKnowledgeTags = [];
+  state.selectedKnowledgeSourceTypes = [];
+  state.selectedKnowledgeResultId = '';
+  if (state.knowledgeSearchQuery.trim()) await searchKnowledgeAction();
+  else render();
+}
+
+function selectKnowledgeSource(sourceId?: string): void {
+  state.selectedKnowledgeSourceId = sourceId ?? '';
+  render();
+}
+
+function selectKnowledgeResult(chunkId?: string): void {
+  state.selectedKnowledgeResultId = chunkId ?? '';
+  render();
+}
+
+function clearKnowledgePanelSelection(): boolean {
+  if (state.selectedKnowledgeResultId) {
+    state.selectedKnowledgeResultId = '';
+    render();
+    return true;
+  }
+  if (state.selectedKnowledgeSourceId) {
+    state.selectedKnowledgeSourceId = '';
+    render();
+    return true;
+  }
+  if (state.knowledgeSearchError) {
+    state.knowledgeSearchError = '';
+    render();
+    return true;
+  }
+  return false;
+}
+
+function normalizeKnowledgeSelectionsForRender(): void {
+  if (state.selectedKnowledgeSourceId && !state.knowledgeSources.some((source) => source.sourceId === state.selectedKnowledgeSourceId)) {
+    state.selectedKnowledgeSourceId = '';
+  }
+  if (state.selectedKnowledgeResultId && !state.knowledgeSearchResponse?.results.some((result) => result.chunkId === state.selectedKnowledgeResultId)) {
+    state.selectedKnowledgeResultId = '';
+  }
+}
+
+function toggleStringValue(values: readonly string[], value: string): string[] {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+function isKnowledgeSourceType(value: unknown): value is KnowledgeSourceType {
+  return typeof value === 'string' && KNOWLEDGE_SOURCE_TYPES.includes(value as KnowledgeSourceType);
+}
+
+function syncAiQueueAutoRefresh(): void {
+  const panelVisible = state.rootSetupRequired || state.activeTab === 'settings';
+  if (!panelVisible || !state.aiQueueAutoRefreshEnabled) {
+    clearAiQueueAutoRefreshTimer();
+    return;
+  }
+  if (state.aiQueueLoading) return;
+  const hasActiveTask = (state.aiQueueSnapshot?.queued ?? 0) > 0 || (state.aiQueueSnapshot?.running ?? 0) > 0;
+  const nextDelay = hasActiveTask ? AI_QUEUE_ACTIVE_REFRESH_MS : AI_QUEUE_IDLE_REFRESH_MS;
+  if (aiQueueAutoRefreshTimer !== null && aiQueueAutoRefreshDelayMs === nextDelay) return;
+  clearAiQueueAutoRefreshTimer();
+  aiQueueAutoRefreshDelayMs = nextDelay;
+  aiQueueAutoRefreshTimer = window.setTimeout(() => {
+    aiQueueAutoRefreshTimer = null;
+    aiQueueAutoRefreshDelayMs = null;
+    void loadAiQueueSnapshot(false);
+  }, nextDelay);
+}
+
+function clearAiQueueAutoRefreshTimer(): void {
+  if (aiQueueAutoRefreshTimer !== null) {
+    window.clearTimeout(aiQueueAutoRefreshTimer);
+    aiQueueAutoRefreshTimer = null;
+  }
+  aiQueueAutoRefreshDelayMs = null;
+}
+
 async function reloadCache(): Promise<void> {
   const [casesResult, dashboardResult] = await Promise.all([
     window.hasarbotu.listCases<CaseIndexItem[]>(),
@@ -123,6 +492,7 @@ async function reloadCache(): Promise<void> {
   ]);
   if (casesResult.ok) {
     state.cases = casesResult.data;
+    validateUiPreferencesAgainstCases();
     if (state.selectedFolderPath && !state.cases.some((item) => item.folderPath === state.selectedFolderPath)) state.selectedFolderPath = '';
     if (!state.selectedFolderPath && state.cases[0]) state.selectedFolderPath = state.cases[0].folderPath;
     if (state.selectedFolderPath) await hydrateSelectedCase(state.selectedFolderPath, false);
@@ -140,6 +510,7 @@ interface FocusSnapshot {
 }
 
 function render(): void {
+  normalizeKnowledgeSelectionsForRender();
   const focusSnapshot = captureFocusedControl();
   try {
     rootElement.innerHTML = renderApp(state);
@@ -151,6 +522,7 @@ function render(): void {
   restoreFocusedControl(focusSnapshot);
   scheduleToastAutoDismiss();
   scheduleErrorAutoDismiss();
+  syncAiQueueAutoRefresh();
   window.requestAnimationFrame(() => {
     restoreVirtualListScroll();
     void loadVisibleThumbnails();
@@ -239,6 +611,116 @@ function queueAutoLaborSearchUpdate(value: string): void {
   }, SEARCH_DEBOUNCE_MS);
 }
 
+function defaultUiPreferences(): UiFilterPreferences {
+  return {
+    caseList: {
+      quickFilter: 'all',
+      responsibleFilter: 'all',
+      serviceFilter: 'all',
+      statusFilter: 'all',
+      sortMode: 'plate-az',
+      advancedOpen: false
+    },
+    statusBoard: {
+      sort: 'dosya-az',
+      statusFilter: 'all',
+      showClosed: false,
+      advancedOpen: false,
+      responsibleFilter: 'all',
+      missingOnly: false,
+      openTodoOnly: false
+    }
+  };
+}
+
+function applyUiPreferences(input: UiFilterPreferences | undefined): void {
+  const prefs = input ?? defaultUiPreferences();
+  state.filter = prefs.caseList.quickFilter || 'all';
+  state.responsibleFilter = prefs.caseList.responsibleFilter || 'all';
+  state.serviceFilter = prefs.caseList.serviceFilter || 'all';
+  state.statusFilter = prefs.caseList.statusFilter || 'all';
+  state.sortMode = prefs.caseList.sortMode || 'plate-az';
+  state.advancedFiltersOpen = prefs.caseList.advancedOpen === true;
+  state.statusBoardSort = prefs.statusBoard.sort || 'dosya-az';
+  state.statusBoardStatusFilter = prefs.statusBoard.statusFilter || 'all';
+  state.statusBoardShowClosed = prefs.statusBoard.showClosed === true;
+  state.statusBoardAdvancedOpen = prefs.statusBoard.advancedOpen === true;
+  state.statusBoardResponsibleFilter = prefs.statusBoard.responsibleFilter || 'all';
+  state.statusBoardMissingOnly = prefs.statusBoard.missingOnly === true;
+  state.statusBoardOpenTodoOnly = prefs.statusBoard.openTodoOnly === true;
+  state.search = '';
+  state.statusBoardSearch = '';
+}
+
+function captureUiPreferences(): UiFilterPreferences {
+  return {
+    caseList: {
+      quickFilter: state.filter || 'all',
+      responsibleFilter: state.responsibleFilter || 'all',
+      serviceFilter: state.serviceFilter || 'all',
+      statusFilter: state.statusFilter || 'all',
+      sortMode: state.sortMode,
+      advancedOpen: state.advancedFiltersOpen
+    },
+    statusBoard: {
+      sort: state.statusBoardSort,
+      statusFilter: state.statusBoardStatusFilter || 'all',
+      showClosed: state.statusBoardShowClosed,
+      advancedOpen: state.statusBoardAdvancedOpen,
+      responsibleFilter: state.statusBoardResponsibleFilter || 'all',
+      missingOnly: state.statusBoardMissingOnly,
+      openTodoOnly: state.statusBoardOpenTodoOnly
+    }
+  };
+}
+
+function queuePersistUiPreferences(): void {
+  if (!state.settings) return;
+  state.settings.uiPreferences = captureUiPreferences();
+  if (uiPreferencesPersistTimer !== null) window.clearTimeout(uiPreferencesPersistTimer);
+  uiPreferencesPersistTimer = window.setTimeout(() => {
+    uiPreferencesPersistTimer = null;
+    void persistUiPreferencesNow();
+  }, 500);
+}
+
+async function persistUiPreferencesNow(): Promise<void> {
+  if (!state.settings) return;
+  const result = await window.hasarbotu.saveSettings<AppSettings>({ ...state.settings, uiPreferences: captureUiPreferences() });
+  if (result.ok) {
+    state.settings = result.data;
+    state.error = '';
+  } else {
+    state.error = result.error.message;
+    render();
+  }
+}
+
+function validateUiPreferencesAgainstCases(): void {
+  if (state.cases.length === 0) return;
+  let changed = false;
+  const responsibleOptions = new Set(state.cases.map((item) => item.sorumlu).filter(Boolean));
+  const serviceOptions = new Set(state.cases.map((item) => item.serviceName).filter(Boolean));
+  const statusOptions = new Set<string>(state.cases.map((item) => item.workflowStatus).filter(Boolean));
+  if (state.responsibleFilter !== 'all' && !responsibleOptions.has(state.responsibleFilter)) {
+    state.responsibleFilter = 'all';
+    changed = true;
+  }
+  if (state.serviceFilter !== 'all' && !serviceOptions.has(state.serviceFilter)) {
+    state.serviceFilter = 'all';
+    changed = true;
+  }
+  if (state.statusFilter !== 'all' && !statusOptions.has(state.statusFilter)) {
+    state.statusFilter = 'all';
+    changed = true;
+  }
+  if (state.statusBoardResponsibleFilter !== 'all' && !responsibleOptions.has(state.statusBoardResponsibleFilter)) {
+    state.statusBoardResponsibleFilter = 'all';
+    changed = true;
+  }
+  if (changed) queuePersistUiPreferences();
+}
+
 async function hydrateSelectedCase(folderPath: string, shouldRender: boolean): Promise<void> {
   if (!folderPath) return;
   const result = await window.hasarbotu.getCase<CaseIndexItem | null>(folderPath);
@@ -268,6 +750,10 @@ function wireEvents(): void {
       render();
       return;
     }
+    if (target.id === 'knowledge-search') {
+      state.knowledgeSearchQuery = target.value;
+      return;
+    }
     if (target.id === 'status-board-search') {
       state.statusBoardSearch = target.value;
       state.statusBoardPage = 1;
@@ -277,18 +763,21 @@ function wireEvents(): void {
     if (target.dataset.statusFilter === 'board') {
       state.statusBoardStatusFilter = target.value || 'all';
       state.statusBoardPage = 1;
+      queuePersistUiPreferences();
       render();
       return;
     }
     if (target.dataset.statusSort === 'board') {
       state.statusBoardSort = target.value as typeof state.statusBoardSort;
       state.statusBoardPage = 1;
+      queuePersistUiPreferences();
       render();
       return;
     }
     if (target.dataset.statusResponsible === 'board') {
       state.statusBoardResponsibleFilter = target.value || 'all';
       state.statusBoardPage = 1;
+      queuePersistUiPreferences();
       render();
       return;
     }
@@ -332,24 +821,28 @@ function wireEvents(): void {
     if (target.dataset.listFilter === 'responsible') {
       state.responsibleFilter = target.value || 'all';
       state.caseListScrollTop = 0;
+      queuePersistUiPreferences();
       render();
       return;
     }
     if (target.dataset.listFilter === 'service') {
       state.serviceFilter = target.value || 'all';
       state.caseListScrollTop = 0;
+      queuePersistUiPreferences();
       render();
       return;
     }
     if (target.dataset.listFilter === 'status') {
       state.statusFilter = target.value || 'all';
       state.caseListScrollTop = 0;
+      queuePersistUiPreferences();
       render();
       return;
     }
     if (target.dataset.listFilter === 'sort') {
       state.sortMode = target.value as typeof state.sortMode;
       state.caseListScrollTop = 0;
+      queuePersistUiPreferences();
       render();
       return;
     }
@@ -515,6 +1008,7 @@ function wireEvents(): void {
     if (filter) {
       state.filter = filter;
       state.caseListScrollTop = 0;
+      queuePersistUiPreferences();
       render();
       return;
     }
@@ -523,6 +1017,11 @@ function wireEvents(): void {
       state.activeTab = tab as typeof state.activeTab;
       render();
       if (tab === 'klasorler' && !state.folderBrowse && !state.folderLoading) void loadFolders();
+      if (tab === 'settings') {
+        if (!state.aiQueueLoading) void loadAiQueueSnapshot(false);
+        if (!state.knowledgeSourcesLoading && state.knowledgeSources.length === 0) void loadKnowledgeSources(false);
+        if (!state.knowledgeImportDryRunLoading && !state.knowledgeImportDryRunPlan) void loadKnowledgeImportDryRunPlan();
+      }
       return;
     }
   });
@@ -537,6 +1036,16 @@ function wireEvents(): void {
   }, { passive: false });
 
   window.addEventListener('keydown', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.id === 'knowledge-search' && event.key === 'Enter') {
+      event.preventDefault();
+      void searchKnowledgeAction();
+      return;
+    }
+    if (event.key === 'Escape' && target instanceof Element && target.closest('.knowledge-panel') && clearKnowledgePanelSelection()) {
+      event.preventDefault();
+      return;
+    }
     if (event.ctrlKey && event.key === '0' && state.settings) {
       event.preventDefault();
       state.settings.zoom = 1;
@@ -584,6 +1093,24 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'heavy-damage-save-cancel': state.heavyDamageConfirmOpen = false; setToast('Ağır hasar kaydı iptal edildi.', 'info'); render(); break;
     case 'heavy-damage-clear': await clearHeavyDamageAssessment(); break;
     case 'labor-learning-refresh': await loadLaborLearning(true); break;
+    case 'ai-queue-refresh': await loadAiQueueSnapshot(true); break;
+    case 'ai-queue-toggle-auto-refresh': toggleAiQueueAutoRefresh(); break;
+    case 'ai-queue-select': selectAiQueueTask(element?.dataset.queueTaskId); break;
+    case 'ai-queue-cancel': await cancelAiQueueTask(element?.dataset.queueTaskId); break;
+    case 'ai-queue-clear-finished': await clearAiQueueFinished(); break;
+    case 'knowledge-refresh': await loadKnowledgeSources(true); void loadKnowledgeImportDryRunPlan(); break;
+    case 'knowledge-dryrun-choose-files': await chooseKnowledgeImportDryRunFiles(); break;
+    case 'knowledge-approve-candidate': setKnowledgeImportApprovalDecision(element?.dataset.candidateId, element?.dataset.decision); break;
+    case 'knowledge-approval-reset': resetKnowledgeImportApprovalDecisions(); break;
+    case 'knowledge-preview-text': await previewKnowledgeImportTextFile(); break;
+    case 'knowledge-commit-text-preview': await commitApprovedKnowledgeImportTextPreviewAction(); break;
+    case 'knowledge-search': await searchKnowledgeAction(); break;
+    case 'knowledge-clear-search': clearKnowledgeSearch(); break;
+    case 'knowledge-tag-toggle': await toggleKnowledgeTag(element?.dataset.knowledgeTag); break;
+    case 'knowledge-source-type-toggle': await toggleKnowledgeSourceType(element?.dataset.knowledgeSourceType); break;
+    case 'knowledge-filter-clear': await clearKnowledgeFilters(); break;
+    case 'knowledge-source-select': selectKnowledgeSource(element?.dataset.knowledgeSourceId); break;
+    case 'knowledge-result-select': selectKnowledgeResult(element?.dataset.knowledgeResultId); break;
     case 'labor-learning-update': await updateLaborLearningEntry(element); break;
     case 'labor-learning-disable': await setLaborLearningEntryActive(element, false); break;
     case 'labor-learning-enable': await setLaborLearningEntryActive(element, true); break;
@@ -597,8 +1124,9 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'export-parts-labor': await exportPartsLaborExcel(); break;
     case 'export-cases-excel': await exportFilteredCasesExcel(); break;
     case 'status-export-all': await exportAllCasesExcel(); break;
-    case 'status-toggle-advanced': state.statusBoardAdvancedOpen = !state.statusBoardAdvancedOpen; render(); break;
+    case 'status-toggle-advanced': state.statusBoardAdvancedOpen = !state.statusBoardAdvancedOpen; queuePersistUiPreferences(); render(); break;
     case 'status-clear-filters': clearStatusBoardFilters(); break;
+    case 'clear-case-filters': clearCaseListFilters(); break;
     case 'status-open-case': openCaseFromBoard(element?.dataset.folder); break;
     case 'status-page-prev': setStatusBoardPage(state.statusBoardPage - 1); break;
     case 'status-page-next': setStatusBoardPage(state.statusBoardPage + 1); break;
@@ -633,7 +1161,13 @@ async function handleMenuCommand(command: string): Promise<void> {
     case 'menu:zoom-in': await adjustZoom(0.05); break;
     case 'menu:zoom-out': await adjustZoom(-0.05); break;
     case 'menu:health': await showHealth(); break;
-    case 'menu:settings': state.activeTab = 'settings'; render(); break;
+    case 'menu:settings':
+      state.activeTab = 'settings';
+      render();
+      void loadAiQueueSnapshot(false);
+      if (!state.knowledgeSourcesLoading && state.knowledgeSources.length === 0) void loadKnowledgeSources(false);
+      if (!state.knowledgeImportDryRunLoading && !state.knowledgeImportDryRunPlan) void loadKnowledgeImportDryRunPlan();
+      break;
   }
 }
 
@@ -1632,18 +2166,48 @@ function applyStatusBoardToggle(key: string, value: boolean): void {
   else if (key === 'open-todo-only') state.statusBoardOpenTodoOnly = value;
   else return;
   state.statusBoardPage = 1;
+  queuePersistUiPreferences();
   render();
 }
 
+function clearCaseListFilters(): void {
+  resetCaseListFilters();
+  queuePersistUiPreferences();
+  render();
+}
+
+function resetCaseListFilters(): void {
+  state.search = '';
+  state.filter = 'all';
+  state.responsibleFilter = 'all';
+  state.serviceFilter = 'all';
+  state.statusFilter = 'all';
+  state.sortMode = 'plate-az';
+  state.advancedFiltersOpen = false;
+  state.caseListScrollTop = 0;
+}
+
 function clearStatusBoardFilters(): void {
+  resetStatusBoardFilters();
+  queuePersistUiPreferences();
+  render();
+}
+
+function resetStatusBoardFilters(): void {
   state.statusBoardSearch = '';
   state.statusBoardStatusFilter = 'all';
   state.statusBoardResponsibleFilter = 'all';
   state.statusBoardMissingOnly = false;
   state.statusBoardOpenTodoOnly = false;
   state.statusBoardShowClosed = false;
+  state.statusBoardAdvancedOpen = false;
   state.statusBoardPage = 1;
-  render();
+}
+
+function resetPersistentUiFilters(): void {
+  resetCaseListFilters();
+  resetStatusBoardFilters();
+  if (state.settings) state.settings.uiPreferences = captureUiPreferences();
 }
 
 function openCaseFromBoard(folder?: string): void {
@@ -1886,12 +2450,8 @@ async function chooseRootPath(): Promise<void> {
   state.settings = result.data;
   state.rootSetupRequired = false;
   state.activeTab = 'home';
-  state.filter = 'all';
-  state.responsibleFilter = 'all';
-  state.serviceFilter = 'all';
-  state.statusFilter = 'all';
-  state.search = '';
-  state.caseListScrollTop = 0;
+  resetPersistentUiFilters();
+  queuePersistUiPreferences();
   setToast('Ana klasör seçildi. Tarama başlatılıyor.', 'success');
   state.error = '';
   await loadDeploymentStatus();
@@ -1914,12 +2474,8 @@ async function saveSettingsFromPage(): Promise<void> {
   await persistSettings('Ayarlar kaydedildi.');
   state.rootSetupRequired = false;
   state.activeTab = 'home';
-  state.filter = 'all';
-  state.responsibleFilter = 'all';
-  state.serviceFilter = 'all';
-  state.statusFilter = 'all';
-  state.search = '';
-  state.caseListScrollTop = 0;
+  resetPersistentUiFilters();
+  queuePersistUiPreferences();
   await loadDeploymentStatus();
   await reloadCache();
   await scanNow();
@@ -2047,6 +2603,7 @@ function scheduleErrorAutoDismiss(): void {
 
 function toggleAdvancedFilters(): void {
   state.advancedFiltersOpen = !state.advancedFiltersOpen;
+  queuePersistUiPreferences();
   render();
 }
 

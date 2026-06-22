@@ -1,12 +1,12 @@
 # Pilot Kabul Planı
 
-Bu plan HasarBotu v0.5.0 için sınırlı gerçek dosya ile yapılan **Saha Pilot v2** kabul sürecini tanımlar.
+Bu plan HasarBotu v0.6.0 için sınırlı gerçek dosya ile yapılan **Saha Pilot v2** kabul sürecini tanımlar.
 
 ## Pilot Hazırlığı
 
 - [ ] Pilot ay klasörü aktif veriden güvenli şekilde ayrıldı.
 - [ ] Gerekirse `npm run pilot:copy-month` ile kontrollü pilot kopyası oluşturuldu.
-- [ ] Pilot bilgisayarda v0.5.0 çalışıyor.
+- [ ] Pilot bilgisayarda v0.6.0 çalışıyor.
 - [ ] `npm run pilot:collect` ile tanı paketi alınabileceği doğrulandı.
 
 ## Kabul Alanları
@@ -19,7 +19,7 @@ Bu plan HasarBotu v0.5.0 için sınırlı gerçek dosya ile yapılan **Saha Pilo
 | Fotoğraf | KM, Vites, Şase/Şasi, Olay Yeri, HEIC/RAW ve bozuk fotoğraf uyarıları ayrışıyor. |
 | Veri Kalitesi | Eksik sorumlu, eksik takip tarihi, kapalıda açık görev ve durgun dosya uyarıları görünür. |
 | pCloud güvenliği | Conflicted copy, same-revision different-write ve revision regression sessiz ezmeye yol açmıyor. |
-| Excel | Portal Excel dağıtımı ayrı çıktı dosyası üretir. |
+| Excel | AI Otomatik İşçilik Dağıtıcı önizleme sonrası ayrı çıktı dosyası üretir. |
 | AI İşçilik | Önizleme/onay olmadan yazmaz; C sütunu ana açıklama olarak kullanılır. |
 
 ## Başarılı Pilot Kriterleri

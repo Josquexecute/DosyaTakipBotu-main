@@ -250,7 +250,7 @@ function renderLabor(item: CaseIndexItem, state: UiState): string {
       <label class="switch"><input type="checkbox" data-field="labor.parcaIscilikGirildi" ${item.tracking.labor.parcaIscilikGirildi ? 'checked' : ''}/> Parça/işçilik girildi</label>
       <label class="wide">Not<textarea data-field="labor.not">${escapeHtml(item.tracking.labor.not)}</textarea></label>
     </div>
-    <div class="info-card wide labor-excel-card">
+    <div class="info-card wide labor-excel-card" hidden aria-hidden="true">
       <h3>Portal Excel İşçilik Dağıtıcı <button class="info-button" title="Orijinal Excel dosyası değiştirilmez. Dağıtılmış yeni .xlsx dosyası kaydedilir.">i</button></h3>
       <div class="excel-steps">
         <div class="excel-step active">${icon('upload')}<b>1. Excel Dosyası Seç</b><span>${preview ? escapeHtml(preview.fileName) : 'İşlenecek .xlsx veya .csv dosyasını yükleyin.'}</span><button class="secondary" data-action="choose-labor-excel">Excel Seç</button></div>
@@ -298,7 +298,7 @@ function renderAutoLaborCard(state: UiState): string {
   const result = state.autoLaborResult;
   return `<div class="info-card wide auto-labor-card">
     <h3>${icon('ai')} AI Otomatik İşçilik Dağıtıcı <button class="info-button" title="Excel'i seçin; sistem TÜM satırları analiz edip H..N işçilik sütunlarını öğrenen sözlük + kural + fiyat listesiyle otomatik doldurur. Kaydetmeden önce önizleme gösterilir; orijinal korunur ve yedeği alınır.">i</button></h3>
-    <p class="muted">Kolon kolon seçmeden: Excel'i seç → tüm satırlar otomatik dolsun → önizlemede düzelt → onayla, kaydet. Eski manuel dağıtım yukarıda durmaya devam ediyor.</p>
+    <p class="muted">Kolon kolon seçmeden: Excel'i seç → tüm satırlar otomatik dolsun → önizlemede düzelt → onayla, kaydet. Kullanıcı onayı olmadan Excel'e yazılmaz.</p>
     <div class="auto-labor-actions">
       <button class="primary" data-action="auto-labor-preview" ${state.autoLaborSaving ? 'disabled' : ''}>${icon('excel')}<span>Excel Seç ve Otomatik Doldur (Önizleme)</span></button>
       ${preview ? `<button class="secondary compact" data-action="auto-labor-clear">Temizle</button>` : ''}

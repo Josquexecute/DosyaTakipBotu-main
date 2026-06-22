@@ -1,6 +1,6 @@
 # HasarBotu - DosyaTakipBotu
 
-[![Sürüm](https://img.shields.io/badge/sürüm-v0.5.0-1f6feb)](#v050-yenilikleri)
+[![Sürüm](https://img.shields.io/badge/sürüm-v0.6.0-1f6feb)](#v050-yenilikleri)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-2563eb)](#windows-exe-üretimi)
 [![Electron](https://img.shields.io/badge/Electron-41-47848f)](#sistem-mimarisi-kısa-özeti)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6)](#geliştirme-komutları)
@@ -8,8 +8,13 @@
 
 Baran Global Ekspertiz için geliştirilen **sigorta eksper dosya takip otomasyonu**. Hasar dosyalarını klasör yapısı üzerinden tarar, her dosyanın durumunu local-first şekilde yönetir, evrak/fotoğraf risklerini görünür kılar, Excel işçilik süreçlerini güvenli önizleme ile çalıştırır ve çok bilgisayarlı ofis kullanımında veri ezilmesini engellemeye odaklanır.
 
-> Güncel sürüm: **v0.5.0**  
+> Güncel sürüm: **v0.6.0**  
 > Hedef kullanım: Baran Global Ekspertiz kurum içi Windows masaüstü operasyonu
+
+## v0.6.0 Sürüm Notu
+
+- **Sürüm damgası hizalaması:** `package.json`, `package-lock.json`, `APP_VERSION`, README, dokümanlar, CHANGELOG ve final office audit kapısı kaynak kod seviyesiyle (v0.6.0) uyumlu hâle getirildi. Önceki damga (v0.5.0) ofis dağıtım/güncellik kontrolünde yanlış sonuç verebiliyordu.
+- **Davranış değişikliği yok:** Bu sürümde yeni özellik, refactor, `takip.json` şema değişikliği veya Excel/AppData/Bilgi Bankası/AI Queue/Gemini/OCR davranış değişikliği yapılmadı; yalnızca sürüm bilgisi düzeltildi.
 
 ## Öne Çıkan Özellikler
 
@@ -22,7 +27,7 @@ Baran Global Ekspertiz için geliştirilen **sigorta eksper dosya takip otomasyo
 | Tek dosya yenileme | Seçili dosyayı tam yıl taraması yapmadan yeniler; gereksiz pCloud okumasını azaltır. |
 | Evrak ve fotoğraf kontrolü | Trafik/kasko evrak gereksinimleri, KM/Vites/Şase/Olay Yeri fotoğraf kontrolleri, HEIC/RAW format ayrımı ve bozuk fotoğraf şüphesi. |
 | Yanlış plaka hard-block | Parça listesi fotoğrafı aktif dosyaya ait değilse Gemini'ye gönderilmez; aynı plaka ama farklı dosya klasörü de engellenir. |
-| Excel araçları | Portal Excel işçilik dağıtımı, filtrelenmiş dosya listesi export, parça + işçilik Excel üretimi. |
+| Excel araçları | AI otomatik işçilik önizleme/kaydetme, filtrelenmiş dosya listesi export, parça + işçilik Excel üretimi. |
 | AI İşçilik Dağıtıcı | Gerçek portal Excel kolonlarına göre H-N işçilik önerisi üretir; önizleme, kullanıcı düzeltmesi, kontrollü öğrenme ve ayrı çıktı dosyası akışı kullanır. |
 | Öğrenen sözlük | Kullanıcı onaylı/düzeltilmiş kararlar yerel sözlüğe alınır; mevcut H-N değerleri otomatik eğitim verisi kabul edilmez. |
 | Ağır Hasar AI | Ekonomik oran ve yapısal kritik parça eşiklerini ayrı gösteren ön değerlendirme, rapor notu ve mail taslağı üretir. |
@@ -67,7 +72,7 @@ AppData/HasarBotu
 1. **Ana Sayfa / Dashboard:** Günlük iş masası, risk göstergeleri ve kritik özetler izlenir.
 2. **Dosyalar:** Plaka, dosya no, sorumlu, servis, durum ve kalite filtreleriyle operasyon listesi yönetilir.
 3. **Dosya Detayı:** Evrak, fotoğraf, rücu/KTT/ağır hasar, not, görev ve işçilik bilgileri tek dosyada güncellenir.
-4. **Excel & Parça Veri Merkezi:** Portal Excel dağıtımı, AI işçilik önizlemesi ve parça listesi fotoğraf okuma akışları çalıştırılır.
+4. **Excel & Parça Veri Merkezi:** AI otomatik işçilik önizlemesi, onaylı Excel kaydetme ve parça listesi fotoğraf okuma akışları çalıştırılır.
 5. **Sorunlar / Risk:** pCloud çakışması, corrupt JSON, plaka uyuşmazlığı, eksik evrak/fotoğraf ve kalite uyarıları incelenir.
 
 Detaylı kullanım için: [docs/KULLANIM_KILAVUZU.md](docs/KULLANIM_KILAVUZU.md)
@@ -133,8 +138,8 @@ npm run dist:win
 
 Çıktılar `release/` klasöründe üretilir:
 
-- `HasarBotu-Baran-Ekspertiz-Kurulum-0.5.0.exe`
-- `HasarBotu-Baran-Ekspertiz-Tasinabilir-0.5.0.exe`
+- `HasarBotu-Baran-Ekspertiz-Kurulum-0.6.0.exe`
+- `HasarBotu-Baran-Ekspertiz-Tasinabilir-0.6.0.exe`
 
 EXE rehberi: [docs/EXE_URETIM_REHBERI.md](docs/EXE_URETIM_REHBERI.md)
 

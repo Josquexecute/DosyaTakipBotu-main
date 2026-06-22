@@ -1,6 +1,6 @@
 # Kullanım Kılavuzu
 
-HasarBotu v0.5.0, Baran Global Ekspertiz'in hasar dosyalarını tek masaüstü uygulamasında takip etmesi için hazırlanmıştır. Uygulama dosya klasörlerini okur, her dosyanın takip bilgisini `_HASARBOTU/takip.json` içinde tutar ve kullanıcı onayı olmadan kritik veri yazmaz.
+HasarBotu v0.6.0, Baran Global Ekspertiz'in hasar dosyalarını tek masaüstü uygulamasında takip etmesi için hazırlanmıştır. Uygulama dosya klasörlerini okur, her dosyanın takip bilgisini `_HASARBOTU/takip.json` içinde tutar ve kullanıcı onayı olmadan kritik veri yazmaz.
 
 ## İlk Açılış
 
@@ -18,7 +18,7 @@ HasarBotu v0.5.0, Baran Global Ekspertiz'in hasar dosyalarını tek masaüstü u
 | 2 | Dosyalar | Plaka, dosya no, sorumlu, servis, durum ve kalite filtreleriyle dosya bulmak |
 | 3 | Dosya detayı | Not, görev, sorumlu, takip tarihi, ağır hasar ön değerlendirmesi ve operasyon alanlarını güncellemek |
 | 4 | Evrak & Fotoğraf | Eksik belge/fotoğraf, HEIC/RAW, bozuk fotoğraf ve plaka risklerini kontrol etmek |
-| 5 | Excel & Parça Veri Merkezi | Portal Excel işçilik dağıtımı, AI işçilik önizlemesi ve parça listesi fotoğraf okuma yapmak |
+| 5 | Excel & Parça Veri Merkezi | AI işçilik önizlemesi/kaydetme ve parça listesi fotoğraf okuma yapmak |
 | 6 | Sorunlar / Risk | pCloud, corrupt JSON, revision/writeId ve veri kalitesi uyarılarını kapatmak |
 
 ## Dosyalar Ekranı
@@ -46,7 +46,7 @@ Her mutasyon `takip.json` içinde revision artırır ve yeni writeId üretir. Di
 
 ## Ağır Hasar AI Ön Değerlendirme
 
-v0.5.0 ile ağır hasar ekranında ekonomik oran ve yapısal kritik parça eşiği ayrı değerlendirilir.
+v0.6.0 ile ağır hasar ekranında ekonomik oran ve yapısal kritik parça eşiği ayrı değerlendirilir.
 
 - Rayiç ve hasar tutarı ekonomik `%60` eşik için hesaplanır.
 - Yapısal kritik parçalar ayrıca puanlanır; tek başına eşiği aşan parça varsa ekonomik oran düşük kalsa da risk açık gösterilir.
@@ -70,7 +70,7 @@ Parça listesi fotoğrafı AI ile okunurken aktif dosya bağlamı kontrol edilir
 
 Bu bölüm üç ana iş için kullanılır:
 
-1. Portal Excel işçilik tutarı dağıtımı.
+1. AI Otomatik İşçilik Dağıtıcı ile Excel önizleme, düzeltme ve onaylı kaydetme.
 2. AI İşçilik Dağıtıcı ile H-N işçilik kolonlarına öneri üretme.
 3. Parça listesi fotoğrafını Gemini ile okuyup temiz parça + işçilik Excel'i üretme.
 

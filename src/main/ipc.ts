@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { BrowserWindow, ipcMain, shell } from 'electron';
 import type {
   ApiResult,
@@ -15,15 +16,21 @@ import type {
 } from '../shared/types';
 import { APP_VERSION } from '../shared/constants';
 import { IPC_INVOKE_CHANNELS as IPC } from '../shared/ipc-contract';
+import { AI_TASK_TYPES, type AiTaskRequest, type AiTaskType } from '../shared/ai/ai-task-types';
+import type { AiTaskQueueEnqueueOptions } from '../shared/ai/ai-queue-types';
 import type {
+  AiQueueEnqueuePreviewArgs,
   CaseListExportExcelArgs,
   HeavyDamageClearArgs,
   HeavyDamageGenerateNoteArgs,
   HeavyDamageGetArgs,
   HeavyDamagePreviewArgs,
   HeavyDamageSaveArgs,
+  KnowledgeImportCommitInput,
+  KnowledgeImportDryRunPlanArgs,
   LaborDistributeExcelArgs,
   LaborInspectExcelArgs,
+  KnowledgeSearchQuery,
   LaborLearningAdminKey,
   LaborLearningUpdateInput,
   LaborAutoSaveArgs,
@@ -42,6 +49,12 @@ import type {
 import { LocalCacheStore } from './local-cache/local-cache-store';
 import { assertSafeCasePath } from './security';
 import type { LogLevel } from './debug-logger';
+import { AiTaskQueueService } from './services/ai/ai-task-queue-service';
+import { KnowledgeSearchService } from './services/knowledge/knowledge-search-service';
+import { buildDryRunPlan } from './services/knowledge/knowledge-import-planner';
+import { chooseFilesForKnowledgeImportDryRun } from './services/knowledge/knowledge-import-dry-run-service';
+import { previewTextFileForKnowledgeImport } from './services/knowledge/knowledge-import-text-preview-service';
+import { commitApprovedKnowledgeImportTextPreview } from './services/knowledge/knowledge-import-commit-service';
 import {
   CasesQueryService,
   ConflictResolverService,
@@ -70,6 +83,8 @@ export class IpcController {
   private readonly conflicts: ConflictResolverService;
   private readonly excel: ExcelWorkflowService;
   private readonly laborLearning: LaborLearningAdminService;
+  private readonly aiQueue: AiTaskQueueService;
+  private readonly knowledge: KnowledgeSearchService;
   private readonly heavyDamage: HeavyDamageAssessmentService;
   private readonly deployment: DeploymentService;
 
@@ -83,6 +98,9 @@ export class IpcController {
     this.conflicts = new ConflictResolverService(this.context, this.cases);
     this.excel = new ExcelWorkflowService(this.context);
     this.laborLearning = new LaborLearningAdminService(this.context);
+    this.aiQueue = new AiTaskQueueService();
+    this.aiQueue.start();
+    this.knowledge = new KnowledgeSearchService();
     this.heavyDamage = new HeavyDamageAssessmentService(this.context, this.cases);
     this.deployment = new DeploymentService(this.context);
   }
@@ -114,6 +132,20 @@ export class IpcController {
     ipcMain.handle(IPC.laborLearningDelete, (_event, args: LaborLearningAdminKey) => this.safe(() => this.laborLearning.delete(args)));
     ipcMain.handle(IPC.laborLearningExport, () => this.safe(() => this.laborLearning.export()));
     ipcMain.handle(IPC.laborLearningImport, () => this.safe(() => this.laborLearning.import()));
+    ipcMain.handle(IPC.aiQueueGetSnapshot, () => this.safe(async () => this.aiQueue.getSnapshot()));
+    ipcMain.handle(IPC.aiQueueGetEvents, (_event, limit?: number) => this.safe(async () => this.aiQueue.getEvents(Number(limit))));
+    ipcMain.handle(IPC.aiQueueGetTask, (_event, queueTaskId: string) => this.safe(async () => this.aiQueue.getTask(String(queueTaskId || '')) ?? null));
+    ipcMain.handle(IPC.aiQueueEnqueuePreview, (_event, args: AiQueueEnqueuePreviewArgs) => this.safe(async () => this.aiQueue.enqueue(buildSafeAiQueuePreviewRequest(args), buildSafeAiQueueOptions(args))));
+    ipcMain.handle(IPC.aiQueueCancelTask, (_event, queueTaskId: string, reason?: string) => this.safe(async () => this.aiQueue.cancelTask(String(queueTaskId || ''), safeShortText(reason, 'Kullanici istegiyle iptal edildi.'))));
+    ipcMain.handle(IPC.aiQueueClearFinished, () => this.safe(async () => this.aiQueue.clearFinished()));
+    ipcMain.handle(IPC.knowledgeSearch, (_event, query: KnowledgeSearchQuery | string) => this.safe(async () => this.knowledge.search(query)));
+    ipcMain.handle(IPC.knowledgeListSources, () => this.safe(async () => this.knowledge.listSources()));
+    ipcMain.handle(IPC.knowledgeGetSource, (_event, sourceId: string) => this.safe(async () => this.knowledge.getSource(String(sourceId || ''))));
+    ipcMain.handle(IPC.knowledgeGetChunk, (_event, chunkId: string) => this.safe(async () => this.knowledge.getChunk(String(chunkId || ''))));
+    ipcMain.handle(IPC.knowledgeImportDryRunPlan, (_event, args: KnowledgeImportDryRunPlanArgs) => this.safe(async () => buildSafeKnowledgeImportDryRunPlan(args)));
+    ipcMain.handle(IPC.knowledgeImportChooseFilesDryRun, () => this.safe(async () => chooseFilesForKnowledgeImportDryRun(this.mainWindowProvider())));
+    ipcMain.handle(IPC.knowledgeImportPreviewTextFile, () => this.safe(async () => previewTextFileForKnowledgeImport(this.mainWindowProvider())));
+    ipcMain.handle(IPC.knowledgeImportCommitApprovedTextPreview, (_event, args: KnowledgeImportCommitInput) => this.safe(async () => commitApprovedKnowledgeImportTextPreview(this.cache.cacheRoot, args)));
     ipcMain.handle(IPC.heavyDamagePreview, (_event, args: HeavyDamagePreviewArgs) => this.safe(() => this.heavyDamage.preview(args)));
     ipcMain.handle(IPC.heavyDamageGet, (_event, args: HeavyDamageGetArgs) => this.safe(() => this.heavyDamage.get(args)));
     ipcMain.handle(IPC.heavyDamageSave, (_event, args: HeavyDamageSaveArgs) => this.safe(() => this.heavyDamage.save(args)));
@@ -175,4 +207,79 @@ export class IpcController {
       return { ok: false, error: { code: typeof code === 'string' && code ? code : 'HASARBOTU_ERROR', message: error instanceof Error ? error.message : 'Bilinmeyen hata', details: String(error) } };
     }
   }
+}
+
+function buildSafeAiQueuePreviewRequest(args: AiQueueEnqueuePreviewArgs): AiTaskRequest {
+  const taskType = normalizeAiTaskType(args?.taskType);
+  return {
+    taskId: safeShortText(args?.taskId, `ai-preview-${randomUUID()}`),
+    taskType,
+    ...(args?.caseId ? { caseId: safeShortText(args.caseId, '') } : {}),
+    ...(args?.plate ? { plate: safeShortText(args.plate, '') } : {}),
+    ...(args?.claimNo ? { claimNo: safeShortText(args.claimNo, '') } : {}),
+    input: plainRecord(args?.input),
+    ...(isPlainRecord(args?.context) ? { context: plainRecord(args.context) } : {}),
+    privacyLevel: 'local_only',
+    providerPolicy: {
+      allowPaidProviders: false,
+      allowExternalProviders: false,
+      allowLocalModel: false,
+      preferDeterministicRules: true
+    },
+    requiresUserApproval: true,
+    createdAt: new Date().toISOString()
+  };
+}
+
+function buildSafeAiQueueOptions(args: AiQueueEnqueuePreviewArgs | undefined): AiTaskQueueEnqueueOptions {
+  const timeoutMs = sanitizePositiveInteger(args?.timeoutMs);
+  return {
+    ...(timeoutMs ? { timeoutMs } : {}),
+    priority: args?.priority === 'high' || args?.priority === 'low' ? args.priority : 'normal'
+  };
+}
+
+function normalizeAiTaskType(value: unknown): AiTaskType {
+  return typeof value === 'string' && (AI_TASK_TYPES as readonly string[]).includes(value) ? value as AiTaskType : 'generic_rule_assist';
+}
+
+function plainRecord(value: unknown): Record<string, unknown> {
+  if (!isPlainRecord(value)) return {};
+  return Object.fromEntries(Object.entries(value).slice(0, 200));
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sanitizePositiveInteger(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+}
+
+/**
+ * v0.6.0 P3-G: read-only dry-run import plani. Yalniz dosya-adi/boyut metadata kullanilir; filePath kabul edilmez,
+ * dosya icerigi okunmaz, parser/OCR yok ve plan canWrite=false doner. Saf buildDryRunPlan planlayicisi cagrilir.
+ */
+function buildSafeKnowledgeImportDryRunPlan(args: KnowledgeImportDryRunPlanArgs) {
+  const files = (Array.isArray(args?.files) ? args.files : []).slice(0, 200)
+    .map((file) => {
+      const fileName = typeof file?.fileName === 'string' ? file.fileName.replace(/\s+/g, ' ').trim().slice(0, 260) : '';
+      const sizeBytes = Number(file?.sizeBytes);
+      return Number.isFinite(sizeBytes) && sizeBytes >= 0 ? { fileName, sizeBytes: Math.floor(sizeBytes) } : { fileName };
+    })
+    .filter((file) => file.fileName.length > 0);
+  return buildDryRunPlan({
+    mode: 'dry_run',
+    files,
+    ...(typeof args?.preferredSourceKind === 'string' && args.preferredSourceKind ? { preferredSourceKind: args.preferredSourceKind } : {}),
+    ...(Array.isArray(args?.preferredTags) ? { preferredTags: args.preferredTags } : {})
+  });
+}
+
+function safeShortText(value: unknown, fallback: string): string {
+  const cleaned = typeof value === 'string'
+    ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+    : '';
+  return cleaned || fallback;
 }
