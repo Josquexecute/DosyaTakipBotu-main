@@ -582,6 +582,43 @@ async function pathExists(targetPath) {
   }
 }
 
+// --- Eksik relative JS import guard: dist-ui build ciktisindaki her relative .js referansinin
+// diskte gercekten var oldugunu dogrular; barrel klasor importunun yanlis dosyaya cevrilmesinden
+// dogan net::ERR_FILE_NOT_FOUND (orn. knowledge.js) beyaz ekranini gelecekte yakalar. ---
+const distUiRoot = path.join(process.cwd(), 'dist-ui');
+if (!(await pathExists(distUiRoot))) {
+  console.log('NOT - dist-ui yok; relative JS import guard atlandi (once: npm run build).');
+} else {
+  const distJsFiles = [];
+  const collectDistJs = async (dir) => {
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await collectDistJs(full);
+      else if (entry.isFile() && entry.name.endsWith('.js')) distJsFiles.push(full);
+    }
+  };
+  await collectDistJs(distUiRoot);
+  const relativeJsSpecRegexes = [
+    /\bfrom\s*['"](\.\.?\/[^'"]+\.js)['"]/g,
+    /\bimport\s*\(\s*['"](\.\.?\/[^'"]+\.js)['"]\s*\)/g
+  ];
+  const missingRelativeImports = [];
+  for (const jsFile of distJsFiles) {
+    const text = await fs.readFile(jsFile, 'utf-8');
+    for (const regex of relativeJsSpecRegexes) {
+      regex.lastIndex = 0;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const targetPath = path.resolve(path.dirname(jsFile), match[1]);
+        if (!(await pathExists(targetPath))) {
+          missingRelativeImports.push(`${path.relative(process.cwd(), jsFile).replace(/\\/g, '/')} -> ${match[1]}`);
+        }
+      }
+    }
+  }
+  assert(missingRelativeImports.length === 0, 'v0.6.0 RUNTIME dist-ui relative .js import hedefleri diskte mevcut (barrel/knowledge.js net::ERR_FILE_NOT_FOUND beyaz ekrani yok)', 'Eksik relative JS import hedefi: ' + missingRelativeImports.join(' | '));
+}
+
 const failed = checks.filter((item) => !item.ok);
 if (failed.length) {
   console.error(`Ofis final denetimi başarısız: ${failed.length} hata.`);
