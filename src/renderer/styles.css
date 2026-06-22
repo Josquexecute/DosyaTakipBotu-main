@@ -286,6 +286,32 @@ code {
   box-shadow: inset 4px 0 0 #bcc7de;
 }
 
+/* v0.6.0 UI-stability: Manuel çalışma klasörü seçilmeden kilitli sekmeler soluk görünür (tıklayınca Dosyalar'da kalır). */
+.nav-item.locked {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.nav-item.locked:hover {
+  background: transparent;
+  color: var(--on-surface-variant);
+}
+
+.working-folder-gate-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-sm) var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--outline-variant);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .side-footer {
   display: grid;
   gap: var(--space-xs);

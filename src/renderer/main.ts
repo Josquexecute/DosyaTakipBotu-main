@@ -34,7 +34,7 @@ import { statusBoardCases, statusBoardPageCount } from './app/components/status-
 import { formatMoney, laborWrittenTotal } from './app/components/detail';
 import { todayDateInput } from './app/validation';
 import { state, selectedCase } from './app/state';
-import type { AutoLaborPreviewFilter } from './app/state';
+import type { AutoLaborPreviewFilter, DetailTab } from './app/state';
 import { normalizeSearch } from '../shared/turkish';
 import { createMutationQueue, setTrackingLocalField as setLocalField } from '../shared/renderer-stability';
 import { normalizePartName } from '../shared/parca-sozlugu';
@@ -107,6 +107,8 @@ async function boot(): Promise<void> {
     return;
   }
 
+  // v0.6.0 UI-stability: Açılışta kullanıcı önce Dosyalar'dan çalışma dosyası seçsin; kilit manuel seçimle açılır.
+  state.activeTab = 'dosyalar';
   await reloadCache();
   scheduleAutoScan();
   render();
@@ -509,9 +511,52 @@ interface FocusSnapshot {
   selectionEnd: number | null;
 }
 
+// v0.6.0 UI-stability: render() her çağrıda tüm DOM'u yeniden kurar; sayfa-seviyesi scroll
+// container'ları yeniden oluştuğu için scrollTop sıfırlanır. Aynı ekranda (tab + seçili dosya
+// değişmeden) yapılan render'larda — toast/hata otomatik kapanması, arka plan yenileme, push
+// olayları — scroll pozisyonu korunmalı; sadece gerçek bağlam değişiminde (tab veya seçili dosya
+// değişti) sıfırlanmasına izin verilir. Kaynak listesi sanal kaydırması ayrı korunur.
+const SCROLL_PRESERVE_SELECTORS = ['.focus-content', '.detail-content', '.status-board', '.settings-workspace', '.home-page', '.folder-tree', '.knowledge-source-list', '.knowledge-result-list'];
+let lastRenderedTab: DetailTab | null = null;
+let lastRenderedSelectedFolder = '';
+
+function captureScrollPositions(): Map<string, number> {
+  const positions = new Map<string, number>();
+  for (const selector of SCROLL_PRESERVE_SELECTORS) {
+    const element = rootElement.querySelector(selector);
+    if (element instanceof HTMLElement && element.scrollTop > 0) positions.set(selector, element.scrollTop);
+  }
+  return positions;
+}
+
+function restoreScrollPositions(positions: Map<string, number>): void {
+  for (const [selector, top] of positions) {
+    const element = rootElement.querySelector(selector);
+    if (element instanceof HTMLElement) element.scrollTop = top;
+  }
+}
+
+// v0.6.0 UI-stability: Manuel çalışma klasörü/dosyası seçim kilidi. Kullanıcı Dosyalar bölümünden
+// ELLE bir dosya seçene kadar yalnızca Dosyalar ve Ayarlar sekmelerine girilebilir; diğer ekranlar
+// (Operasyon, Özet, Evrak, Excel, Rücu, KTT, Ağır Hasar, Durum Panosu, Klasörler, Ana Sayfa) kilitlidir.
+// Otomatik son-klasör yükleme/geri-yükleme bu kilidi AÇMAZ; yalnız manuel seçim açar.
+const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'settings'];
+
+function isTabAllowedNow(tab: DetailTab): boolean {
+  return state.hasManualWorkingFolderSelection || TABS_ALLOWED_WHILE_FOLDER_LOCKED.includes(tab);
+}
+
+function markManualWorkingFolderSelection(): void {
+  state.hasManualWorkingFolderSelection = true;
+}
+
 function render(): void {
   normalizeKnowledgeSelectionsForRender();
   const focusSnapshot = captureFocusedControl();
+  // Bağlam (aktif sekme veya seçili dosya) değişmediyse scroll'u koru; değiştiyse bilinçli context
+  // değişimidir, üstten başlaması normaldir.
+  const contextChanged = lastRenderedTab !== state.activeTab || lastRenderedSelectedFolder !== state.selectedFolderPath;
+  const scrollSnapshot = contextChanged ? null : captureScrollPositions();
   try {
     rootElement.innerHTML = renderApp(state);
   } catch (error) {
@@ -523,8 +568,11 @@ function render(): void {
   scheduleToastAutoDismiss();
   scheduleErrorAutoDismiss();
   syncAiQueueAutoRefresh();
+  lastRenderedTab = state.activeTab;
+  lastRenderedSelectedFolder = state.selectedFolderPath;
   window.requestAnimationFrame(() => {
     restoreVirtualListScroll();
+    if (scrollSnapshot) restoreScrollPositions(scrollSnapshot);
     void loadVisibleThumbnails();
   });
 }
@@ -999,6 +1047,7 @@ function wireEvents(): void {
     if (folder) {
       const folderChanged = state.selectedFolderPath !== folder;
       state.selectedFolderPath = folder;
+      markManualWorkingFolderSelection();
       if (folderChanged) resetHeavyDamagePreviewState(true);
       render();
       void hydrateSelectedCase(folder, true);
@@ -1014,7 +1063,15 @@ function wireEvents(): void {
     }
     const tab = element.dataset.tab;
     if (tab) {
-      state.activeTab = tab as typeof state.activeTab;
+      const targetTab = tab as DetailTab;
+      // v0.6.0 UI-stability: Manuel çalışma klasörü seçimi yapılmadan Dosyalar/Ayarlar dışı sekme engellenir.
+      if (!isTabAllowedNow(targetTab)) {
+        setToast('Önce Dosyalar bölümünden çalışma klasörü seçiniz.', 'warning');
+        state.activeTab = 'dosyalar';
+        render();
+        return;
+      }
+      state.activeTab = targetTab;
       render();
       if (tab === 'klasorler' && !state.folderBrowse && !state.folderLoading) void loadFolders();
       if (tab === 'settings') {
@@ -2214,6 +2271,7 @@ function openCaseFromBoard(folder?: string): void {
   if (!folder) return;
   const folderChanged = state.selectedFolderPath !== folder;
   state.selectedFolderPath = folder;
+  markManualWorkingFolderSelection();
   if (folderChanged) resetHeavyDamagePreviewState(true);
   state.activeTab = 'operasyon';
   render();
@@ -2449,7 +2507,8 @@ async function chooseRootPath(): Promise<void> {
   }
   state.settings = result.data;
   state.rootSetupRequired = false;
-  state.activeTab = 'home';
+  // v0.6.0 UI-stability: Kök seçimi sonrası kullanıcı önce Dosyalar'dan çalışma dosyası seçsin (kilit açılır).
+  state.activeTab = 'dosyalar';
   resetPersistentUiFilters();
   queuePersistUiPreferences();
   setToast('Ana klasör seçildi. Tarama başlatılıyor.', 'success');
@@ -2473,7 +2532,8 @@ async function saveSettingsFromPage(): Promise<void> {
   state.settings.users = normalizeUserList(state.settings.users, state.settings.activeUser);
   await persistSettings('Ayarlar kaydedildi.');
   state.rootSetupRequired = false;
-  state.activeTab = 'home';
+  // v0.6.0 UI-stability: Kök seçimi sonrası kullanıcı önce Dosyalar'dan çalışma dosyası seçsin (kilit açılır).
+  state.activeTab = 'dosyalar';
   resetPersistentUiFilters();
   queuePersistUiPreferences();
   await loadDeploymentStatus();

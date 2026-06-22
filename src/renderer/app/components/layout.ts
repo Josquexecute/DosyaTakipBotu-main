@@ -21,6 +21,8 @@ export function renderApp(state: UiState): string {
   const toastClass = state.toastKind || 'info';
   const userName = state.settings?.activeUser ?? 'Ömer Faruk İşleyen';
   const settingsMode = activePage === 'settings';
+  // v0.6.0 UI-stability: Manuel çalışma klasörü seçimi yapılmadan Dosyalar/Ayarlar dışı sekmeler kilitli görünür.
+  const folderLocked = !state.hasManualWorkingFolderSelection;
 
   return `
   <nav class="side-nav-bar" aria-label="Ana gezinme">
@@ -35,19 +37,19 @@ export function renderApp(state: UiState): string {
       ${icon(state.scanRunning ? 'close' : 'sync')}<span>${state.scanRunning ? 'Taramayı Durdur' : 'Yeniden Tara'}</span>
     </button>
     <div class="nav-links">
-      ${navItem('dashboard', 'Ana Sayfa', 'home', activePage === 'home')}
-      ${navItem('folder', 'Dosyalar', 'dosyalar', activePage === 'dosyalar')}
-      ${navItem('details', 'Klasörler', 'klasorler', activePage === 'klasorler')}
-      ${navItem('operation', 'Operasyon', 'operasyon', activePage === 'operasyon')}
-      ${navItem('photo', 'Evrak & Fotoğraf', 'evrak', activePage === 'evrak')}
-      ${navItem('issue', 'Sorunlar / Risk', 'issues', activePage === 'issues')}
-      ${navItem('portal', 'Portal', 'portal', activePage === 'portal')}
-      ${navItem('excel', 'Excel Araçları', 'labor', activePage === 'labor')}
-      ${navItem('rucu', 'Rücu', 'rucu', activePage === 'rucu')}
-      ${navItem('ktt', 'KTT / Kusur', 'ktt', activePage === 'ktt')}
-      ${navItem('warning', 'Ağır Hasar', 'heavy', activePage === 'heavy')}
-      ${navItem('board', 'Durum Panosu', 'durum', activePage === 'durum')}
-      ${navItem('settings', 'Ayarlar', 'settings', activePage === 'settings')}
+      ${navItem('dashboard', 'Ana Sayfa', 'home', activePage === 'home', folderLocked)}
+      ${navItem('folder', 'Dosyalar', 'dosyalar', activePage === 'dosyalar', false)}
+      ${navItem('details', 'Klasörler', 'klasorler', activePage === 'klasorler', folderLocked)}
+      ${navItem('operation', 'Operasyon', 'operasyon', activePage === 'operasyon', folderLocked)}
+      ${navItem('photo', 'Evrak & Fotoğraf', 'evrak', activePage === 'evrak', folderLocked)}
+      ${navItem('issue', 'Sorunlar / Risk', 'issues', activePage === 'issues', folderLocked)}
+      ${navItem('portal', 'Portal', 'portal', activePage === 'portal', folderLocked)}
+      ${navItem('excel', 'Excel Araçları', 'labor', activePage === 'labor', folderLocked)}
+      ${navItem('rucu', 'Rücu', 'rucu', activePage === 'rucu', folderLocked)}
+      ${navItem('ktt', 'KTT / Kusur', 'ktt', activePage === 'ktt', folderLocked)}
+      ${navItem('warning', 'Ağır Hasar', 'heavy', activePage === 'heavy', folderLocked)}
+      ${navItem('board', 'Durum Panosu', 'durum', activePage === 'durum', folderLocked)}
+      ${navItem('settings', 'Ayarlar', 'settings', activePage === 'settings', false)}
     </div>
     <div class="side-footer">
       <div class="sync-line"><span class="dot ${rootOnline ? 'ok' : rootConfirmed ? 'warning' : 'error'}"></span>${!rootConfirmed ? 'Ana klasör seçilmeli' : rootOnline ? 'Aktif kök bağlı' : 'Yerel önbellek modu'}</div>
@@ -77,6 +79,7 @@ export function renderApp(state: UiState): string {
     ${settingsMode ? renderSettingsWorkspace(state, toastClass) : `
     <main class="workspace workspace-page page-${escapeHtml(activePage)}">
       ${renderDeploymentWarning(state)}
+      ${renderWorkingFolderGateHint(state)}
       ${renderAlerts(state, toastClass)}
       ${renderPage(state, activePage)}
     </main>`}
@@ -149,8 +152,15 @@ function renderAlerts(state: UiState, toastClass: string): string {
   return `${errorAlert}${toastAlert}`;
 }
 
-function navItem(iconName: string, label: string, tab: string, active: boolean): string {
-  return `<button class="nav-item ${active ? 'active' : ''}" data-tab="${escapeHtml(tab)}" title="${escapeHtml(label)}">${icon(iconName)}<span>${escapeHtml(label)}</span></button>`;
+function navItem(iconName: string, label: string, tab: string, active: boolean, locked = false): string {
+  const title = locked ? 'Önce Dosyalar bölümünden çalışma klasörü seçiniz' : label;
+  return `<button class="nav-item ${active ? 'active' : ''} ${locked ? 'locked' : ''}" data-tab="${escapeHtml(tab)}" title="${escapeHtml(title)}"${locked ? ' aria-disabled="true"' : ''}>${icon(iconName)}<span>${escapeHtml(label)}</span></button>`;
+}
+
+// v0.6.0 UI-stability: Kilitliyken Dosyalar ekranında net yönlendirme metni gösterir.
+function renderWorkingFolderGateHint(state: UiState): string {
+  if (state.hasManualWorkingFolderSelection) return '';
+  return `<div class="working-folder-gate-hint">${icon('folder')}<span>Devam etmek için önce Dosyalar bölümünden bir çalışma klasörü/dosyası seçiniz. Seçim yapılmadan diğer ekranlar açılmaz.</span></div>`;
 }
 
 function renderSettingsWorkspace(state: UiState, toastClass: string): string {

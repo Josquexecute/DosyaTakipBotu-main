@@ -20,6 +20,10 @@ export interface UiState {
   statusFilter: string;
   sortMode: CaseSortMode;
   activeTab: DetailTab;
+  /** v0.6.0 UI-stability: Kullanıcı bu oturumda Dosyalar bölümünden ELLE çalışma klasörü/dosyası seçti mi.
+   * Otomatik son-klasör yükleme/geri-yükleme bunu açmaz; manuel seçim yapılmadan Dosyalar (ve Ayarlar) dışı
+   * sekmelere geçilemez. */
+  hasManualWorkingFolderSelection: boolean;
   scanRunning: boolean;
   lastScanReport: ScanReport | null;
   toast: string;
@@ -186,6 +190,7 @@ export const state: UiState = {
   statusFilter: 'all',
   sortMode: 'plate-az',
   activeTab: 'home',
+  hasManualWorkingFolderSelection: false,
   scanRunning: false,
   lastScanReport: null,
   toast: '',
