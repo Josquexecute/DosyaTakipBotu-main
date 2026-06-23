@@ -223,7 +223,7 @@ function renderStatusSummary(args: {
 }): string {
   const cards = [
     ['Kaynak sayısı', args.sourceCount],
-    ['Chunk sayısı', args.chunkTotal],
+    ['Parça sayısı', args.chunkTotal],
     ['Aktif kaynak', args.activeSources],
     ['Sonuç', args.resultCount],
     ['Seçili etiket', args.selectedTagCount],
@@ -267,7 +267,7 @@ function renderSourceRow(source: KnowledgeSource, selected: boolean): string {
       <small>${escapeHtml(source.description ?? '')}</small>
       ${renderInlineBadges(source.tags, 'Etiket')}
     </span>
-    <span class="knowledge-source-count"><small>Chunk</small><b>${escapeHtml(source.chunkCount ?? 0)}</b></span>
+    <span class="knowledge-source-count"><small>Parça</small><b>${escapeHtml(source.chunkCount ?? 0)}</b></span>
   </button>`;
 }
 
@@ -284,13 +284,13 @@ function renderSourceDetail(source: KnowledgeSource | null): string {
     </div>
     <div class="knowledge-detail-meta">
       ${renderMeta('Başlık', source.title)}
-      ${renderMeta('sourceId', source.sourceId)}
-      ${renderMeta('sourceType', source.sourceType)}
+      ${renderMeta('Kaynak no', source.sourceId)}
+      ${renderMeta('Kaynak tipi', source.sourceType)}
       ${renderMeta('Sürüm', source.version ?? '-')}
       ${renderMeta('Oluşturma', formatDate(source.createdAt))}
       ${renderMeta('Güncelleme', source.updatedAt ? formatDate(source.updatedAt) : '-')}
       ${renderMeta('Sahip', source.owner ?? '-')}
-      ${renderMeta('Chunk', source.chunkCount ?? 0)}
+      ${renderMeta('Parça', source.chunkCount ?? 0)}
     </div>
     ${source.description ? `<p>${escapeHtml(source.description)}</p>` : ''}
     ${renderBadgeBlock('Etiketler', source.tags)}
@@ -365,7 +365,7 @@ function renderSearchResults(state: UiState): string {
 
   if (!response) {
     return `<section class="knowledge-results" aria-label="Bilgi bankası arama sonuçları" aria-live="polite">
-      <div class="knowledge-subhead"><b>Arama sonucu</b><small>Default limit 10</small></div>
+      <div class="knowledge-subhead"><b>Arama sonucu</b><small>Varsayılan sınır 10</small></div>
       ${warning}${loading}
       <div class="knowledge-empty">Arama yapmak için parça, kural veya poliçe terimi girin.</div>
     </section>`;
@@ -432,9 +432,9 @@ function renderResultDetail(result: KnowledgeSearchResult | null, fallbackSource
       ${isUserSource ? renderMeta('Kaynak türü', 'Kullanıcı Kaynağı') : ''}
       ${isUserSource ? renderMeta('Depo', 'Yerel kullanıcı bilgi deposu (user-knowledge-store.json)') : ''}
       ${isUserSource ? renderMeta('Mod', 'Salt okunur') : ''}
-      ${renderMeta('sourceId', result.sourceId)}
+      ${renderMeta('Kaynak no', result.sourceId)}
       ${renderMeta('chunkId', result.chunkId)}
-      ${renderMeta('sourceType', sourceType ?? '-')}
+      ${renderMeta('Kaynak tipi', sourceType ?? '-')}
       ${renderMeta('Konum', location)}
       ${renderMeta('Öncelik', result.priority ?? '-')}
     </div>

@@ -343,10 +343,10 @@ async function commitApprovedKnowledgeImportTextPreviewAction(): Promise<void> {
     state.knowledgeImportCommitResult = result.data;
     if (result.data.committed > 0) setToast('Icerik kullanici bilgi deposuna kaydedildi.', 'success');
     else if (result.data.skippedDuplicate > 0) setToast('Ayni icerik zaten vardi; kaydedilmedi.', 'info');
-    else setToast('Commit yapilmadi.', 'warning');
+    else setToast('Kalıcı kayıt yapılmadı.', 'warning');
   } else {
     state.knowledgeImportCommitResult = { ok: false, committed: 0, skippedDuplicate: 0, rejected: 1, message: result.error.message, entryIds: [] };
-    setToast('Commit basarisiz.', 'warning');
+    setToast('Kalıcı kayıt başarısız.', 'warning');
   }
   render();
 }
