@@ -520,6 +520,7 @@ function renderPartsPhotoCard(state: UiState): string {
       ${analysis ? '<button class="secondary compact" data-action="copy-parts-list">' + icon('export') + '<span>Kopyala</span></button>' : ''}
       ${analysis ? '<button class="secondary compact" data-action="clear-parts-analysis">Temizle</button>' : ''}
     </div>
+    ${state.partsAnalysisError && !analyzing ? `<div class="app-alert warning parts-analysis-error" role="status" aria-live="polite">${icon('warning')}<span>${escapeHtml(state.partsAnalysisError)}</span><button class="secondary compact" data-action="analyze-parts-photo">${icon('sync')}<span>Tekrar Dene</span></button></div>` : ''}
     ${analysis ? renderPartsAnalysis(analysis) : '<p class="muted">El yazısı/karışık parça listesi fotoğrafını seçin; usta dili gerçek parça adına çevrilir. Yanlış/eksik çıkanı düzeltip <b>Öğret</b> dersen sözlük bir daha doğru okur.</p>'}
   </div>`;
 }

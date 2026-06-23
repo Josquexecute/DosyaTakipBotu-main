@@ -25,6 +25,7 @@ import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResu
 import type { LaborCategory } from '../shared/labor-rules';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageDamageType, HeavyDamageRepairSeverity, HeavyDamageRowEdit } from '../shared/heavy-damage-types';
 import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../shared/ai/ai-queue-types';
+import { AI_TRANSIENT_ERROR_CODE, AI_TRANSIENT_USER_MESSAGE } from '../shared/ai/ai-transient-error';
 import type { KnowledgeImportCommitInput, KnowledgeImportCommitResult, KnowledgeImportDryRunResponse, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceType } from '../shared/knowledge';
 import { applyKnowledgeImportApprovalDecision, buildKnowledgeImportCommitPlan, createKnowledgeImportApprovalState, isKnowledgeSourceFilter } from '../shared/knowledge';
 import { applyHeavyDamageEdits, generateHeavyDamageAssessmentNote, HEAVY_DAMAGE_FILTERS, type HeavyDamageFilter } from '../shared/heavy-damage-rules';
@@ -1463,6 +1464,7 @@ async function analyzePartsPhotoAction(): Promise<void> {
   // v0.4.7: Aktif dosya bağlamı gönderilir; main tarafı yanlış plakalı fotoğrafı SERT engeller.
   const activeCase = selectedCase();
   state.partsAnalyzing = true;
+  state.partsAnalysisError = '';
   setToast('Fotoğraf Gemini ile okunuyor…', 'info');
   render();
   const result = await window.hasarbotu.analyzePartsPhoto<PartsPhotoAnalysis>({
@@ -1477,9 +1479,19 @@ async function analyzePartsPhotoAction(): Promise<void> {
       render();
       return;
     }
+    // v0.6.1: Geçici AI hatası (HTTP 503/zaman aşımı/ağ) → uygulama kilitlenmez; mevcut seçim/analiz korunur.
+    // Kullanıcıya tek anlaşılır Türkçe mesaj + "Tekrar Dene" gösterilir. Teknik ayrıntı yalnız main log'unda kalır.
+    if (result.error.code === AI_TRANSIENT_ERROR_CODE) {
+      state.partsAnalysisError = AI_TRANSIENT_USER_MESSAGE;
+      state.error = '';
+      setToast(AI_TRANSIENT_USER_MESSAGE, 'warning');
+      render();
+      return;
+    }
     reportOperationError(result.error.message);
     return;
   }
+  state.partsAnalysisError = '';
   // v0.4.6: Fotoğraftan OKUNAN plaka (Gemini), seçili dosyanın plakasıyla uyuşmuyorsa ayrıca uyar.
   const selected = selectedCase();
   const readPlate = (result.data.vehicle.plate || '').replace(/[^a-z0-9]/gi, '').toUpperCase();

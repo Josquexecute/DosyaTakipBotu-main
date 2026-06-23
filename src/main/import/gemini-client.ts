@@ -3,6 +3,8 @@
  * API anahtarı KODA GÖMÜLMEZ; çağıran taraf (yerel ayardan okunan) anahtarı verir.
  * Yalnızca transport katmanıdır; yanıt ayrıştırma parts-list-analyzer'da yapılır.
  */
+import { createTransientAiError } from '../../shared/ai/ai-transient-error';
+
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -42,6 +44,8 @@ export async function callGeminiVision(
     });
     if (!response.ok) {
       const body = await response.text().catch(() => '');
+      // v0.6.1: HTTP 5xx (örn. 503) GEÇİCİ sunucu hatasıdır → kullanıcıya dostu mesaj + tekrar deneme.
+      if (response.status >= 500) throw createTransientAiError(mapHttpError(response.status, body));
       throw new Error(mapHttpError(response.status, body));
     }
     const data = (await response.json()) as GeminiResponse;
@@ -52,11 +56,12 @@ export async function callGeminiVision(
     if (!text.trim()) throw new Error('Gemini boş yanıt döndü. Fotoğrafı netleştirip tekrar deneyin.');
     return text;
   } catch (error) {
+    // v0.6.1: Zaman aşımı ve ağ hatası da GEÇİCİ hatadır → uygulamayı kilitlemeden tekrar denenebilir.
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Gemini isteği zaman aşımına uğradı. İnternet bağlantısını kontrol edip tekrar deneyin.');
+      throw createTransientAiError('Gemini isteği zaman aşımına uğradı. İnternet bağlantısını kontrol edip tekrar deneyin.');
     }
     if (error instanceof TypeError) {
-      throw new Error('Gemini sunucusuna ulaşılamadı. İnternet bağlantınızı kontrol edin.');
+      throw createTransientAiError('Gemini sunucusuna ulaşılamadı. İnternet bağlantınızı kontrol edin.');
     }
     throw error;
   } finally {

@@ -42,6 +42,8 @@ import { buildKnowledgeImportCommitPlan } from '../dist-electron/shared/knowledg
 import { commitApprovedKnowledgeImportTextPreview } from '../dist-electron/main/services/knowledge/knowledge-import-commit-service.js';
 import { searchUserKnowledgeEntries, mergeUserKnowledgeIntoResponse, USER_KNOWLEDGE_RESULT_LABEL } from '../dist-electron/main/services/knowledge/user-knowledge-search-service.js';
 import { filterKnowledgeResultsByOrigin, isKnowledgeSourceFilter, KNOWLEDGE_SOURCE_FILTERS } from '../dist-electron/shared/knowledge/knowledge-source-filter.js';
+import { callGeminiVision } from '../dist-electron/main/import/gemini-client.js';
+import { AI_TRANSIENT_ERROR_CODE, AI_TRANSIENT_USER_MESSAGE, isTransientAiError } from '../dist-electron/shared/ai/ai-transient-error.js';
 import { AI_FINAL_APPROVAL_WARNING_CODE, normalizeAiTaskRequest } from '../dist-electron/shared/ai/ai-safety.js';
 import { IPC_INVOKE_CHANNELS } from '../dist-electron/shared/ipc-contract.js';
 import { isForbiddenKnowledgeChannel, isKnowledgeReadOnlyChannel } from '../dist-electron/shared/knowledge/knowledge-safety.js';
@@ -1263,6 +1265,42 @@ assert(knowledgePanelSource.includes('Canlı Deneme Planı') && knowledgePanelSo
 assert(rendererStateSource.includes('laborLearningExpanded: Record<string, boolean>') && rendererStateSource.includes('laborLearningExpanded: {}'), 'v0.6.0 UI sozluk ac/kapat durumu bellek-ici state olarak tanimli (varsayilan bos)', 'laborLearningExpanded state eksik');
 assert(settingsSource.includes('labor-learning-row compact') && settingsSource.includes('data-action="labor-learning-toggle"') && settingsSource.includes('labor-learning-detail') && settingsSource.includes("'Kapat' : 'Aç'") && settingsSource.includes('data-action="labor-learning-update"') && settingsSource.includes('data-action="labor-learning-delete"') && settingsSource.includes('data-action="labor-learning-disable"'), 'v0.6.0 UI AI iscilik ogrenme sozlugu kompakt akordeon (varsayilan kapali) + kaydet/sil/devre-disi korunur', 'sozluk kompakt akordeon yapisi eksik');
 assert(rendererMainSource.includes('toggleLaborLearningExpanded') && rendererMainSource.includes("case 'labor-learning-toggle'"), 'v0.6.0 UI sozluk ac/kapat aksiyonu yalniz UI bellegini gunceller (yeni IPC/yazma yok)', 'sozluk toggle aksiyonu eksik');
+
+// --- v0.6.1: Gemini AI parca-okuma gecici hata (HTTP 503/timeout/network) merkezi yakalama + Tekrar Dene ---
+const aiTransientFetchBackup = globalThis.fetch;
+try {
+  globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => '' });
+  let g503Code = '';
+  try { await callGeminiVision('k', 'AAAA', 'image/jpeg', 'p'); } catch (error) { g503Code = (error && error.code) || ''; }
+  assert(g503Code === AI_TRANSIENT_ERROR_CODE && isTransientAiError({ code: g503Code }), 'v0.6.1 Gemini HTTP 503 gecici AI hatasi olarak isaretlenir (kod=AI_SERVICE_TRANSIENT)', `code=${g503Code}`);
+
+  globalThis.fetch = async () => { throw new TypeError('network down'); };
+  let gNetCode = '';
+  try { await callGeminiVision('k', 'AAAA', 'image/jpeg', 'p'); } catch (error) { gNetCode = (error && error.code) || ''; }
+  assert(gNetCode === AI_TRANSIENT_ERROR_CODE, 'v0.6.1 Gemini ag hatasi (network) gecici AI hatasi olarak isaretlenir', `code=${gNetCode}`);
+
+  globalThis.fetch = async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e; };
+  let gAbortCode = '';
+  try { await callGeminiVision('k', 'AAAA', 'image/jpeg', 'p'); } catch (error) { gAbortCode = (error && error.code) || ''; }
+  assert(gAbortCode === AI_TRANSIENT_ERROR_CODE, 'v0.6.1 Gemini zaman asimi (timeout) gecici AI hatasi olarak isaretlenir', `code=${gAbortCode}`);
+
+  globalThis.fetch = async () => ({ ok: false, status: 400, text: async () => 'API_KEY_INVALID' });
+  let g400Code = 'none';
+  try { await callGeminiVision('k', 'AAAA', 'image/jpeg', 'p'); } catch (error) { g400Code = (error && error.code) || 'none'; }
+  assert(g400Code !== AI_TRANSIENT_ERROR_CODE, 'v0.6.1 Gemini 400 (gecersiz anahtar) gecici degildir; ayrik kalir', `code=${g400Code}`);
+} finally {
+  globalThis.fetch = aiTransientFetchBackup;
+}
+assert(AI_TRANSIENT_USER_MESSAGE.includes('AI servisi geçici olarak cevap vermiyor') && AI_TRANSIENT_USER_MESSAGE.includes('manuel'), 'v0.6.1 gecici AI hatasi kullanici mesaji Turkce ve pratik secenek (manuel) sunar', AI_TRANSIENT_USER_MESSAGE);
+const geminiClientSource = await fs.readFile('src/main/import/gemini-client.ts', 'utf-8');
+assert(geminiClientSource.includes('createTransientAiError') && /status >= 500[\s\S]*?createTransientAiError/.test(geminiClientSource) && geminiClientSource.includes("error.name === 'AbortError'") && geminiClientSource.includes('instanceof TypeError'), 'v0.6.1 gemini-client 5xx/timeout/network hatalarini gecici hata kodu ile firlatir', 'gemini-client gecici hata siniflandirmasi eksik');
+const partsActionSlice = rendererMainSource.slice(rendererMainSource.indexOf('async function analyzePartsPhotoAction'), rendererMainSource.indexOf('async function loadPartsUserTerms'));
+const transientIdx = partsActionSlice.indexOf('AI_TRANSIENT_ERROR_CODE');
+const successAssignIdx = partsActionSlice.indexOf('state.partsAnalysis = result.data');
+assert(transientIdx > 0 && successAssignIdx > transientIdx && partsActionSlice.includes('partsAnalysisError = AI_TRANSIENT_USER_MESSAGE') && partsActionSlice.slice(transientIdx, successAssignIdx).includes('return;'), 'v0.6.1 renderer gecici AI hatasinda Tekrar Dene mesaji set eder ve basari atamasindan once erken doner (analiz/Excel/ogrenme oto devam etmez)', 'renderer gecici hata akisi eksik');
+assert(rendererStateSource.includes('partsAnalysisError: string') && rendererStateSource.includes("partsAnalysisError: ''"), 'v0.6.1 partsAnalysisError state alani tanimli (bos baslar)', 'partsAnalysisError state eksik');
+const detailComponentSourceV61 = await fs.readFile('src/renderer/app/components/detail.ts', 'utf-8');
+assert(detailComponentSourceV61.includes('partsAnalysisError') && detailComponentSourceV61.includes('Tekrar Dene') && detailComponentSourceV61.includes('data-action="analyze-parts-photo"'), 'v0.6.1 parca fotograf karti gecici hatada Tekrar Dene butonu gosterir', 'parca foto Tekrar Dene UI eksik');
 const aiQueueIpcSlice = mainIpcSource.slice(mainIpcSource.indexOf('IPC.aiQueueGetSnapshot'), mainIpcSource.indexOf('IPC.heavyDamagePreview'));
 const knowledgeIpcSlice = mainIpcSource.slice(mainIpcSource.indexOf('IPC.knowledgeSearch'), mainIpcSource.indexOf('IPC.heavyDamagePreview'));
 assert(ipcContractSource.includes('AiQueueEnqueuePreviewArgs') && preloadSource.includes('enqueueAiPreview') && mainIpcSource.includes('buildSafeAiQueuePreviewRequest') && mainIpcSource.includes('allowPaidProviders: false') && mainIpcSource.includes('allowExternalProviders: false'), 'v0.6.0 P1-B AI queue IPC/preload/main guvenli preview katmani bagli', 'AI queue IPC/preload/main guard eksik');

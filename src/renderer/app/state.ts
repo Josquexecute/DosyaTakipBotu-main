@@ -57,6 +57,8 @@ export interface UiState {
   partsAnalysis: PartsPhotoAnalysis | null;
   /** Parça fotoğrafı analizi sürüyor mu. */
   partsAnalyzing: boolean;
+  /** v0.6.1: AI parça okuma geçici hata mesajı (HTTP 503/zaman aşımı/ağ). Set ise "Tekrar Dene" gösterilir; analiz/seçim bozulmaz. */
+  partsAnalysisError: string;
   /** Kullanıcının öğrettiği parça terimleri (kalıcı, kişisel sözlük). */
   partsUserTerms: UserPartTerm[];
   laborLearningEntries: LaborLearningEntry[];
@@ -223,6 +225,7 @@ export const state: UiState = {
   laborRowOverrides: {},
   partsAnalysis: null,
   partsAnalyzing: false,
+  partsAnalysisError: '',
   partsUserTerms: [],
   laborLearningEntries: [],
   laborLearningSearch: '',
