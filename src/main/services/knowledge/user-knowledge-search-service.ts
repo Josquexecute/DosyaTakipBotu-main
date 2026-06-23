@@ -1,5 +1,5 @@
 import type { KnownKnowledgeTag } from '../../../shared/knowledge/knowledge-tags';
-import type { KnowledgeSearchQuery, KnowledgeSearchResponse, KnowledgeSearchResult } from '../../../shared/knowledge/knowledge-search-types';
+import type { KnowledgeSearchQuery, KnowledgeSearchResponse, KnowledgeSearchResult, UserKnowledgeStoreSearchStatus } from '../../../shared/knowledge/knowledge-search-types';
 import type { KnowledgeSourceType } from '../../../shared/knowledge/knowledge-types';
 import type { UserKnowledgeEntry } from '../../../shared/knowledge/user-knowledge-store-types';
 import { normalizeKnowledgeText, tokenizeKnowledgeText } from './knowledge-normalizer';
@@ -95,13 +95,14 @@ export function searchUserKnowledgeEntries(entries: readonly UserKnowledgeEntry[
  * tamami korunur (hicbiri dusurulmez); kullanici sonuclari skora gore ayni karsilastiriciyla yerlesir.
  * Depo okuma hatasinda seed sonuclari calismaya devam eder, yalniz bir uyari eklenir.
  */
-export function mergeUserKnowledgeIntoResponse(seed: KnowledgeSearchResponse, userResults: KnowledgeSearchResult[], userStoreError: boolean): KnowledgeSearchResponse {
+export function mergeUserKnowledgeIntoResponse(seed: KnowledgeSearchResponse, userResults: KnowledgeSearchResult[], userStoreStatus: UserKnowledgeStoreSearchStatus): KnowledgeSearchResponse {
   const combined = [...seed.results, ...userResults].sort(compareResults);
   return {
     query: seed.query,
     normalizedQuery: seed.normalizedQuery,
     total: seed.total + userResults.length,
     results: combined,
-    warnings: userStoreError ? [...seed.warnings, USER_KNOWLEDGE_STORE_READ_WARNING] : seed.warnings
+    warnings: userStoreStatus.readError ? [...seed.warnings, USER_KNOWLEDGE_STORE_READ_WARNING] : seed.warnings,
+    userStoreStatus
   };
 }

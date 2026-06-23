@@ -5,7 +5,7 @@ import type { LaborLearningEntry } from '../../shared/labor-learning-dictionary'
 import type { HeavyDamageAssessmentPreview, HeavyDamageRowEdit } from '../../shared/heavy-damage-types';
 import type { HeavyDamageFilter } from '../../shared/heavy-damage-rules';
 import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../../shared/ai/ai-queue-types';
-import type { KnowledgeImportApprovalReducerState, KnowledgeImportCommitResult, KnowledgeImportPlan, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceType } from '../../shared/knowledge';
+import type { KnowledgeImportApprovalReducerState, KnowledgeImportCommitResult, KnowledgeImportPlan, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceFilter, KnowledgeSourceType } from '../../shared/knowledge';
 
 export interface UiState {
   settings: AppSettings | null;
@@ -64,6 +64,8 @@ export interface UiState {
   laborLearningFilter: string;
   laborLearningLoading: boolean;
   laborLearningReport: string;
+  /** v0.6.0 UI: AI İşçilik Öğrenme Sözlüğü'nde açık/genişletilmiş kayıt anahtarları (yalnız UI belleği; kalıcı değil). */
+  laborLearningExpanded: Record<string, boolean>;
   aiQueueSnapshot: AiTaskQueueSnapshot | null;
   aiQueueEvents: AiQueueHistoryEvent[];
   aiQueueEventsError: string;
@@ -84,6 +86,8 @@ export interface UiState {
   selectedKnowledgeSourceTypes: KnowledgeSourceType[];
   selectedKnowledgeSourceId: string;
   selectedKnowledgeResultId: string;
+  /** v0.6.0 P4-E4: Bilgi Bankasi sonuc gorunumu icin salt-okunur kaynak filtresi (all/seed/user). */
+  knowledgeSourceFilter: KnowledgeSourceFilter;
   /** v0.6.0 P3-H: read-only dry-run import IPC'sinden donen plan (canli panel testi). Kalici degildir. */
   knowledgeImportDryRunPlan: KnowledgeImportPlan | null;
   knowledgeImportDryRunLoading: boolean;
@@ -225,6 +229,7 @@ export const state: UiState = {
   laborLearningFilter: 'all',
   laborLearningLoading: false,
   laborLearningReport: '',
+  laborLearningExpanded: {},
   aiQueueSnapshot: null,
   aiQueueEvents: [],
   aiQueueEventsError: '',
@@ -245,6 +250,7 @@ export const state: UiState = {
   selectedKnowledgeSourceTypes: [],
   selectedKnowledgeSourceId: '',
   selectedKnowledgeResultId: '',
+  knowledgeSourceFilter: 'all',
   knowledgeImportDryRunPlan: null,
   knowledgeImportDryRunLoading: false,
   knowledgeImportDryRunError: '',

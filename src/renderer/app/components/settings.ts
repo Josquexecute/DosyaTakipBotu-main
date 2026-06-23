@@ -118,7 +118,7 @@ function renderLaborLearningCard(state: UiState): string {
   const disabled = total - active;
   const shown = entries.slice(0, 80);
   const rows = shown.length
-    ? shown.map(renderLaborLearningRow).join('')
+    ? shown.map((entry) => renderLaborLearningRow(entry, state.laborLearningExpanded[laborLearningEntryKey(entry)] === true)).join('')
     : '<div class="labor-learning-empty">Bu filtrede öğrenme kaydı yok.</div>';
   return `<div class="info-card wide labor-learning-card">
     <div class="labor-learning-header">
@@ -152,37 +152,53 @@ function renderLaborLearningCard(state: UiState): string {
   </div>`;
 }
 
-function renderLaborLearningRow(entry: LaborLearningEntry): string {
+function laborLearningEntryKey(entry: LaborLearningEntry): string {
+  return `${entry.normalizedName}::${entry.partCode ?? ''}`;
+}
+
+// v0.6.0 UI: Kompakt akordeon satır. Varsayılan kapalı; yalnız özet (parça adı, kod, işçilik türleri,
+// durum ve Aç/Kapat) gösterilir. Detay (meta + düzenleme + işlemler) yalnız kullanıcı "Aç" derse görünür.
+function renderLaborLearningRow(entry: LaborLearningEntry, expanded: boolean): string {
   const keyAttrs = `data-learning-name="${escapeHtml(entry.normalizedName)}" data-learning-code="${escapeHtml(entry.partCode ?? '')}"`;
-  const categories = LABOR_CATEGORIES.map((category) => `<label><input type="checkbox" data-learning-category="${escapeHtml(category)}" ${entry.categories.includes(category) ? 'checked' : ''}/> ${escapeHtml(category)}</label>`).join('');
-  return `<div class="labor-learning-row ${entry.active === false ? 'disabled' : ''}" ${keyAttrs}>
-    <div class="labor-learning-main">
-      <div>
+  const toggleAttrs = `data-learning-key="${escapeHtml(laborLearningEntryKey(entry))}"`;
+  const categorySummary = entry.categories.length ? escapeHtml(entry.categories.join(', ')) : 'İşçilik türü yok';
+  const summary = `<div class="labor-learning-summary">
+      <button class="labor-learning-toggle secondary compact" data-action="labor-learning-toggle" ${toggleAttrs} type="button" aria-expanded="${expanded ? 'true' : 'false'}" title="${expanded ? 'Kaydı kapat' : 'Kaydı aç'}">${icon(expanded ? 'close' : 'details')}<span>${expanded ? 'Kapat' : 'Aç'}</span></button>
+      <div class="labor-learning-summary-main">
         <b>${escapeHtml(entry.alias)}</b>
         <small>${escapeHtml(entry.normalizedName)}${entry.partCode ? ` • Kod: ${escapeHtml(entry.partCode)}` : ''}</small>
+        <small>İşçilik: ${categorySummary}</small>
       </div>
       <span class="status-chip ${entry.active === false ? 'warning' : 'ok'}">${entry.active === false ? 'Devre dışı' : 'Aktif'}</span>
-    </div>
-    <div class="labor-learning-meta">
-      <span><small>İşçilik</small><b>${escapeHtml(entry.categories.join(', '))}</b></span>
-      <span><small>Kaynak</small><b>${escapeHtml(laborLearningSourceLabel(entry.source))}</b></span>
-      <span><small>Kullanım</small><b>${entry.useCount ?? 0}</b></span>
-      <span><small>Öğrenildi</small><b>${escapeHtml(formatLearningDate(entry.createdAt))}</b></span>
-      <span><small>Son kullanım</small><b>${escapeHtml(formatLearningDate(entry.lastUsedAt))}</b></span>
-      <span><small>Güncelleme</small><b>${escapeHtml(formatLearningDate(entry.updatedAt))}</b></span>
-    </div>
-    <div class="labor-learning-edit">
-      <div class="labor-learning-categories">${categories}</div>
-      <label class="switch"><input type="checkbox" data-learning-review ${entry.needsReview ? 'checked' : ''}/> Kontrol gerekli varsayılanı</label>
-      <label class="switch"><input type="checkbox" data-learning-active ${entry.active !== false ? 'checked' : ''}/> Aktif</label>
-      <label class="wide">Karar gerekçesi / not<textarea data-learning-reason rows="2">${escapeHtml(entry.reason ?? '')}</textarea></label>
-    </div>
-    <div class="labor-learning-actions">
-      <button class="primary compact" data-action="labor-learning-update" ${keyAttrs}>${icon('check')}<span>Kaydet</span></button>
-      ${entry.active === false
-        ? `<button class="secondary compact" data-action="labor-learning-enable" ${keyAttrs}>Aktifleştir</button>`
-        : `<button class="secondary compact" data-action="labor-learning-disable" ${keyAttrs}>Devre dışı bırak</button>`}
-      <button class="secondary danger compact" data-action="labor-learning-delete" ${keyAttrs}>Sil</button>
+    </div>`;
+  if (!expanded) {
+    return `<div class="labor-learning-row compact ${entry.active === false ? 'disabled' : ''}" ${keyAttrs}>${summary}</div>`;
+  }
+  const categories = LABOR_CATEGORIES.map((category) => `<label><input type="checkbox" data-learning-category="${escapeHtml(category)}" ${entry.categories.includes(category) ? 'checked' : ''}/> ${escapeHtml(category)}</label>`).join('');
+  return `<div class="labor-learning-row ${entry.active === false ? 'disabled' : ''}" ${keyAttrs}>
+    ${summary}
+    <div class="labor-learning-detail">
+      <div class="labor-learning-meta">
+        <span><small>İşçilik</small><b>${escapeHtml(entry.categories.join(', '))}</b></span>
+        <span><small>Kaynak</small><b>${escapeHtml(laborLearningSourceLabel(entry.source))}</b></span>
+        <span><small>Kullanım</small><b>${entry.useCount ?? 0}</b></span>
+        <span><small>Öğrenildi</small><b>${escapeHtml(formatLearningDate(entry.createdAt))}</b></span>
+        <span><small>Son kullanım</small><b>${escapeHtml(formatLearningDate(entry.lastUsedAt))}</b></span>
+        <span><small>Güncelleme</small><b>${escapeHtml(formatLearningDate(entry.updatedAt))}</b></span>
+      </div>
+      <div class="labor-learning-edit">
+        <div class="labor-learning-categories">${categories}</div>
+        <label class="switch"><input type="checkbox" data-learning-review ${entry.needsReview ? 'checked' : ''}/> Kontrol gerekli varsayılanı</label>
+        <label class="switch"><input type="checkbox" data-learning-active ${entry.active !== false ? 'checked' : ''}/> Aktif</label>
+        <label class="wide">Karar gerekçesi / not<textarea data-learning-reason rows="2">${escapeHtml(entry.reason ?? '')}</textarea></label>
+      </div>
+      <div class="labor-learning-actions">
+        <button class="primary compact" data-action="labor-learning-update" ${keyAttrs}>${icon('check')}<span>Kaydet</span></button>
+        ${entry.active === false
+          ? `<button class="secondary compact" data-action="labor-learning-enable" ${keyAttrs}>Aktifleştir</button>`
+          : `<button class="secondary compact" data-action="labor-learning-disable" ${keyAttrs}>Devre dışı bırak</button>`}
+        <button class="secondary danger compact" data-action="labor-learning-delete" ${keyAttrs}>Sil</button>
+      </div>
     </div>
   </div>`;
 }

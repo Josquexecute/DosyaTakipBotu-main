@@ -11,3 +11,4 @@ export * from './knowledge-import-approval';
 export * from './knowledge-import-write-lock';
 export * from './user-knowledge-store-types';
 export * from './knowledge-import-commit-plan';
+export * from './knowledge-source-filter';

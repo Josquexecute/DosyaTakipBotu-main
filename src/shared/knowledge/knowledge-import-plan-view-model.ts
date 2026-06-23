@@ -45,12 +45,12 @@ export interface KnowledgeImportPlanViewModel {
 }
 
 export const KNOWLEDGE_IMPORT_PLAN_SAFETY_NOTES = [
-  'Bu ekran sadece import planini gosterir.',
+  'Bu ekran sadece içe aktarma planını gösterir.',
   'Bu asamada dosya icerigi okunmaz.',
   'Bu asamada bilgi bankasina kalici kaynak eklenmez.',
   'takip.json, Excel veya AppData yazilmaz.',
-  'Onay akisi hazirlik durumundadir; bu surumde import calistirilmaz.',
-  'Plan canWrite=false olarak uretilir.'
+  'Onay akışı hazırlık durumundadır; bu sürümde içe aktarma çalıştırılmaz.',
+  'Plan yazma kapalı (canWrite=false) olarak üretilir.'
 ] as const;
 
 export function buildKnowledgeImportPlanViewModel(plan: KnowledgeImportPlan, approvalState?: KnowledgeImportApprovalReducerState): KnowledgeImportPlanViewModel {
@@ -62,11 +62,11 @@ export function buildKnowledgeImportPlanViewModel(plan: KnowledgeImportPlan, app
     canWriteLabel: plan.canWrite === false ? 'Yazma kapali' : 'Yazma kapali olmalidir',
     metrics: [
       { label: 'Toplam aday', value: plan.totals.totalCandidates, tone: 'neutral' },
-      { label: 'Dry-run adayi', value: plan.totals.allowedForDryRun, tone: 'ok' },
+      { label: 'Deneme planı adayı', value: plan.totals.allowedForDryRun, tone: 'ok' },
       { label: 'Onay gerektirir', value: plan.totals.requiresApproval, tone: 'warning' },
       { label: 'Reddedildi', value: plan.totals.notAllowed, tone: 'danger' },
       { label: 'Mod', value: plan.mode, tone: 'neutral' },
-      { label: 'Kalici yazma', value: 'Kapali', tone: 'danger' }
+      { label: 'Kalıcı yazma', value: 'Kapalı', tone: 'danger' }
     ],
     warnings: [...plan.warnings],
     safetyNotes: [...KNOWLEDGE_IMPORT_PLAN_SAFETY_NOTES],
@@ -104,7 +104,7 @@ export function permissionLabel(permission: KnowledgeImportPermissionLevel): str
     case 'not_allowed': return 'Reddedildi';
     case 'dry_run_only': return 'Sadece plan';
     case 'requires_user_approval': return 'Kullanici onayi gerekir';
-    case 'approved_for_future_import': return 'Gelecek import icin uygun';
+    case 'approved_for_future_import': return 'Gelecek içe aktarma için uygun';
   }
 }
 

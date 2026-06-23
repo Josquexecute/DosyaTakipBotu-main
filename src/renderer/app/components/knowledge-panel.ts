@@ -1,9 +1,9 @@
 import type { UiState } from '../state';
 import { escapeHtml, formatDate } from '../validation';
 import { icon } from '../icons';
-import type { KnowledgeSearchResult, KnowledgeSource, KnowledgeSourceType } from '../../../shared/knowledge';
+import type { KnowledgeSearchResult, KnowledgeSource, KnowledgeSourceFilter, KnowledgeSourceType } from '../../../shared/knowledge';
 // P3-F: Pasif (read-only) statik ORNEK dry-run plan + ornek onay durumu gosterimi. Gercek tarama, dosya alma, IPC veya yazma yoktur.
-import { approvalLabel, buildKnowledgeImportCommitPlan, buildSampleKnowledgeImportApprovalState, buildSampleKnowledgeImportPlan, getKnowledgeImportApprovalState, summarizeKnowledgeImportApprovals } from '../../../shared/knowledge';
+import { approvalLabel, buildKnowledgeImportCommitPlan, buildSampleKnowledgeImportApprovalState, buildSampleKnowledgeImportPlan, filterKnowledgeResultsByOrigin, getKnowledgeImportApprovalState, summarizeKnowledgeImportApprovals } from '../../../shared/knowledge';
 import { renderKnowledgeImportPlanView } from './knowledge-import-plan-view';
 
 const MAX_VISIBLE_SOURCES = 30;
@@ -34,7 +34,7 @@ export function renderKnowledgePanel(state: UiState): string {
     <div class="knowledge-header">
       <div>
         <h3>${icon('health')} Bilgi Bankası</h3>
-        <p class="settings-help">Local-only / ücretsiz / salt okunur</p>
+        <p class="settings-help">Yalnız yerel / ücretsiz / salt okunur</p>
       </div>
       <div class="settings-header-actions">
         <button class="secondary compact" data-action="knowledge-refresh" type="button" ${state.knowledgeSourcesLoading ? 'disabled' : ''}>${icon('refresh')}<span>Yenile</span></button>
@@ -54,6 +54,7 @@ export function renderKnowledgePanel(state: UiState): string {
     <div class="knowledge-workspace">
       <div class="knowledge-search-panel knowledge-search-controls">
         ${renderSearchBar(state)}
+        ${renderKnowledgeSourceFilter(state)}
         ${renderKnowledgeFilters(state, availableTags, availableSourceTypes)}
       </div>
       <div class="knowledge-source-panel">
@@ -80,7 +81,7 @@ export function renderKnowledgePanel(state: UiState): string {
 function renderKnowledgeImportTextPreview(state: UiState): string {
   const preview = state.knowledgeImportTextPreview;
   const loadingBlock = state.knowledgeImportTextPreviewLoading
-    ? `<div class="app-alert info"><span>Metin dosyasi okunuyor (yazmasiz)...</span></div>`
+    ? `<div class="app-alert info"><span>Metin dosyası okunuyor (yazmasız)...</span></div>`
     : '';
   const errorBlock = state.knowledgeImportTextPreviewError
     ? `<div class="app-alert warning"><span>${escapeHtml(state.knowledgeImportTextPreviewError)}</span></div>`
@@ -89,18 +90,18 @@ function renderKnowledgeImportTextPreview(state: UiState): string {
     ? `<div class="knowledge-import-plan-meta compact">
         <span><small>Dosya</small><b>${escapeHtml(preview.fileName)}</b></span>
         <span><small>Boyut (bayt)</small><b>${escapeHtml(preview.sizeBytes)}</b></span>
-        <span><small>Kisaltildi</small><b>${preview.truncated ? 'evet' : 'hayir'}</b></span>
-        <span><small>canWrite</small><b>${preview.canWrite ? 'true' : 'false'}</b></span>
+        <span><small>Kısaltıldı</small><b>${preview.truncated ? 'evet' : 'hayır'}</b></span>
+        <span><small>Yazma izni</small><b>${preview.canWrite ? 'var' : 'yok'}</b></span>
       </div>
       <pre class="knowledge-import-text-preview">${escapeHtml(preview.text)}</pre>`
-    : `<div class="knowledge-empty">Onizleme icin .txt/.md dosyasi sec.</div>`;
-  return `<section class="knowledge-import-plan-view" aria-label="TXT/MD icerik onizleme (yazmasiz)">
+    : `<div class="knowledge-empty">Önizleme için .txt/.md dosyası seçin.</div>`;
+  return `<section class="knowledge-import-plan-view" aria-label="TXT/MD içerik önizleme (yazmasız)">
     <div class="knowledge-import-plan-header">
       <div>
-        <h4>TXT/MD Icerik Onizleme (yazmasiz)</h4>
-        <p class="settings-help">Yalniz .txt/.md duz-metin okunur ve bellek-ici gosterilir; PDF/DOCX/XLSX acilmaz, ayristirma/gorsel-metin yok, kalici yazma yok.</p>
+        <h4>TXT/MD İçerik Önizleme (yazmasız)</h4>
+        <p class="settings-help">Yalnız .txt/.md düz-metin okunur ve bellekte gösterilir; PDF/DOCX/XLSX açılmaz, ayrıştırma/görsel-metin yok, kalıcı yazma yok.</p>
       </div>
-      <button class="secondary compact" data-action="knowledge-preview-text" type="button" ${state.knowledgeImportTextPreviewLoading ? 'disabled' : ''}>TXT/MD onizle</button>
+      <button class="secondary compact" data-action="knowledge-preview-text" type="button" ${state.knowledgeImportTextPreviewLoading ? 'disabled' : ''}>TXT/MD önizle</button>
     </div>
     ${loadingBlock}${errorBlock}${body}
   </section>`;
@@ -117,29 +118,29 @@ function renderKnowledgeImportCommitPreview(state: UiState): string {
     && commit.candidates.some((candidate) => candidate.willCommit && candidate.fileName === preview.fileName);
   const result = state.knowledgeImportCommitResult;
   const resultBlock = result
-    ? `<div class="app-alert ${result.ok ? 'info' : 'warning'}"><span>${escapeHtml(result.message)} (committed=${result.committed}, duplicate=${result.skippedDuplicate}, revision=${escapeHtml(result.storeRevision ?? '-')}, writeId=${escapeHtml(result.writeId ?? '-')})</span></div>`
+    ? `<div class="app-alert ${result.ok ? 'info' : 'warning'}"><span>${escapeHtml(result.message)} (eklenen=${result.committed}, tekrar=${result.skippedDuplicate}, sürüm=${escapeHtml(result.storeRevision ?? '-')}, kayıt no=${escapeHtml(result.writeId ?? '-')})</span></div>`
     : '';
   const rows = commit.candidates.map((candidate) => `<div class="knowledge-import-approval-row">
       <div class="knowledge-import-approval-main">
         <b>${escapeHtml(candidate.fileName)}</b>
         <small>${escapeHtml(candidate.status)}</small>
       </div>
-      <span class="status-chip ${candidate.willCommit ? 'ok' : 'info'}">${candidate.willCommit ? 'commit edilebilir' : 'yazilmaz'}</span>
+      <span class="status-chip ${candidate.willCommit ? 'ok' : 'info'}">${candidate.willCommit ? 'kalıcı eklenebilir' : 'yazılmaz'}</span>
     </div>`).join('');
-  return `<section class="knowledge-import-plan-view" aria-label="Import commit on izleme">
+  return `<section class="knowledge-import-plan-view" aria-label="Kalıcı kayıt ön izleme">
     <div class="knowledge-import-plan-header">
       <div>
-        <h4>Import Commit On Izleme (onaylanmis .txt/.md)</h4>
-        <p class="settings-help">Onizlenmis ve onaylanmis tek .txt/.md icerigi ayri kullanici bilgi deposuna kalici yazar. takip.json/Excel/dosya klasorlerine dokunulmaz; yazimdan once son onay sorulur.</p>
+        <h4>Kalıcı Kayıt Ön İzleme (onaylanmış .txt/.md)</h4>
+        <p class="settings-help">Önizlenmiş ve onaylanmış tek .txt/.md içeriği ayrı kullanıcı bilgi deposuna kalıcı yazar. takip.json/Excel/dosya klasörlerine dokunulmaz; yazımdan önce son onay sorulur.</p>
       </div>
-      <button class="primary compact" data-action="knowledge-commit-text-preview" type="button" ${committable && !state.knowledgeImportCommitting ? '' : 'disabled'}>Kalici ice aktar</button>
+      <button class="primary compact" data-action="knowledge-commit-text-preview" type="button" ${committable && !state.knowledgeImportCommitting ? '' : 'disabled'}>Kalıcı olarak ekle</button>
     </div>
     <div class="knowledge-import-plan-meta compact">
       <span><small>Hedef depo</small><b>${escapeHtml(commit.targetStore)}</b></span>
-      <span><small>Onayli</small><b>${commit.totals.approved}</b></span>
+      <span><small>Onaylı</small><b>${commit.totals.approved}</b></span>
       <span><small>Uygun</small><b>${commit.totals.wouldCommit}</b></span>
-      <span><small>willWrite</small><b>${commit.willWrite ? 'true' : 'false'}</b></span>
-      <span><small>lockOpen</small><b>${commit.lockOpen ? 'true' : 'false'}</b></span>
+      <span><small>Yazılacak</small><b>${commit.willWrite ? 'evet' : 'hayır'}</b></span>
+      <span><small>Kilit açık</small><b>${commit.lockOpen ? 'evet' : 'hayır'}</b></span>
     </div>
     ${resultBlock}
     <div class="knowledge-import-approval-list">${rows}</div>
@@ -165,11 +166,11 @@ function renderKnowledgeImportApprovalControls(state: UiState): string {
       </div>
     </div>`;
   }).join('');
-  return `<section class="knowledge-import-plan-view" aria-label="Bellek-ici import onay kararlari">
+  return `<section class="knowledge-import-plan-view" aria-label="Bellek-ici onay kararlari">
     <div class="knowledge-import-plan-header">
       <div>
         <h4>Onay Kararlari (bellek-ici)</h4>
-        <p class="settings-help">Kararlar yalniz bellekte tutulur; import calistirmaz, diske/AppData/takip.json/Excel yazmaz. "Onayla" karari bile import baslatmaz (canExecuteImport=false).</p>
+        <p class="settings-help">Kararlar yalniz bellekte tutulur; kalıcı kayıt çalıştırmaz, diske/AppData/takip.json/Excel yazmaz. "Onayla" kararı bile kalıcı kayıt başlatmaz (kalıcı kayıt izni kapalı).</p>
       </div>
       <button class="secondary compact" data-action="knowledge-approval-reset" type="button">Kararlari sifirla</button>
     </div>
@@ -178,7 +179,7 @@ function renderKnowledgeImportApprovalControls(state: UiState): string {
       <span><small>Reddedildi</small><b>${summary.rejected}</b></span>
       <span><small>Manuel inceleme</small><b>${summary.userReviewRequired}</b></span>
       <span><small>Calistirildi</small><b>${summary.executed}</b></span>
-      <span><small>canExecuteImport</small><b>${summary.canExecuteImport ? 'true' : 'false'}</b></span>
+      <span><small>Kalıcı kayıt izni</small><b>${summary.canExecuteImport ? 'evet' : 'hayır'}</b></span>
     </div>
     <div class="knowledge-import-approval-list">${rows}</div>
   </section>`;
@@ -187,25 +188,25 @@ function renderKnowledgeImportApprovalControls(state: UiState): string {
 function renderKnowledgeImportLiveStatus(state: UiState): string {
   const plan = state.knowledgeImportDryRunPlan;
   const body = state.knowledgeImportDryRunLoading
-    ? `<div class="app-alert info"><span>Canli dry-run IPC cagrisi yapiliyor...</span></div>`
+    ? `<div class="app-alert info"><span>Canlı deneme planı hazırlanıyor...</span></div>`
     : state.knowledgeImportDryRunError
       ? `<div class="app-alert warning"><span>${escapeHtml(state.knowledgeImportDryRunError)}</span></div>`
       : plan
         ? `<div class="knowledge-import-plan-meta compact">
-            <span><small>Aday</small><b>${escapeHtml(plan.candidates.length)}</b></span>
-            <span><small>mode</small><b>${escapeHtml(plan.mode)}</b></span>
-            <span><small>canWrite</small><b>${plan.canWrite ? 'true' : 'false'}</b></span>
+            <span><small>Aday kayıt</small><b>${escapeHtml(plan.candidates.length)}</b></span>
+            <span><small>Mod</small><b>${escapeHtml(plan.mode)}</b></span>
+            <span><small>Yazma izni</small><b>${plan.canWrite ? 'var' : 'yok'}</b></span>
           </div>`
-        : `<div class="knowledge-empty">Canli dry-run IPC henuz cagrilmadi.</div>`;
-  return `<section class="knowledge-import-plan-view" aria-label="Canli read-only dry-run import IPC testi">
+        : `<div class="knowledge-empty">Canlı deneme planı henüz hazırlanmadı.</div>`;
+  return `<section class="knowledge-import-plan-view" aria-label="Canlı salt-okunur deneme planı">
     <div class="knowledge-import-plan-header">
       <div>
-        <h4>Canli Dry-run IPC Testi (read-only)</h4>
-        <p class="settings-help">Sabit ornek ya da secilen dosyalarin yalniz ad+boyut metadata'si ile read-only dry-run plan; icerik okuma veya kalici yazma yoktur.</p>
+        <h4>Canlı Deneme Planı (salt okunur)</h4>
+        <p class="settings-help">Sabit örnek ya da seçilen dosyaların yalnız ad+boyut dosya bilgisiyle salt-okunur deneme planı; içerik okuma veya kalıcı yazma yoktur.</p>
       </div>
       <div class="settings-header-actions">
-        <button class="secondary compact" data-action="knowledge-dryrun-choose-files" type="button" ${state.knowledgeImportDryRunLoading ? 'disabled' : ''}>Dosya sec (dry-run)</button>
-        <span class="status-chip info">read-only</span>
+        <button class="secondary compact" data-action="knowledge-dryrun-choose-files" type="button" ${state.knowledgeImportDryRunLoading ? 'disabled' : ''}>Dosya seç (deneme)</button>
+        <span class="status-chip info">salt okunur</span>
       </div>
     </div>
     ${body}
@@ -227,9 +228,9 @@ function renderStatusSummary(args: {
     ['Sonuç', args.resultCount],
     ['Seçili etiket', args.selectedTagCount],
     ['Seçili kaynak tipi', args.selectedSourceTypeCount],
-    ['Local-only', 'Evet'],
+    ['Yalnız yerel', 'Evet'],
     ['Ücretli servis', 'Yok'],
-    ['Harici API', 'Yok'],
+    ['Harici bağlantı', 'Yok'],
     ['Yazma modu', 'Kapalı']
   ];
   return `<div class="knowledge-summary" role="status" aria-live="polite">${cards.map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`).join('')}</div>`;
@@ -238,7 +239,7 @@ function renderStatusSummary(args: {
 function renderSafetyNotes(): string {
   return `<div class="knowledge-safety">
     <div class="app-alert info">${icon('info')}<span>Bu panel bilgi bankasını sadece okur. takip.json, Excel veya dosya klasörlerine yazma yapmaz.</span></div>
-    <div class="app-alert info">${icon('info')}<span>Bilgi bankası sonuçları ön bilgi niteliğindedir; nihai karar kullanıcı/eksper onayına tabidir. Local-only / ücretsiz / harici API yok.</span></div>
+    <div class="app-alert info">${icon('info')}<span>Bilgi bankası sonuçları ön bilgi niteliğindedir; nihai karar kullanıcı/eksper onayına tabidir. Yalnız yerel / ücretsiz / harici bağlantı yok.</span></div>
     <div class="app-alert info">${icon('info')}<span>Yerel kullanıcı bilgi deposundaki kayıtlar bu aramaya salt okunur olarak katılır; bu panel yalnız okuma yapar, depoyu değiştirmez.</span></div>
   </div>`;
 }
@@ -304,6 +305,26 @@ function renderSearchBar(state: UiState): string {
   </div>`;
 }
 
+function renderKnowledgeSourceFilter(state: UiState): string {
+  const current = state.knowledgeSourceFilter;
+  const options: Array<[KnowledgeSourceFilter, string]> = [['all', 'Tümü'], ['seed', 'Yerleşik'], ['user', 'Kullanıcı Kaynağı']];
+  return `<section class="knowledge-source-filter" aria-label="Bilgi bankası kaynak filtresi">
+    <div class="knowledge-subhead"><b>Kaynak</b><small>Sonuç görünümü (salt okunur)</small></div>
+    <div class="knowledge-chip-list">${options.map(([value, label]) => `<button class="knowledge-chip ${current === value ? 'active' : ''}" data-action="knowledge-source-filter" data-knowledge-source-filter="${escapeHtml(value)}" type="button" aria-pressed="${current === value ? 'true' : 'false'}" aria-label="${escapeHtml(`${label} kaynak filtresi`)}">${escapeHtml(label)}</button>`).join('')}</div>
+  </section>`;
+}
+
+function knowledgeResultsEmptyMessage(state: UiState): string {
+  const status = state.knowledgeSearchResponse?.userStoreStatus;
+  if (state.knowledgeSourceFilter === 'user') {
+    if (status?.readError) return 'Kullanıcı bilgi deposu okunamadı; yerleşik kaynaklar gösteriliyor.';
+    if ((status?.entryCount ?? 0) === 0) return 'Kullanıcı bilgi deposunda henüz kayıt yok.';
+    return 'Kullanıcı kaynaklarında eşleşen kayıt bulunamadı.';
+  }
+  if (state.knowledgeSourceFilter === 'seed') return 'Eşleşen yerleşik kayıt bulunamadı.';
+  return 'Eşleşen bilgi bulunamadı.';
+}
+
 function renderKnowledgeFilters(state: UiState, tags: string[], sourceTypes: KnowledgeSourceType[]): string {
   const hasFilters = state.selectedKnowledgeTags.length > 0 || state.selectedKnowledgeSourceTypes.length > 0;
   return `<section class="knowledge-filter-panel" aria-label="Bilgi bankası filtreleri">
@@ -329,7 +350,9 @@ function renderFilterChip(action: string, dataName: string, value: string, label
 
 function renderSearchResults(state: UiState): string {
   const response = state.knowledgeSearchResponse;
-  const results = response?.results.slice(0, MAX_VISIBLE_RESULTS) ?? [];
+  // v0.6.0 P4-E4: Sonuclar kaynak filtresine gore (all/seed/user) gosterimde suzulur; arama motoru degismez.
+  const filteredResults = response ? filterKnowledgeResultsByOrigin(response.results, state.knowledgeSourceFilter) : [];
+  const results = filteredResults.slice(0, MAX_VISIBLE_RESULTS);
   const warning = state.knowledgeSearchError
     ? `<div class="app-alert warning" role="status" aria-live="polite">${icon('warning')}<span>${escapeHtml(state.knowledgeSearchError)}</span></div>`
     : '';
@@ -350,16 +373,24 @@ function renderSearchResults(state: UiState): string {
 
   const body = results.length
     ? results.map((result) => renderResultRow(result, state.selectedKnowledgeResultId === result.chunkId)).join('')
-    : `<div class="knowledge-empty">Eşleşen bilgi bulunamadı.</div>`;
+    : `<div class="knowledge-empty">${escapeHtml(knowledgeResultsEmptyMessage(state))}</div>`;
 
   return `<section class="knowledge-results" aria-label="Bilgi bankası arama sonuçları" aria-live="polite">
     <div class="knowledge-subhead">
       <b>Arama sonucu</b>
-      <small>${escapeHtml(response.total)} eşleşme · ${escapeHtml(response.normalizedQuery || response.query || '-')}</small>
+      <small>${escapeHtml(filteredResults.length)} eşleşme${state.knowledgeSourceFilter !== 'all' ? ` (${escapeHtml(sourceFilterLabel(state.knowledgeSourceFilter))})` : ''} · ${escapeHtml(response.normalizedQuery || response.query || '-')}</small>
     </div>
     ${warning}${loading}${serviceWarnings}
     <div class="knowledge-result-list">${body}</div>
   </section>`;
+}
+
+function sourceFilterLabel(filter: KnowledgeSourceFilter): string {
+  switch (filter) {
+    case 'seed': return 'Yerleşik';
+    case 'user': return 'Kullanıcı Kaynağı';
+    default: return 'Tümü';
+  }
 }
 
 function renderResultRow(result: KnowledgeSearchResult, selected: boolean): string {

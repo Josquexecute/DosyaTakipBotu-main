@@ -3357,6 +3357,42 @@ html.dark .case-virtual-row.selected {
   background: color-mix(in srgb, var(--warning, #b26a00) 5%, var(--surface));
 }
 
+/* v0.6.0 UI: AI İşçilik Öğrenme Sözlüğü kompakt akordeon. Kapalı kayıt tek satır özet, detay açınca görünür. */
+.labor-learning-row.compact {
+  padding: 6px 10px;
+}
+
+.labor-learning-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.labor-learning-summary-main {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.labor-learning-summary-main small {
+  color: var(--on-surface-variant);
+  font-size: 11px;
+}
+
+.labor-learning-toggle {
+  flex: 0 0 auto;
+}
+
+.labor-learning-detail {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--outline-variant);
+}
+
 .labor-learning-main,
 .labor-learning-actions {
   display: flex;

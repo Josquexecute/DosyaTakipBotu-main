@@ -26,7 +26,7 @@ import type { LaborCategory } from '../shared/labor-rules';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageDamageType, HeavyDamageRepairSeverity, HeavyDamageRowEdit } from '../shared/heavy-damage-types';
 import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../shared/ai/ai-queue-types';
 import type { KnowledgeImportCommitInput, KnowledgeImportCommitResult, KnowledgeImportDryRunResponse, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceType } from '../shared/knowledge';
-import { applyKnowledgeImportApprovalDecision, buildKnowledgeImportCommitPlan, createKnowledgeImportApprovalState } from '../shared/knowledge';
+import { applyKnowledgeImportApprovalDecision, buildKnowledgeImportCommitPlan, createKnowledgeImportApprovalState, isKnowledgeSourceFilter } from '../shared/knowledge';
 import { applyHeavyDamageEdits, generateHeavyDamageAssessmentNote, HEAVY_DAMAGE_FILTERS, type HeavyDamageFilter } from '../shared/heavy-damage-rules';
 import { renderApp } from './app/components/layout';
 import { getFilteredCases, getVirtualListTotalHeight, renderCaseVirtualRows } from './app/components/cases';
@@ -421,6 +421,13 @@ function selectKnowledgeSource(sourceId?: string): void {
 
 function selectKnowledgeResult(chunkId?: string): void {
   state.selectedKnowledgeResultId = chunkId ?? '';
+  render();
+}
+
+// v0.6.0 P4-E4: Sonuc gorunumu kaynak filtresi (all/seed/user). Yalniz mevcut sonuclari gosterimde suzer;
+// yeni arama/IPC/yazma yapmaz.
+function setKnowledgeSourceFilter(filter?: string): void {
+  state.knowledgeSourceFilter = isKnowledgeSourceFilter(filter) ? filter : 'all';
   render();
 }
 
@@ -1150,6 +1157,7 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'heavy-damage-save-cancel': state.heavyDamageConfirmOpen = false; setToast('Ağır hasar kaydı iptal edildi.', 'info'); render(); break;
     case 'heavy-damage-clear': await clearHeavyDamageAssessment(); break;
     case 'labor-learning-refresh': await loadLaborLearning(true); break;
+    case 'labor-learning-toggle': toggleLaborLearningExpanded(element); break;
     case 'ai-queue-refresh': await loadAiQueueSnapshot(true); break;
     case 'ai-queue-toggle-auto-refresh': toggleAiQueueAutoRefresh(); break;
     case 'ai-queue-select': selectAiQueueTask(element?.dataset.queueTaskId); break;
@@ -1168,6 +1176,7 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'knowledge-filter-clear': await clearKnowledgeFilters(); break;
     case 'knowledge-source-select': selectKnowledgeSource(element?.dataset.knowledgeSourceId); break;
     case 'knowledge-result-select': selectKnowledgeResult(element?.dataset.knowledgeResultId); break;
+    case 'knowledge-source-filter': setKnowledgeSourceFilter(element?.dataset.knowledgeSourceFilter); break;
     case 'labor-learning-update': await updateLaborLearningEntry(element); break;
     case 'labor-learning-disable': await setLaborLearningEntryActive(element, false); break;
     case 'labor-learning-enable': await setLaborLearningEntryActive(element, true); break;
@@ -1525,6 +1534,14 @@ function collectLaborLearningUpdate(element?: HTMLElement): LaborLearningUpdateI
   const needsReview = row.querySelector<HTMLInputElement>('[data-learning-review]')?.checked ?? false;
   const active = row.querySelector<HTMLInputElement>('[data-learning-active]')?.checked ?? true;
   return { ...key, categories, reason, needsReview, active, source: 'user-correction' };
+}
+
+// v0.6.0 UI: AI İşçilik Öğrenme Sözlüğü kompakt kartının aç/kapat durumu (yalnız UI belleği, kalıcı değil).
+function toggleLaborLearningExpanded(element?: HTMLElement): void {
+  const key = element?.closest<HTMLElement>('[data-learning-key]')?.dataset.learningKey;
+  if (!key) return;
+  state.laborLearningExpanded[key] = !state.laborLearningExpanded[key];
+  render();
 }
 
 async function updateLaborLearningEntry(element?: HTMLElement): Promise<void> {

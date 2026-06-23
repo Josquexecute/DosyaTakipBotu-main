@@ -28,10 +28,23 @@ export interface KnowledgeSearchResult {
   sourceLabel?: string;
 }
 
+/**
+ * v0.6.0 P4-E4: Kullanici bilgi deposunun SALT-OKUNUR durum ozeti (UI bos/hata mesajlari icin).
+ * filePath/mutlak yol/AppData yolu ICERMEZ; yalniz sayisal/ozet bilgidir.
+ */
+export interface UserKnowledgeStoreSearchStatus {
+  available: boolean;
+  entryCount: number;
+  matchedCount: number;
+  readError?: string;
+}
+
 export interface KnowledgeSearchResponse {
   query: string;
   normalizedQuery: string;
   total: number;
   results: KnowledgeSearchResult[];
   warnings: string[];
+  /** v0.6.0 P4-E4: kullanici bilgi deposu durum ozeti (read-only; UI filtre/bos-mesaj icin). */
+  userStoreStatus?: UserKnowledgeStoreSearchStatus;
 }

@@ -206,14 +206,18 @@ export class IpcController {
   private async searchKnowledgeWithUserStore(query: KnowledgeSearchQuery | string): Promise<KnowledgeSearchResponse> {
     const seed = this.knowledge.search(query);
     let userResults: KnowledgeSearchResult[] = [];
-    let userStoreError = false;
+    let entryCount = 0;
+    let available = true;
+    let readError: string | undefined;
     try {
       const store = await new UserKnowledgeStoreFile(this.cache.cacheRoot).read();
+      entryCount = store.entries.length;
       userResults = searchUserKnowledgeEntries(store.entries, query);
     } catch {
-      userStoreError = true;
+      available = false;
+      readError = 'Kullanıcı bilgi deposu okunamadı.';
     }
-    return mergeUserKnowledgeIntoResponse(seed, userResults, userStoreError);
+    return mergeUserKnowledgeIntoResponse(seed, userResults, { available, entryCount, matchedCount: userResults.length, ...(readError ? { readError } : {}) });
   }
 
   private async safe<T>(operation: () => Promise<T>): Promise<ApiResult<T>> {
