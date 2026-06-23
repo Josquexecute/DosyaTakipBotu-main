@@ -19,7 +19,7 @@ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-office-audit-'))
 const appData = path.join(root, 'appdata');
 const yearRoot = path.join(root, 'pCloud Drive (P)', 'BARAN GLOBAL EKSPERTİZ', '2026');
 const pkg = JSON.parse(await fs.readFile('package.json', 'utf-8'));
-assert(pkg.version === '0.6.0', 'Paket sürümü v0.6.0 olarak sabitlendi', `version=${pkg.version}`);
+assert(pkg.version === '0.6.1', 'Paket sürümü v0.6.1 olarak sabitlendi', `version=${pkg.version}`);
 assert(APP_VERSION === pkg.version, 'APP_VERSION package.json ile uyumlu', `APP_VERSION=${APP_VERSION}, package=${pkg.version}`);
 assert(Boolean(pkg.scripts?.['live:version-check']) && Boolean(pkg.scripts?.['release:hash']) && Boolean(pkg.scripts?.['release:notes']), 'v0.3.14 Windows rollout scriptleri package.json içinde mevcut', JSON.stringify(pkg.scripts));
 assert(Boolean(pkg.scripts?.['test:behavior']) && String(pkg.scripts?.ci || '').includes('test:behavior'), 'v0.3.18 davranış regresyon testleri CI zincirine bağlı', JSON.stringify(pkg.scripts));
@@ -586,7 +586,7 @@ async function pathExists(targetPath) {
 // --- v0.6.0 UI/Runtime stability: manuel calisma-klasoru secim kilidi + scroll koruma guardlari ---
 const rendererStateSource = await fs.readFile('src/renderer/app/state.ts', 'utf-8');
 assert(rendererStateSource.includes('hasManualWorkingFolderSelection: boolean') && rendererStateSource.includes('hasManualWorkingFolderSelection: false'), 'v0.6.0 UI-stability manuel calisma-klasoru secim bayragi state icinde tanimli ve baslangicta kapali', 'hasManualWorkingFolderSelection state alani eksik');
-assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'settings']") && rendererSource.includes('isTabAllowedNow') && rendererSource.includes('if (!isTabAllowedNow(targetTab))') && rendererSource.includes('Önce Dosyalar bölümünden çalışma klasörü seçiniz.'), 'v0.6.0 UI-stability manuel secim yapilmadan Dosyalar/Ayarlar disi sekme kilitli (tab gate + uyari)', 'manuel secim tab gate eksik');
+assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'settings']") && rendererSource.includes('isTabAllowedNow') && rendererSource.includes('if (!isTabAllowedNow(targetTab))') && rendererSource.includes('Önce Dosyalar bölümünden çalışma klasörü seçiniz.'), 'v0.6.1 UI-stability manuel secim yapilmadan Dosyalar/Durum Panosu/Ayarlar disi sekme kilitli (tab gate + uyari)', 'manuel secim tab gate eksik');
 const reloadCacheSlice = rendererSource.slice(rendererSource.indexOf('async function reloadCache'), rendererSource.indexOf('interface FocusSnapshot'));
 assert(reloadCacheSlice.length > 0 && reloadCacheSlice.includes('state.cases[0]') && !reloadCacheSlice.includes('markManualWorkingFolderSelection'), 'v0.6.0 UI-stability otomatik son-klasor/ilk-dosya secimi kilidi ACMAZ (manuel bayragi set etmez)', 'otomatik klasor secimi kilidi aciyor');
 assert((rendererSource.match(/markManualWorkingFolderSelection\(\)/g) || []).length >= 2, 'v0.6.0 UI-stability manuel dosya secimi (liste tiklamasi + panodan acma) kilidi acar', 'manuel secim bayragi set edilmiyor');

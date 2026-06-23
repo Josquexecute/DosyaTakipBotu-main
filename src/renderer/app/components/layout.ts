@@ -48,7 +48,7 @@ export function renderApp(state: UiState): string {
       ${navItem('rucu', 'Rücu', 'rucu', activePage === 'rucu', folderLocked)}
       ${navItem('ktt', 'KTT / Kusur', 'ktt', activePage === 'ktt', folderLocked)}
       ${navItem('warning', 'Ağır Hasar', 'heavy', activePage === 'heavy', folderLocked)}
-      ${navItem('board', 'Durum Panosu', 'durum', activePage === 'durum', folderLocked)}
+      ${navItem('board', 'Durum Panosu', 'durum', activePage === 'durum', false)}
       ${navItem('settings', 'Ayarlar', 'settings', activePage === 'settings', false)}
     </div>
     <div class="side-footer">

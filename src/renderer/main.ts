@@ -543,11 +543,12 @@ function restoreScrollPositions(positions: Map<string, number>): void {
   }
 }
 
-// v0.6.0 UI-stability: Manuel çalışma klasörü/dosyası seçim kilidi. Kullanıcı Dosyalar bölümünden
-// ELLE bir dosya seçene kadar yalnızca Dosyalar ve Ayarlar sekmelerine girilebilir; diğer ekranlar
-// (Operasyon, Özet, Evrak, Excel, Rücu, KTT, Ağır Hasar, Durum Panosu, Klasörler, Ana Sayfa) kilitlidir.
+// v0.6.1 UI-stability: Manuel çalışma klasörü/dosyası seçim kilidi. Kullanıcı Dosyalar veya Durum Panosu'ndan
+// ELLE bir dosya seçene kadar yalnızca her zaman açık sekmelere (Dosyalar, Durum Panosu, Ayarlar) girilebilir;
+// diğer operasyonel ekranlar (Operasyon, Özet, Evrak, Excel, Rücu, KTT, Ağır Hasar, Klasörler, Ana Sayfa) kilitlidir.
+// Durum Panosu da daima açıktır; oradan dosya seçimi (openCaseFromBoard) aktif seçim sayılır ve kilidi açar.
 // Otomatik son-klasör yükleme/geri-yükleme bu kilidi AÇMAZ; yalnız manuel seçim açar.
-const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'settings'];
+const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'settings'];
 
 function isTabAllowedNow(tab: DetailTab): boolean {
   return state.hasManualWorkingFolderSelection || TABS_ALLOWED_WHILE_FOLDER_LOCKED.includes(tab);
