@@ -22,6 +22,7 @@ import type {
   TrackingFile,
   TrackingWriteResult
 } from './types';
+import type { VehicleContext } from './vehicle/vehicle-context';
 import type { UserPartTerm } from './parca-sozlugu';
 import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from './labor-learning-dictionary';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageClearArgs, HeavyDamageGenerateNoteArgs, HeavyDamageGetArgs, HeavyDamagePreviewArgs, HeavyDamageSaveArgs } from './heavy-damage-types';
@@ -167,6 +168,8 @@ export interface AiQueueEnqueuePreviewArgs {
 export interface PartsAnalyzePhotoArgs {
   activePlate?: string;
   activeFolderPath?: string;
+  /** v0.6.2: Aktif dosyanın AI-güvenli araç bağlamı (Şase/Motor HARİÇ). Yerel uyum değerlendirmesi için. */
+  vehicleContext?: Omit<VehicleContext, 'chassisNo' | 'engineNo'>;
 }
 
 /** v0.4.11: AI İşçilik Dağıtıcı — kaydetme argümanları. */

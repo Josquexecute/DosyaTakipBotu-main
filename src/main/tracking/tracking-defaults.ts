@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { CaseIdentity, TrackingFile } from '../../shared/types';
 import { PORTAL_CHECKLIST_DEFAULTS } from '../../shared/document-rules';
 import { normalizeSearch } from '../../shared/turkish';
+import { normalizeVehicleContext } from '../../shared/vehicle/vehicle-context';
 
 export function nowIso(): string {
   return new Date().toISOString();
@@ -77,6 +78,7 @@ export function createDefaultTracking(caseIdentity: CaseIdentity, user = 'Sistem
       finalDecisionWarning: 'Bu modül yalnızca yardımcıdır. Ağır hasar/pert kararı otomatik verilmez.',
       not: heavyDamageHint ? 'Klasör adında ağır hasar/pert ibaresi görüldü. Kullanıcı doğrulaması gerekir.' : ''
     },
+    vehicleContext: normalizeVehicleContext({}),
     audit: [{
       at: now,
       by: user,

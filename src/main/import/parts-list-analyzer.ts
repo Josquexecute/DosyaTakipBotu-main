@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AnalyzedPartRow, PartsPhotoAnalysis } from '../../shared/types';
 import { normalizePartName, type UserPartTerm } from '../../shared/parca-sozlugu';
+import type { VehicleContext } from '../../shared/vehicle/vehicle-context';
+import { evaluatePartVehicleFit } from '../../shared/vehicle/vehicle-fit-evaluator';
 import { parseMoney } from './excel-importer';
 import { callGeminiVision } from './gemini-client';
 
@@ -33,6 +35,8 @@ const PARTS_PROMPT = [
 export interface AnalyzePartsOptions {
   model?: string;
   userTerms?: readonly UserPartTerm[];
+  /** v0.6.2: Aktif dosyanın araç bağlamı (yerel uyum değerlendirmesi için; harici AI'ya GÖNDERİLMEZ). */
+  vehicleContext?: VehicleContext;
 }
 
 export async function analyzePartsPhoto(filePath: string, apiKey: string, options: AnalyzePartsOptions = {}): Promise<PartsPhotoAnalysis> {
@@ -45,7 +49,7 @@ export async function analyzePartsPhoto(filePath: string, apiKey: string, option
   if (stat.size > MAX_IMAGE_BYTES) throw new Error(`Görsel çok büyük: ${Math.round(stat.size / 1024 / 1024)} MB (12 MB sınırı).`);
   const imageBase64 = (await fs.readFile(absolutePath)).toString('base64');
   const rawText = await callGeminiVision(apiKey, imageBase64, mimeType, PARTS_PROMPT, options.model ? { model: options.model } : {});
-  return parsePartsResponse(rawText, absolutePath, options.userTerms);
+  return parsePartsResponse(rawText, absolutePath, options.userTerms, options.vehicleContext);
 }
 
 interface RawGeminiParts {
@@ -53,8 +57,8 @@ interface RawGeminiParts {
   parcalar?: Array<{ ham?: unknown; adet?: unknown; tutar?: unknown; not?: unknown }>;
 }
 
-/** Gemini JSON yanıtını ayrıştırır ve her satırı usta sözlüğüyle (+ öğrenilen terimlerle) normalize eder. (Saf; mock'la test edilebilir.) */
-export function parsePartsResponse(rawText: string, filePath = '', userTerms?: readonly UserPartTerm[]): PartsPhotoAnalysis {
+/** Gemini JSON yanıtını ayrıştırır, her satırı usta sözlüğüyle normalize eder ve araç bağlamıyla uyumu YEREL olarak değerlendirir. (Saf; mock'la test edilebilir.) */
+export function parsePartsResponse(rawText: string, filePath = '', userTerms?: readonly UserPartTerm[], vehicleContext?: VehicleContext): PartsPhotoAnalysis {
   const parsed = safeParseJson(rawText);
   const warnings: string[] = [];
   const vehicle = {
@@ -75,6 +79,8 @@ export function parsePartsResponse(rawText: string, filePath = '', userTerms?: r
     const amount = toPositiveAmount(part?.tutar);
     const note = asString(part?.not).trim().slice(0, 60);
     if (match.ambiguousSide) ambiguousRaws.push(raw);
+    // v0.6.2: Araçla uyum YEREL değerlendirilir (sallama yok); şüpheli/bilinmiyor → Kontrol gerekli.
+    const fit = evaluatePartVehicleFit(vehicleContext, { raw, canonical: match.canonical, category: match.category });
     rows.push({
       raw,
       canonical: match.canonical,
@@ -84,7 +90,11 @@ export function parsePartsResponse(rawText: string, filePath = '', userTerms?: r
       ...(quantity !== null ? { quantity } : {}),
       ...(amount !== null ? { amount } : {}),
       ...(note ? { note } : {}),
-      ...(match.ambiguousSide ? { ambiguousSide: true } : {})
+      ...(match.ambiguousSide ? { ambiguousSide: true } : {}),
+      vehicleFit: fit.vehicleFit,
+      fitReason: fit.reason,
+      fitConfidence: fit.confidence,
+      ...(fit.needsReview ? { needsReview: true } : {})
     });
   }
 
@@ -95,6 +105,10 @@ export function parsePartsResponse(rawText: string, filePath = '', userTerms?: r
   }
   if (ambiguousRaws.length > 0) {
     warnings.push(`Yön belirtilmemiş (ön/arka kontrol edin): ${ambiguousRaws.slice(0, 6).join(', ')}${ambiguousRaws.length > 6 ? ' …' : ''}. Otomatik "Ön ..." varsayıldı.`);
+  }
+  const reviewCount = rows.filter((row) => row.needsReview).length;
+  if (reviewCount > 0) {
+    warnings.push(`${reviewCount} satır araç bilgisiyle şüpheli/bilinmiyor — kontrol gerekli. Bu satırlar otomatik Excel'e aktarılmaz.`);
   }
 
   return {

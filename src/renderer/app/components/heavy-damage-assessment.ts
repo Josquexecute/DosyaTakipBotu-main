@@ -12,6 +12,8 @@ import {
 } from '../../../shared/heavy-damage-rules';
 import { escapeHtml } from '../validation';
 import { icon } from '../icons';
+import type { VehicleContext } from '../../../shared/vehicle/vehicle-context';
+import { vehicleContextForAi } from '../../../shared/vehicle/vehicle-context';
 
 const FILTER_LABELS: Record<HeavyDamageFilter, string> = {
   all: 'Tüm satırlar',
@@ -28,6 +30,8 @@ const FILTER_LABELS: Record<HeavyDamageFilter, string> = {
 
 export function renderHeavyDamageAssessment(item: CaseIndexItem, state: UiState): string {
   const saved = item.tracking.heavyDamageAssessment ?? null;
+  // v0.6.2 (revize): AKTİF dosyanın AI-güvenli araç bağlamı (Şase/Motor hariç) — not/mail taslaklarında ortak kullanılır.
+  const vehicleContextAi = vehicleContextForAi(item.tracking.vehicleContext);
   const preview = state.heavyDamagePreview
     ? applyHeavyDamageEdits(state.heavyDamagePreview, state.heavyDamageEdits, state.heavyDamageUserNotes, state.heavyDamagePreview.assessedAt)
     : null;
@@ -59,13 +63,13 @@ export function renderHeavyDamageAssessment(item: CaseIndexItem, state: UiState)
       </div>
       ${state.heavyDamageReport ? `<div class="app-alert info"><span>${escapeHtml(state.heavyDamageReport)}</span></div>` : ''}
     </div>
-    ${saved && !state.heavyDamagePreview ? renderSavedAssessment(saved) : ''}
-    ${preview ? renderAssessmentPreview(preview, state) : saved ? '' : '<div class="empty-state panel-empty"><h3>Henüz ön değerlendirme yok</h3><p>Dosya notları ve manuel girişlerden kritik yapısal parça adayları analiz edilir; kaydetmeden önce son onay gerekir.</p></div>'}
-    ${preview && state.heavyDamageConfirmOpen ? renderConfirmModal(preview, state) : ''}
+    ${saved && !state.heavyDamagePreview ? renderSavedAssessment(saved, vehicleContextAi) : ''}
+    ${preview ? renderAssessmentPreview(preview, state, vehicleContextAi) : saved ? '' : '<div class="empty-state panel-empty"><h3>Henüz ön değerlendirme yok</h3><p>Dosya notları ve manuel girişlerden kritik yapısal parça adayları analiz edilir; kaydetmeden önce son onay gerekir.</p></div>'}
+    ${preview && state.heavyDamageConfirmOpen ? renderConfirmModal(preview, state, vehicleContextAi) : ''}
   </div>`;
 }
 
-function renderSavedAssessment(assessment: HeavyDamageAssessmentRecord): string {
+function renderSavedAssessment(assessment: HeavyDamageAssessmentRecord, vehicleContext?: VehicleContext): string {
   return `<div class="info-card wide heavy-damage-saved">
     <h3>Kayıtlı Ön Değerlendirme</h3>
     <div class="heavy-summary-cards">
@@ -74,11 +78,11 @@ function renderSavedAssessment(assessment: HeavyDamageAssessmentRecord): string 
       <span><small>Onaylayan</small><b>${escapeHtml(assessment.assessedBy)}</b></span>
       <span><small>Tarih</small><b>${escapeHtml(new Date(assessment.assessedAt).toLocaleString('tr-TR'))}</b></span>
     </div>
-    <p class="muted">${escapeHtml(generateHeavyDamageAssessmentNote(assessment))}</p>
+    <p class="muted">${escapeHtml(generateHeavyDamageAssessmentNote(assessment, vehicleContext))}</p>
   </div>`;
 }
 
-function renderAssessmentPreview(assessment: HeavyDamageAssessmentRecord, state: UiState): string {
+function renderAssessmentPreview(assessment: HeavyDamageAssessmentRecord, state: UiState, vehicleContext?: VehicleContext): string {
   const rows = assessment.rows.filter((row) => heavyDamageFilterMatches(row, state.heavyDamageFilter));
   return `<div class="info-card wide heavy-damage-preview-card">
     <div class="heavy-preview-header">
@@ -101,11 +105,11 @@ function renderAssessmentPreview(assessment: HeavyDamageAssessmentRecord, state:
     </label>
     <div class="heavy-note-preview">
       <b>Rapor notu önizlemesi</b>
-      <p>${escapeHtml(generateHeavyDamageAssessmentNote(assessment))}</p>
+      <p>${escapeHtml(generateHeavyDamageAssessmentNote(assessment, vehicleContext))}</p>
     </div>
     <details class="heavy-note-preview">
       <summary>Mail taslağı</summary>
-      <pre>${escapeHtml(generateHeavyDamageAssessmentMailDraft(assessment))}</pre>
+      <pre>${escapeHtml(generateHeavyDamageAssessmentMailDraft(assessment, vehicleContext))}</pre>
     </details>
     <div class="heavy-damage-actions">
       <button class="primary" data-action="heavy-damage-save" ${state.heavyDamageSaving ? 'disabled' : ''}>${icon('check')}<span>Değerlendirmeyi Kaydet</span></button>
@@ -162,7 +166,7 @@ function renderAssessmentRow(row: HeavyDamageAssessmentRow): string {
   </div>`;
 }
 
-function renderConfirmModal(assessment: HeavyDamageAssessmentRecord, state: UiState): string {
+function renderConfirmModal(assessment: HeavyDamageAssessmentRecord, state: UiState, vehicleContext?: VehicleContext): string {
   const s = assessment.summary;
   return `<div class="conflict-overlay heavy-confirm-overlay" role="dialog" aria-modal="true">
     <div class="conflict-card heavy-confirm-card">
@@ -176,7 +180,7 @@ function renderConfirmModal(assessment: HeavyDamageAssessmentRecord, state: UiSt
         <span><small>Düşük güven</small><b>${s.lowConfidenceRows}</b></span>
         <span><small>Kullanıcı düzeltmesi</small><b>${assessment.rows.filter((row) => row.userEdited).length}</b></span>
       </div>
-      <div class="heavy-note-preview"><b>Rapor notu</b><p>${escapeHtml(generateHeavyDamageAssessmentNote(assessment))}</p></div>
+      <div class="heavy-note-preview"><b>Rapor notu</b><p>${escapeHtml(generateHeavyDamageAssessmentNote(assessment, vehicleContext))}</p></div>
       <div class="conflict-actions">
         <button class="secondary" data-action="heavy-damage-confirm-back">Geri dön ve düzenle</button>
         <button class="primary" data-action="heavy-damage-save-confirm" ${state.heavyDamageSaving ? 'disabled' : ''}>${state.heavyDamageSaving ? 'Kaydediliyor…' : 'Kaydet'}</button>

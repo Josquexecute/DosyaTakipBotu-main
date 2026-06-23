@@ -12,6 +12,7 @@ import { safeFileDisplayName } from '../../shared/turkish';
 import { chooseTrackingItemId } from '../../shared/tracking-item-id';
 import { nowIso } from '../tracking/tracking-defaults';
 import { CLAIM_TYPES, DOSYA_DURUMLARI, PRIORITIES, WORKFLOW_STATUSES } from '../../shared/workflow';
+import { VEHICLE_CONTEXT_FIELDS } from '../../shared/vehicle/vehicle-context';
 import { normalizeSettings } from './settings-normalizer';
 import { existsDirectory } from './fs-utils';
 
@@ -243,7 +244,12 @@ export class TrackingMutationService {
       'status.dosyaDurumu', 'status.workflowStatus',
       'rucu.varMi', 'rucu.potansiyel', 'rucu.durum', 'rucu.not',
       'labor.parcaListesiIstendi', 'labor.parcaKodlariIstendi', 'labor.parcaIscilikGirildi', 'labor.not',
-      'kttKusur.not', 'heavyDamage.enabled', 'heavyDamage.not', 'heavyDamage.skor'
+      'kttKusur.not', 'heavyDamage.enabled', 'heavyDamage.not', 'heavyDamage.skor',
+      // v0.6.2: Araç bağlamı alanları (Şase/Motor/marka/model/yıl/yakıt) yalnız AKTİF dosyanın takip dosyasına yazilir.
+      'vehicleContext.plate', 'vehicleContext.chassisNo', 'vehicleContext.engineNo',
+      'vehicleContext.make', 'vehicleContext.model', 'vehicleContext.modelYear',
+      'vehicleContext.fuelType', 'vehicleContext.engineDisplacement', 'vehicleContext.transmission',
+      'vehicleContext.bodyType', 'vehicleContext.damageDirection'
     ]);
     if (!allowed.has(args.path)) throw new Error('Bu alan güvenli güncelleme listesinde yok.');
     const result = await this.context.tracking.mutate(args.folderPath, args.expectedRevision, this.cases.expectedWriteIdFor(args), settings.activeUser, (tracking) => {
@@ -284,7 +290,8 @@ function sanitizeFieldValue(fieldPath: string, value: unknown): unknown {
     'assignment.sorumlu', 'assignment.eksper', 'assignment.raportor', 'assignment.takipTarihi',
     'caseIdentity.officeFileNo', 'caseIdentity.claimNoticeNo',
     'service.name',
-    'rucu.durum', 'rucu.not', 'labor.not', 'kttKusur.not', 'heavyDamage.not'
+    'rucu.durum', 'rucu.not', 'labor.not', 'kttKusur.not', 'heavyDamage.not',
+    ...VEHICLE_CONTEXT_FIELDS.map((field) => `vehicleContext.${field}`)
   ]);
   const booleanFields = new Set([
     'rucu.varMi', 'rucu.potansiyel',

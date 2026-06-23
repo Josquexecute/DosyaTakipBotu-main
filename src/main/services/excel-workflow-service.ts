@@ -213,7 +213,8 @@ export class ExcelWorkflowService {
       selectedFilePath: selectedPath
     });
     const userTerms = await this.context.cache.readUserPartTerms();
-    return analyzePartsPhoto(selectedPath, apiKey, { userTerms });
+    // v0.6.2: Yalnız AKTİF dosyanın AI-güvenli araç bağlamı (Şase/Motor hariç) yerel uyum değerlendirmesi için verilir; Gemini'ye gönderilmez.
+    return analyzePartsPhoto(selectedPath, apiKey, { userTerms, ...(args?.vehicleContext ? { vehicleContext: args.vehicleContext } : {}) });
   }
 
   async exportPartsLaborExcel(args: { rows: Array<{ description: string; partAmount: number; laborAmount: number }> }): Promise<CaseListExportResult> {

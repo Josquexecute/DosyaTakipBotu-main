@@ -26,6 +26,8 @@ import type { LaborCategory } from '../shared/labor-rules';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageDamageType, HeavyDamageRepairSeverity, HeavyDamageRowEdit } from '../shared/heavy-damage-types';
 import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../shared/ai/ai-queue-types';
 import { AI_TRANSIENT_ERROR_CODE, AI_TRANSIENT_USER_MESSAGE } from '../shared/ai/ai-transient-error';
+import { vehicleContextForAi } from '../shared/vehicle/vehicle-context';
+import { vehicleContextAiLine } from '../shared/vehicle/vehicle-context-ai';
 import type { KnowledgeImportCommitInput, KnowledgeImportCommitResult, KnowledgeImportDryRunResponse, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceType } from '../shared/knowledge';
 import { applyKnowledgeImportApprovalDecision, buildKnowledgeImportCommitPlan, createKnowledgeImportApprovalState, isKnowledgeSourceFilter } from '../shared/knowledge';
 import { applyHeavyDamageEdits, generateHeavyDamageAssessmentNote, HEAVY_DAMAGE_FILTERS, type HeavyDamageFilter } from '../shared/heavy-damage-rules';
@@ -1469,7 +1471,9 @@ async function analyzePartsPhotoAction(): Promise<void> {
   render();
   const result = await window.hasarbotu.analyzePartsPhoto<PartsPhotoAnalysis>({
     activePlate: activeCase?.plate ?? '',
-    activeFolderPath: activeCase?.folderPath ?? ''
+    activeFolderPath: activeCase?.folderPath ?? '',
+    // v0.6.2: Yalnız seçili dosyanın AI-güvenli araç bağlamı (Şase/Motor hariç) gönderilir; yerel uyum değerlendirmesi için.
+    vehicleContext: vehicleContextForAi(activeCase?.tracking?.vehicleContext)
   });
   state.partsAnalyzing = false;
   if (!result.ok) {
@@ -1664,7 +1668,15 @@ function reapplyPartsUserTerms(): void {
 async function exportPartsLaborExcel(): Promise<void> {
   const analysis = state.partsAnalysis;
   if (!analysis || analysis.rows.length === 0) return;
-  const rows = analysis.rows.map((row) => {
+  // v0.6.2: Araç bilgisiyle şüpheli/kontrol-gerekli (needsReview) satırlar otomatik Excel'e YAZILMAZ; kullanıcı önce gözden geçirmeli.
+  const exportableRows = analysis.rows.filter((row) => !row.needsReview);
+  const skipped = analysis.rows.length - exportableRows.length;
+  if (exportableRows.length === 0) {
+    setToast('Satırların tümü araç bilgisiyle şüpheli/kontrol gerekli; otomatik Excel yazımı yapılmadı. Lütfen satırları kontrol edip düzeltin.', 'warning');
+    render();
+    return;
+  }
+  const rows = exportableRows.map((row) => {
     const labor = row.laborPart ? suggestLaborForPart(row.laborPart) : null;
     return {
       description: row.matched ? `${row.canonical}${labor ? ` / ${labor.islem}` : ''}` : row.raw,
@@ -1677,15 +1689,17 @@ async function exportPartsLaborExcel(): Promise<void> {
     reportOperationError(result.error.message);
     return;
   }
-  setToast(`Parça + işçilik Excel kaydedildi: ${result.data.rowCount} satır.`, 'success');
+  setToast(`Parça + işçilik Excel kaydedildi: ${result.data.rowCount} satır.${skipped > 0 ? ` ${skipped} şüpheli satır kontrol için hariç tutuldu.` : ''}`, skipped > 0 ? 'warning' : 'success');
   render();
 }
 
 async function copyPartsList(): Promise<void> {
   const analysis = state.partsAnalysis;
   if (!analysis || analysis.rows.length === 0) return;
-  const text = analysis.rows
-    .map((row) => `${row.matched ? row.canonical : row.raw}${row.quantity ? ` x${row.quantity}` : ''}`)
+  // v0.6.2 (revize): Kopyalanan taslak metnin başına AKTİF dosyanın AI-güvenli araç bağlamı (Şase/Motor hariç) eklenir.
+  const vehicleLine = vehicleContextAiLine(vehicleContextForAi(selectedCase()?.tracking?.vehicleContext));
+  const text = [vehicleLine, ''].concat(analysis.rows
+    .map((row) => `${row.matched ? row.canonical : row.raw}${row.quantity ? ` x${row.quantity}` : ''}`))
     .join('\n');
   let copied = false;
   try {
@@ -2043,7 +2057,8 @@ async function heavyDamageSaveAction(): Promise<void> {
       userConfirmed: true
     }),
     (tracking) => {
-      const note = generateHeavyDamageAssessmentNote(assessment);
+      // v0.6.2 (revize): Ağır Hasar notu, AKTİF dosyanın AI-güvenli (Şase/Motor hariç) araç bağlamıyla üretilir.
+      const note = generateHeavyDamageAssessmentNote(assessment, vehicleContextForAi(tracking.vehicleContext));
       tracking.heavyDamageAssessment = assessment;
       tracking.heavyDamage.enabled = assessment.summary.riskLevel !== 'low' || assessment.summary.totalScore > 0;
       tracking.heavyDamage.skor = Math.round(assessment.summary.totalScore);

@@ -1,4 +1,6 @@
 import { normalizeSearch } from './turkish';
+import type { VehicleContext } from './vehicle/vehicle-context';
+import { vehicleContextAiLine } from './vehicle/vehicle-context-ai';
 import type {
   HeavyDamageAssessmentPreview,
   HeavyDamageAssessmentRecord,
@@ -350,8 +352,10 @@ function summarizeEffectiveScores(rows: readonly HeavyDamageAssessmentRow[]): { 
   };
 }
 
-export function generateHeavyDamageAssessmentNote(assessment: HeavyDamageAssessmentPreview | HeavyDamageAssessmentRecord): string {
+export function generateHeavyDamageAssessmentNote(assessment: HeavyDamageAssessmentPreview | HeavyDamageAssessmentRecord, vehicleContext?: VehicleContext): string {
   const s = assessment.summary;
+  // v0.6.2 (revize): Gizlilik-güvenli araç bağlamı (Şase/Motor hariç) ön ekle; AI kesin doğrulama yapmaz.
+  const vehiclePrefix = `${vehicleContextAiLine(vehicleContext)} `;
   const plateText = assessment.plate ? `${assessment.plate} plakalı araç` : 'Konu araç';
   const scoredRows = assessment.rows.filter((row) => row.inScope && row.score > 0);
   const frontFirewall = assessment.rows.find((row) => row.guideCategory === 'firewall' && row.score >= 40);
@@ -367,10 +371,10 @@ export function generateHeavyDamageAssessmentNote(assessment: HeavyDamageAssessm
   const rowText = scoredRows.length
     ? ` Puanlamaya etki eden ana kalemler: ${scoredRows.slice(0, 8).map((row) => row.guideCategoryLabel).join(', ')}.`
     : '';
-  return `${plateText} üzerinde yapılan AI destekli ön değerlendirmede, yapısal kritik parça puanlama rehberi kapsamında tespit edilen kalemler toplamı ${formatScore(s.totalScore)} puan olarak hesaplanmış olup 35 puan ağır hasar eşiği bakımından ${s.riskLabel.toLocaleLowerCase('tr-TR')} değerlendirilmiştir.${ratioText}${structuralText}${economicVsStructural}${rowText} ${s.needsReviewRows} satır kontrol gerekli olarak işaretlenmiştir. Nihai değerlendirme dosya kapsamı, hasar fotoğrafları, ölçümleme/servis tespitleri ve eksper kanaati ile yapılmalıdır.`;
+  return `${vehiclePrefix}${plateText} üzerinde yapılan AI destekli ön değerlendirmede, yapısal kritik parça puanlama rehberi kapsamında tespit edilen kalemler toplamı ${formatScore(s.totalScore)} puan olarak hesaplanmış olup 35 puan ağır hasar eşiği bakımından ${s.riskLabel.toLocaleLowerCase('tr-TR')} değerlendirilmiştir.${ratioText}${structuralText}${economicVsStructural}${rowText} ${s.needsReviewRows} satır kontrol gerekli olarak işaretlenmiştir. Nihai değerlendirme dosya kapsamı, hasar fotoğrafları, ölçümleme/servis tespitleri ve eksper kanaati ile yapılmalıdır.`;
 }
 
-export function generateHeavyDamageAssessmentMailDraft(assessment: HeavyDamageAssessmentPreview | HeavyDamageAssessmentRecord): string {
+export function generateHeavyDamageAssessmentMailDraft(assessment: HeavyDamageAssessmentPreview | HeavyDamageAssessmentRecord, vehicleContext?: VehicleContext): string {
   const s = assessment.summary;
   const subject = `Konu: ${assessment.officeFileNo || '-'} / ${assessment.plate || '-'} ağır hasar ön değerlendirme`;
   const ratio = s.repairToMarketRatio === undefined ? '-' : `%${formatScore(s.repairToMarketRatio)}`;
@@ -381,6 +385,8 @@ export function generateHeavyDamageAssessmentMailDraft(assessment: HeavyDamageAs
     'Merhaba,',
     '',
     `${assessment.officeFileNo || '-'} dosya numaralı, ${assessment.plate || '-'} plakalı araç için AI destekli ağır hasar ön değerlendirme özeti aşağıdadır.`,
+    // v0.6.2 (revize): Gizlilik-güvenli araç bağlamı (Şase/Motor hariç).
+    vehicleContextAiLine(vehicleContext),
     '',
     `Rayiç değer: ${s.marketValue !== undefined ? formatMoney(s.marketValue) : '-'}`,
     `KDV dahil hasar toplamı: ${s.repairCost !== undefined ? formatMoney(s.repairCost) : '-'}`,

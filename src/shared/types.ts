@@ -1,4 +1,5 @@
 import type { HeavyDamageAssessmentRecord } from './heavy-damage-types';
+import type { VehicleContext } from './vehicle/vehicle-context';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -148,6 +149,8 @@ export interface TrackingFile {
   kttKusur: HelperModuleInfo;
   heavyDamage: HeavyDamageInfo;
   heavyDamageAssessment?: HeavyDamageAssessmentRecord;
+  /** v0.6.2: Bu dosyaya ÖZEL araç bağlamı (Şase/Motor/marka/model/yıl/yakıt…). Opsiyonel; yalnız bu takip.json'da. */
+  vehicleContext?: VehicleContext;
   audit: AuditItem[];
 }
 
@@ -451,6 +454,14 @@ export interface AnalyzedPartRow {
   note?: string;
   /** v0.4.6: Resmi ad yönlü (Ön/Arka) ama ham ifade yön belirtmedi → ön/arka kontrol edilmeli. */
   ambiguousSide?: boolean;
+  /** v0.6.2: Araç bağlamıyla uyum — 'uygun' | 'şüpheli' | 'bilinmiyor'. */
+  vehicleFit?: 'uygun' | 'şüpheli' | 'bilinmiyor';
+  /** v0.6.2: Uyum gerekçesi (Türkçe). */
+  fitReason?: string;
+  /** v0.6.2: Güven seviyesi — 'yüksek' | 'orta' | 'düşük'. */
+  fitConfidence?: 'yüksek' | 'orta' | 'düşük';
+  /** v0.6.2: Kontrol gerekli mi (şüpheli/bilinmiyor durumda true). */
+  needsReview?: boolean;
 }
 
 export interface PartsPhotoAnalysis {

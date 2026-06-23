@@ -19,7 +19,7 @@ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-office-audit-'))
 const appData = path.join(root, 'appdata');
 const yearRoot = path.join(root, 'pCloud Drive (P)', 'BARAN GLOBAL EKSPERTİZ', '2026');
 const pkg = JSON.parse(await fs.readFile('package.json', 'utf-8'));
-assert(pkg.version === '0.6.1', 'Paket sürümü v0.6.1 olarak sabitlendi', `version=${pkg.version}`);
+assert(pkg.version === '0.6.2', 'Paket sürümü v0.6.2 olarak sabitlendi', `version=${pkg.version}`);
 assert(APP_VERSION === pkg.version, 'APP_VERSION package.json ile uyumlu', `APP_VERSION=${APP_VERSION}, package=${pkg.version}`);
 assert(Boolean(pkg.scripts?.['live:version-check']) && Boolean(pkg.scripts?.['release:hash']) && Boolean(pkg.scripts?.['release:notes']), 'v0.3.14 Windows rollout scriptleri package.json içinde mevcut', JSON.stringify(pkg.scripts));
 assert(Boolean(pkg.scripts?.['test:behavior']) && String(pkg.scripts?.ci || '').includes('test:behavior'), 'v0.3.18 davranış regresyon testleri CI zincirine bağlı', JSON.stringify(pkg.scripts));
@@ -636,6 +636,34 @@ const partsActionOfficeSlice = rendererSource.slice(rendererSource.indexOf('asyn
 assert(partsActionOfficeSlice.includes('AI_TRANSIENT_ERROR_CODE') && partsActionOfficeSlice.includes('partsAnalysisError = AI_TRANSIENT_USER_MESSAGE') && partsActionOfficeSlice.slice(partsActionOfficeSlice.indexOf('AI_TRANSIENT_ERROR_CODE'), partsActionOfficeSlice.indexOf('state.partsAnalysis = result.data')).includes('return;'), 'v0.6.1 renderer gecici AI hatasinda Tekrar Dene set eder ve basari atamasindan once erken doner (analiz/Excel/ogrenme oto devam etmez)', 'renderer gecici hata akisi eksik');
 const detailOfficeComponentSource = await fs.readFile('src/renderer/app/components/detail.ts', 'utf-8');
 assert(detailOfficeComponentSource.includes('partsAnalysisError') && detailOfficeComponentSource.includes('Tekrar Dene') && detailOfficeComponentSource.includes('data-action="analyze-parts-photo"'), 'v0.6.1 parca fotograf karti gecici hatada Tekrar Dene butonu gosterir', 'parca foto Tekrar Dene UI eksik');
+
+// --- v0.6.2: Merkezi Araç Bağlamı (dosya-bazlı) + AI kalite guardlari ---
+const vehicleContextSource = await fs.readFile('src/shared/vehicle/vehicle-context.ts', 'utf-8');
+const vehicleFitSource = await fs.readFile('src/shared/vehicle/vehicle-fit-evaluator.ts', 'utf-8');
+assert(vehicleContextSource.includes('VEHICLE_CONTEXT_FIELDS') && vehicleContextSource.includes('vehicleContextForAi') && /chassisNo[\s\S]*?engineNo/.test(vehicleContextSource) && !/\bfetch\(|axios|from ['"]node:fs|\.write\(/.test(vehicleContextSource), 'v0.6.2 arac baglami modeli saf; AI-guvenli alt kume (Sase/Motor cikarir) sunar; ag/dosya yok', 'v0.6.2 arac baglami modeli eksik/yasak iz');
+assert(vehicleFitSource.includes('evaluatePartVehicleFit') && vehicleFitSource.includes("'şüpheli'") && vehicleFitSource.includes("'bilinmiyor'") && vehicleFitSource.includes('needsReview') && !/\bfetch\(|axios|from ['"]node:fs|\.write\(|console\./.test(vehicleFitSource), 'v0.6.2 fit degerlendirici saf/yerel: supheli/bilinmiyor/Kontrol gerekli uretir; ag/dosya/log yok', 'v0.6.2 fit degerlendirici eksik/yasak iz');
+const trackingSchemaSource = await fs.readFile('src/main/tracking/tracking-schema.ts', 'utf-8');
+const trackingDefaultsSource = await fs.readFile('src/main/tracking/tracking-defaults.ts', 'utf-8');
+assert(trackingSchemaSource.includes('normalizeVehicleContext') && trackingSchemaSource.includes('tracking.vehicleContext =') && trackingDefaultsSource.includes('vehicleContext: normalizeVehicleContext'), 'v0.6.2 takip.json migrate + default arac baglamini normalize eder (eski dosya bos baglamla acilir)', 'v0.6.2 tracking vehicleContext normalize eksik');
+const v62IpcDomainSource = await fs.readFile('src/main/services/ipc-domain-services.ts', 'utf-8');
+assert(v62IpcDomainSource.includes('VEHICLE_CONTEXT_FIELDS') && v62IpcDomainSource.includes('vehicleContext.${field}') && v62IpcDomainSource.includes('this.context.tracking.mutate(args.folderPath'), 'v0.6.2 arac baglami yalniz AKTIF dosya folderPath uzerinden guvenli updateField ile yazilir (cross-case izolasyon, yeni IPC yok)', 'v0.6.2 updateField vehicleContext whitelist/izolasyon eksik');
+const partsAnalyzerSource = await fs.readFile('src/main/import/parts-list-analyzer.ts', 'utf-8');
+assert(partsAnalyzerSource.includes('evaluatePartVehicleFit') && partsAnalyzerSource.includes('normalizePartName(raw, userTerms') && !/chassisNo|engineNo/.test(partsAnalyzerSource), 'v0.6.2 parca analizoru araci YEREL degerlendirir; ogrenme onceligi korunur; Sase/Motor alanina dokunmaz', 'v0.6.2 parca analizoru entegrasyon/gizlilik ihlali');
+const excelWorkflowSource = await fs.readFile('src/main/services/excel-workflow-service.ts', 'utf-8');
+assert(excelWorkflowSource.includes('vehicleContext: args.vehicleContext') && !/callGeminiVision[\s\S]{0,400}vehicleContext/.test(excelWorkflowSource), 'v0.6.2 servis AKTIF dosya arac baglamini analizore verir; Gemini cagrisina arac verisi gitmez', 'v0.6.2 excel-workflow arac baglami akisi hatali');
+assert(rendererSource.includes('vehicleContextForAi(activeCase?.tracking?.vehicleContext)') && rendererSource.includes('filter((row) => !row.needsReview)'), 'v0.6.2 renderer AI ye yalniz secili dosyanin AI-guvenli baglamini gonderir + supheli satirlar otomatik Excel e yazilmaz', 'v0.6.2 renderer arac baglami/Excel guard eksik');
+assert(detailOfficeComponentSource.includes('Araç Bilgileri') && detailOfficeComponentSource.includes('renderVehicleContextCard') && detailOfficeComponentSource.includes('data-field="vehicleContext.'), 'v0.6.2 Arac Bilgileri karti Turkce + dosya-bazli data-field ile duzenlenebilir', 'v0.6.2 Arac Bilgileri UI eksik');
+
+// --- v0.6.2 (revize): ham kontrol karakteri temizligi + araç bağlamının diğer AI taslak akışlarına bağlanması ---
+const v62rVehicleContextSource = await fs.readFile('src/shared/vehicle/vehicle-context.ts', 'utf-8');
+assert(v62rVehicleContextSource.includes('[\\u0000-\\u001f\\u007f]') && !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v62rVehicleContextSource), 'v0.6.2 revize vehicle-context.ts ham kontrol karakteri icermez (sanitize escaped)', 'vehicle-context.ts ham kontrol karakteri tasiyor');
+const v62rVcAiSource = await fs.readFile('src/shared/vehicle/vehicle-context-ai.ts', 'utf-8');
+assert(v62rVcAiSource.includes('vehicleContextAiLine') && v62rVcAiSource.includes('vehicleContextSearchTerms') && /bilinmiyor|kontrol gerekli/i.test(v62rVcAiSource) && !/\bfetch\(|axios|from ['"]node:fs|\.write\(|console\.|chassisNo|engineNo/.test(v62rVcAiSource), 'v0.6.2 revize merkezi araç-bağlamı-AI modulu saf + gizlilik (Sase/Motor yok); bilinmiyor/kontrol gerekli tonu', 'v0.6.2 vehicle-context-ai modulu eksik/yasak iz');
+const v62rHeavyRulesSource = await fs.readFile('src/shared/heavy-damage-rules.ts', 'utf-8');
+assert(/generateHeavyDamageAssessmentNote\([^)]*vehicleContext/.test(v62rHeavyRulesSource) && /generateHeavyDamageAssessmentMailDraft\([^)]*vehicleContext/.test(v62rHeavyRulesSource) && (v62rHeavyRulesSource.match(/vehicleContextAiLine\(/g) || []).length >= 2, 'v0.6.2 revize Agir Hasar AI not + mail/rapor taslagi araç bağlamı kullanir', 'v0.6.2 heavy damage arac baglami baglanmadi');
+const v62rHeavyComp = await fs.readFile('src/renderer/app/components/heavy-damage-assessment.ts', 'utf-8');
+assert(v62rHeavyComp.includes('vehicleContextForAi(item.tracking.vehicleContext)') && v62rHeavyComp.includes('generateHeavyDamageAssessmentMailDraft(assessment, vehicleContext)'), 'v0.6.2 revize Agir Hasar komponenti AKTIF dosya AI-guvenli baglamini not/mail taslaklarina gecirir', 'v0.6.2 heavy damage komponent baglam gecmiyor');
+assert(rendererSource.includes('generateHeavyDamageAssessmentNote(assessment, vehicleContextForAi(tracking.vehicleContext))') && rendererSource.includes('vehicleContextAiLine(vehicleContextForAi(selectedCase()?.tracking?.vehicleContext))'), 'v0.6.2 revize kaydedilen Agir Hasar notu + parca-liste kopyasi AKTIF dosya AI-guvenli baglamini kullanir', 'v0.6.2 renderer not/kopya baglami eksik');
 
 // --- Eksik relative JS import guard: dist-ui build ciktisindaki her relative .js referansinin
 // diskte gercekten var oldugunu dogrular; barrel klasor importunun yanlis dosyaya cevrilmesinden

@@ -191,6 +191,30 @@ function renderSummary(item: CaseIndexItem): string {
   </div>`;
 }
 
+// v0.6.2: Araç Bilgileri — yalnızca bu dosyanın takip.json'una yazılır (data-field guarded mutation → aktif dosya).
+// Tüm alanlar opsiyonel; AI akışları bu bağlamı şüpheli parça uyarısı için kullanır.
+function renderVehicleContextCard(item: CaseIndexItem): string {
+  const vc = item.tracking.vehicleContext ?? {};
+  const val = (value: string | undefined) => escapeHtml(value ?? '');
+  return `<div class="info-card wide vehicle-context-card">
+    <h3>${icon('operation')} Araç Bilgileri <button class="info-button" title="Bu bilgiler yalnızca seçili dosyanın _HASARBOTU/takip.json dosyasına yazılır; başka dosyaya taşınmaz. Tüm alanlar isteğe bağlıdır. AI, şüpheli/uyumsuz parçaları işaretlemek için bu bilgileri kullanır.">i</button></h3>
+    <p class="muted">Tüm alanlar isteğe bağlıdır. Girilen bilgiler yalnızca bu dosyaya aittir.</p>
+    <div class="form-grid compact-form">
+      <label>Plaka<input data-field="vehicleContext.plate" value="${val(vc.plate)}" placeholder="Örn: 34 ABC 123" autocomplete="off" /></label>
+      <label>Marka<input data-field="vehicleContext.make" value="${val(vc.make)}" placeholder="Örn: Renault" autocomplete="off" /></label>
+      <label>Model<input data-field="vehicleContext.model" value="${val(vc.model)}" placeholder="Örn: Megane" autocomplete="off" /></label>
+      <label>Model Yılı<input data-field="vehicleContext.modelYear" value="${val(vc.modelYear)}" placeholder="Örn: 2012" autocomplete="off" /></label>
+      <label>Yakıt Tipi<input data-field="vehicleContext.fuelType" value="${val(vc.fuelType)}" placeholder="benzin / dizel / hibrit / elektrik / lpg" autocomplete="off" /></label>
+      <label>Motor Hacmi<input data-field="vehicleContext.engineDisplacement" value="${val(vc.engineDisplacement)}" placeholder="Örn: 1.5" autocomplete="off" /></label>
+      <label>Vites<input data-field="vehicleContext.transmission" value="${val(vc.transmission)}" placeholder="manuel / otomatik" autocomplete="off" /></label>
+      <label>Kasa / Araç Tipi<input data-field="vehicleContext.bodyType" value="${val(vc.bodyType)}" placeholder="sedan / hatchback / suv / ticari" autocomplete="off" /></label>
+      <label>Hasar Yönü / Darbe Bölgesi<input data-field="vehicleContext.damageDirection" value="${val(vc.damageDirection)}" placeholder="ön / arka / sağ / sol" autocomplete="off" /></label>
+      <label>Şase No<input data-field="vehicleContext.chassisNo" value="${val(vc.chassisNo)}" placeholder="İsteğe bağlı" autocomplete="off" /></label>
+      <label>Motor No<input data-field="vehicleContext.engineNo" value="${val(vc.engineNo)}" placeholder="İsteğe bağlı" autocomplete="off" /></label>
+    </div>
+  </div>`;
+}
+
 function renderOperation(item: CaseIndexItem, state: UiState): string {
   const users = uniqueOptions(state.settings?.users?.length ? state.settings.users : ['Ömer Faruk İşleyen', 'Enes Özmen', 'Baran Gürbüz', 'Berfin Kapar'], item.sorumlu, ...item.tracking.todos.map((todo) => todo.assignedTo));
   return `<div class="operation-grid">
@@ -205,6 +229,7 @@ function renderOperation(item: CaseIndexItem, state: UiState): string {
       <label>Takip Tarihi<input type="date" data-field="assignment.takipTarihi" value="${escapeHtml(item.takipTarihi)}" /></label>
       <label>Öncelik<select data-field="assignment.oncelik">${opt(PRIORITIES, item.oncelik)}</select></label>
     </div>
+    ${renderVehicleContextCard(item)}
     <div class="info-card wide"><h3>Görevler <button class="info-button" title="Görevler takip.json içine yazılır. Düzenleme ve silme kayıtlı dosyada revision artırır.">i</button></h3>${renderTodos(item.tracking.todos, users)}<div class="inline-add"><input id="todo-title" placeholder="Yeni görev..." /><button class="primary" data-action="add-todo">Ekle</button></div></div>
     <div class="info-card wide"><h3>Notlar <button class="info-button" title="Notlar yalnızca seçili dosyanın _HASARBOTU/takip.json dosyasına yazılır. Eski NOTLAR dosyası otomatik yazılmaz; Aktar düğmesi mevcut güvenli not ekleme akışını kullanır.">i</button></h3>${renderLegacyNotes(item)}${renderNotes(item.tracking.notes)}<div class="inline-add"><input id="note-text" placeholder="Dosya notu yaz..." /><button class="primary" data-action="add-note">Not Ekle</button></div></div>
   </div>`;
@@ -539,8 +564,8 @@ function renderPartsAnalysis(analysis: PartsPhotoAnalysis): string {
     <p><b>${escapeHtml(analysis.fileName || 'Fotoğraf')}</b>${vehicle ? ` • Araç: ${escapeHtml(vehicle)}` : ''} • ${analysis.matchedCount} eşleşti / ${analysis.unmatchedCount} eşleşmedi</p>
     ${analysis.warnings.length ? `<div class="app-alert ${analysis.unmatchedCount ? 'warning' : 'info'}">${icon('info')}<span>${escapeHtml(analysis.warnings.join(' • '))}</span></div>` : ''}
     ${datalist}
-    ${rows.length ? `<div class="parts-table editable"><div><b>Okunan (usta dili)</b><b>Gerçek Ad (düzeltilebilir)</b><b>Kategori</b><b>Adet / Tutar</b></div>${rows.map((row, index) => `<div class="${row.matched ? '' : 'unmatched'}${row.ambiguousSide ? ' ambiguous-side' : ''}">
-      <span>${escapeHtml(row.raw)}${row.note ? ` <small class="part-note">(${escapeHtml(row.note)})</small>` : ''}${row.ambiguousSide ? ' <small class="part-warn" title="Resmi ad yönlü (Ön/Arka) ama okunan ifade yön belirtmedi; ön/arka kontrol edin.">⚠ yön?</small>' : ''}</span>
+    ${rows.length ? `<div class="parts-table editable"><div><b>Okunan (usta dili)</b><b>Gerçek Ad (düzeltilebilir)</b><b>Kategori</b><b>Adet / Tutar</b></div>${rows.map((row, index) => `<div class="${row.matched ? '' : 'unmatched'}${row.ambiguousSide ? ' ambiguous-side' : ''}${row.needsReview ? ' needs-review' : ''}">
+      <span>${escapeHtml(row.raw)}${row.note ? ` <small class="part-note">(${escapeHtml(row.note)})</small>` : ''}${row.ambiguousSide ? ' <small class="part-warn" title="Resmi ad yönlü (Ön/Arka) ama okunan ifade yön belirtmedi; ön/arka kontrol edin.">⚠ yön?</small>' : ''}${row.needsReview ? ` <small class="part-warn" title="${escapeHtml(row.fitReason ?? 'Araç bilgisiyle uyumu şüpheli; kontrol gerekli.')}">⚠ kontrol gerekli${row.vehicleFit === 'şüpheli' ? ' (şüpheli)' : ''}</small>` : ''}</span>
       <span class="part-edit-cell">
         <input class="part-canonical-input" data-part-canonical="${index}" list="part-canonical-list" value="${escapeHtml(row.matched ? row.canonical : '')}" placeholder="${row.matched ? '' : 'gerçek adı yaz'}" aria-label="Satır ${index + 1} gerçek parça adı" />
         <select class="part-canonical-picker" data-part-canonical-pick="${index}" title="Listeden gerçek parça adını seç (kaydırılabilir)" aria-label="Satır ${index + 1} parça listesi"><option value="">▾ Listeden seç…</option>${pickerOptions}</select>
