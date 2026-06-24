@@ -46,7 +46,9 @@ import { buildKnowledgeImportCommitPlan } from '../dist-electron/shared/knowledg
 import { commitApprovedKnowledgeImportTextPreview } from '../dist-electron/main/services/knowledge/knowledge-import-commit-service.js';
 import { searchUserKnowledgeEntries, mergeUserKnowledgeIntoResponse, USER_KNOWLEDGE_RESULT_LABEL } from '../dist-electron/main/services/knowledge/user-knowledge-search-service.js';
 import { filterKnowledgeResultsByOrigin, isKnowledgeSourceFilter, KNOWLEDGE_SOURCE_FILTERS } from '../dist-electron/shared/knowledge/knowledge-source-filter.js';
-import { callGeminiVision } from '../dist-electron/main/import/gemini-client.js';
+import { callGeminiVision, callGeminiText } from '../dist-electron/main/import/gemini-client.js';
+import { parseComplianceResponse, COMPLIANCE_VERDICTS, buildScannedPdfNotice, SCANNED_PDF_NOTICE } from '../dist-electron/shared/report-invoice/report-invoice-types.js';
+import { testReportInvoiceAiConnection } from '../dist-electron/main/services/report-invoice-service.js';
 import { AI_TRANSIENT_ERROR_CODE, AI_TRANSIENT_USER_MESSAGE, isTransientAiError } from '../dist-electron/shared/ai/ai-transient-error.js';
 import { AI_FINAL_APPROVAL_WARNING_CODE, normalizeAiTaskRequest } from '../dist-electron/shared/ai/ai-safety.js';
 import { IPC_INVOKE_CHANNELS } from '../dist-electron/shared/ipc-contract.js';
@@ -216,6 +218,26 @@ function createNeverResolvingAiRunner() {
     }
   };
 }
+
+const agentsGuide = await fs.readFile('AGENTS.md', 'utf-8');
+assert(
+  agentsGuide.length < 1800
+    && agentsGuide.includes('Electron + TypeScript')
+    && agentsGuide.includes('takip.json')
+    && agentsGuide.includes('Yeni dependency ekleme')
+    && agentsGuide.includes('UI metinleri Türkçe')
+    && agentsGuide.includes('P4-E2-B')
+    && agentsGuide.includes('Dashboard gate')
+    && agentsGuide.includes('Gemini 503 hotfix')
+    && agentsGuide.includes('Araç Bağlamı')
+    && agentsGuide.includes('AI İşçilik Sözlüğü')
+    && agentsGuide.includes('npm run typecheck')
+    && agentsGuide.includes('npm audit')
+    && agentsGuide.includes('node_modules')
+    && agentsGuide.includes('user-knowledge-store.json'),
+  'Codex proje ayari AGENTS.md kisa ve kritik guvenlik kurallarini icerir',
+  `AGENTS.md length=${agentsGuide.length}`
+);
 
 // v0.6.0 P0: Ucretsiz/local AI Orchestrator cekirdegi kalici yazma yapmadan sadece guvenli preview sonuc uretir.
 const aiOrchestrator = new AiOrchestratorService();
@@ -1362,6 +1384,54 @@ assert(v62HeavyComponentSource.includes('vehicleContextForAi(item.tracking.vehic
 assert(rendererMainSource.includes('generateHeavyDamageAssessmentNote(assessment, vehicleContextForAi(tracking.vehicleContext))') && rendererMainSource.includes('vehicleContextAiLine(vehicleContextForAi(selectedCase()?.tracking?.vehicleContext))'), 'v0.6.2 revize kaydedilen Agir Hasar notu + parca-liste kopyasi AKTIF dosya AI-guvenli baglamini kullanir', 'v0.6.2 renderer not/kopya baglami eksik');
 const v62VcAiModuleSource = await fs.readFile('src/shared/vehicle/vehicle-context-ai.ts', 'utf-8');
 assert(!/\bfetch\(|axios|from ['"]node:fs|\.write\(|console\.|chassisNo|engineNo/.test(v62VcAiModuleSource), 'v0.6.2 revize merkezi araç-bağlamı-AI modulu saf; ag/dosya/log yok ve Sase/Motor alanlarina dokunmaz', 'v0.6.2 vehicle-context-ai modulu yasak iz tasiyor');
+
+// --- v0.6.3: Rapor / Fatura Uyum Kontrolü + sol menü temizliği ---
+const v63Valid = parseComplianceResponse('```json\n{"overall":"Uyumsuz","summary":"Fatura fazla.","differences":["lastik yok"],"amountComparison":[{"label":"KDV Dahil Toplam","report":"10.000","invoice":"13.442,51","note":"fark"}],"partComparison":["kod farki"],"laborComparison":[],"valueGainCheck":"kiymet kazanma dusulmemis","withholdingNote":"tevkifatli","recommendation":"manuel kontrol","warnings":[]}\n```');
+assert(v63Valid.overall === 'Uyumsuz' && v63Valid.amountComparison.length === 1 && v63Valid.amountComparison[0].label === 'KDV Dahil Toplam' && v63Valid.partComparison.includes('kod farki') && v63Valid.valueGainCheck.length > 0, 'v0.6.3 parseComplianceResponse gecerli AI JSON sonucunu normalize eder (tutar/parca/kiymet)', JSON.stringify(v63Valid.overall));
+const v63Broken = parseComplianceResponse('bu bir JSON degil; AI bozuk cevap verdi');
+assert(v63Broken.overall === 'Kontrol gerekli' && v63Broken.warnings.length >= 1, 'v0.6.3 bozuk/AI-disi yanit "Kontrol gerekli" olarak normalize (kilitlenme yok)', JSON.stringify(v63Broken.overall));
+assert(parseComplianceResponse('{"overall":"compliant"}').overall === 'Uyumlu' && parseComplianceResponse('{"overall":"kısmen uyumlu"}').overall === 'Kısmen uyumlu' && parseComplianceResponse('{"overall":"belirsiz"}').overall === 'Kontrol gerekli' && COMPLIANCE_VERDICTS.join('|') === 'Uyumlu|Kısmen uyumlu|Uyumsuz|Kontrol gerekli', 'v0.6.3 verdict normalizasyonu + karar degerleri', JSON.stringify(COMPLIANCE_VERDICTS));
+const v63FetchBackup = globalThis.fetch;
+try {
+  globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => '' });
+  let g503 = '';
+  try { await callGeminiText('k', 'p'); } catch (error) { g503 = (error && error.code) || ''; }
+  assert(g503 === AI_TRANSIENT_ERROR_CODE, 'v0.6.3 callGeminiText HTTP 503 gecici hata kodu firlatir (Gemini 503 hotfix korunur)', `code=${g503}`);
+} finally { globalThis.fetch = v63FetchBackup; }
+const v63ServiceSource = await fs.readFile('src/main/services/report-invoice-service.ts', 'utf-8');
+assert(v63ServiceSource.includes('extractPdfText') && v63ServiceSource.includes('callGeminiText') && v63ServiceSource.includes('path.basename(selectedPath)') && !v63ServiceSource.includes('extracted.reason') && !/atomicWrite|writeFile|appendFile|tracking\.mutate|\.write\(|takip\.json|\.xlsx|UserKnowledgeStoreFile|writeCategoryLaborExcel/i.test(v63ServiceSource), 'v0.6.3 rapor/fatura servisi PDF metni+AI kullanir; KALICI YAZMA yok ve ham PDF hata detayi/full path sizdirmaz', 'v0.6.3 servis kalici yazma veya ham hata izi tasiyor');
+const v63PromptSlice = v63ServiceSource.slice(v63ServiceSource.indexOf('function buildCompliancePrompt'));
+assert(!/selectedPath|filePath|result\.filePaths/.test(v63PromptSlice), 'v0.6.3 AI promptu tam dosya yolu icermez (yalniz dosya adi; full path gonderilmez)', 'v0.6.3 prompt full path sizdiriyor');
+assert(ipcContractSource.includes("reportInvoiceChoosePdf: 'report-invoice:choose-pdf'") && ipcContractSource.includes("reportInvoiceCompliance: 'report-invoice:compliance'") && preloadSource.includes('chooseReportInvoicePdf') && preloadSource.includes('checkReportInvoiceCompliance') && mainIpcSource.includes('IPC.reportInvoiceCompliance'), 'v0.6.3 rapor/fatura IPC kanal/preload/handler bagli (2 kanal)', 'v0.6.3 rapor/fatura IPC baglantisi eksik');
+const v63LayoutSource = await fs.readFile('src/renderer/app/components/layout.ts', 'utf-8');
+assert(v63LayoutSource.includes("'Rapor / Fatura Uyum'") && v63LayoutSource.includes("'rapor-fatura'") && !/navItem\('(issue|rucu|ktt)'/.test(v63LayoutSource), 'v0.6.3 sol menu: Rapor/Fatura eklendi; Sorunlar-Risk/Rucu/KTT nav kaldirildi', 'v0.6.3 sol menu temizligi eksik');
+const v63ComponentSource = await fs.readFile('src/renderer/app/components/report-invoice.ts', 'utf-8');
+assert(v63ComponentSource.includes('Rapor / Fatura Uyum Kontrolü') && v63ComponentSource.includes('AI servisine gönderilebilir') && v63ComponentSource.includes('Tekrar Dene') && v63ComponentSource.includes('const canRun = !loading') && !v63ComponentSource.includes('filePath'), 'v0.6.3 panel Turkce + gizlilik notu + Tekrar Dene; eksik PDF uyarisina izin verir; full path gostermez', 'v0.6.3 panel eksik');
+const v63RunSlice = rendererMainSource.slice(rendererMainSource.indexOf('async function runReportInvoiceComplianceAction'), rendererMainSource.indexOf('function clearReportInvoice'));
+assert(v63RunSlice.includes('AI_TRANSIENT_ERROR_CODE') && !/saveSettings|updateField|commitApproved|tracking\.mutate|exportPartsLabor/.test(v63RunSlice), 'v0.6.3 rapor/fatura AI akisi 503 hotfix kullanir ve sonucu hicbir yere kalici yazmaz', 'v0.6.3 renderer akisi gecici-hata/kalici-yazma guard ihlali');
+
+// --- v0.6.3 final-risk-fix: AI baglanti testi ---
+const aiTestNoKey = await testReportInvoiceAiConnection('');
+assert(aiTestNoKey.ok === false && /anahtar/i.test(aiTestNoKey.message), 'v0.6.3 final AI baglanti testi: API anahtari yok -> Turkce uyari (hata firlatmaz)', JSON.stringify(aiTestNoKey));
+const aiTestFetchBackup = globalThis.fetch;
+try {
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"durum":"ok"}' }] } }] }), text: async () => '' });
+  const aiTestOk = await testReportInvoiceAiConnection('anahtar-var');
+  assert(aiTestOk.ok === true && aiTestOk.message === 'AI bağlantısı çalışıyor.', 'v0.6.3 final AI baglanti testi: basarili yanit -> "AI bağlantısı çalışıyor."', JSON.stringify(aiTestOk));
+  globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => '' });
+  let aiTest503 = '';
+  try { await testReportInvoiceAiConnection('anahtar-var'); } catch (error) { aiTest503 = (error && error.code) || ''; }
+  assert(aiTest503 === AI_TRANSIENT_ERROR_CODE, 'v0.6.3 final AI baglanti testi: 503/timeout -> gecici hata kodu (uygulama kilitlenmez)', `code=${aiTest503}`);
+} finally { globalThis.fetch = aiTestFetchBackup; }
+
+// --- v0.6.3 final-risk-fix: taranmis/gorsel PDF fallback (sahte "Uyumlu" uretmez) ---
+const v63Scanned = buildScannedPdfNotice('rapor.pdf', true, 'fatura.pdf', false);
+assert(v63Scanned.overall === 'Kontrol gerekli' && v63Scanned.summary === SCANNED_PDF_NOTICE && v63Scanned.overall !== 'Uyumlu' && v63Scanned.amountComparison.length === 0 && v63Scanned.warnings.some((w) => w.includes('rapor.pdf')) && !v63Scanned.warnings.some((w) => w.includes('fatura.pdf')), 'v0.6.3 final taranmis PDF -> "Kontrol gerekli" (sahte Uyumlu yok; yalniz dosya adi)', JSON.stringify(v63Scanned.overall));
+assert(!/C:\\|\/Users\/|\.\.\\|filePath|selectedPath/.test(JSON.stringify(v63Scanned)), 'v0.6.3 final taranmis PDF uyarisi tam dosya yolu sizdirmaz', JSON.stringify(v63Scanned.warnings));
+assert(v63ServiceSource.includes('MIN_USABLE_PDF_TEXT_CHARS') && v63ServiceSource.includes('scanned: true') && v63ServiceSource.includes('PDF_PAGE_BREAK_MARKER') && v63ServiceSource.includes('testReportInvoiceAiConnection'), 'v0.6.3 final servis: bos/kisa metin -> scanned; sayfa-sonu isareti elenir; AI baglanti testi var', 'v0.6.3 final servis scanned/AI-test izi eksik');
+assert(v63RunSlice.includes('buildScannedPdfNotice') && /report\.scanned|invoice\.scanned/.test(v63RunSlice) && !/filePath|selectedPath/.test(v63RunSlice), 'v0.6.3 final renderer akisi: taranmis PDF AI cagrisini atlar, full path tasimaz', 'v0.6.3 final renderer scanned-guard eksik');
+const v63TestAiBound = ipcContractSource.includes("reportInvoiceTestAi: 'report-invoice:test-ai'") && preloadSource.includes('testReportInvoiceAi') && mainIpcSource.includes('IPC.reportInvoiceTestAi') && v63ComponentSource.includes('AI Bağlantısını Test Et');
+assert(v63TestAiBound, 'v0.6.3 final AI baglanti testi IPC kanal/preload/handler/panel butonu bagli', 'v0.6.3 final AI baglanti testi baglantisi eksik');
 const aiQueueIpcSlice = mainIpcSource.slice(mainIpcSource.indexOf('IPC.aiQueueGetSnapshot'), mainIpcSource.indexOf('IPC.heavyDamagePreview'));
 const knowledgeIpcSlice = mainIpcSource.slice(mainIpcSource.indexOf('IPC.knowledgeSearch'), mainIpcSource.indexOf('IPC.heavyDamagePreview'));
 assert(ipcContractSource.includes('AiQueueEnqueuePreviewArgs') && preloadSource.includes('enqueueAiPreview') && mainIpcSource.includes('buildSafeAiQueuePreviewRequest') && mainIpcSource.includes('allowPaidProviders: false') && mainIpcSource.includes('allowExternalProviders: false'), 'v0.6.0 P1-B AI queue IPC/preload/main guvenli preview katmani bagli', 'AI queue IPC/preload/main guard eksik');

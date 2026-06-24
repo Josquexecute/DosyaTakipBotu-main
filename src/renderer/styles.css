@@ -1448,6 +1448,23 @@ html.dark .case-virtual-row.selected {
   background: var(--error-container);
 }
 
+/* v0.6.3: Rapor / Fatura Uyum Kontrolü paneli. */
+.report-invoice-picks { display: grid; gap: var(--space-sm); margin: var(--space-sm) 0; }
+.report-invoice-pick { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+.report-invoice-file { display: grid; gap: 1px; }
+.report-invoice-file small { color: var(--on-surface-variant); font-size: 11px; }
+.report-invoice-file.scanned small { color: var(--warning, #b26a00); font-weight: 700; }
+.report-invoice-actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; margin-bottom: var(--space-sm); }
+.report-invoice-verdict { display: flex; align-items: flex-start; gap: var(--space-sm); flex-wrap: wrap; margin: var(--space-sm) 0; }
+.report-invoice-verdict p { min-width: 0; flex: 1 1 240px; margin: 0; }
+.report-invoice-block { margin: var(--space-sm) 0; }
+.report-invoice-block h4 { margin: 0 0 4px; font-size: 12px; }
+.report-invoice-block ul { margin: 0; padding-left: 18px; }
+.report-invoice-amounts { display: grid; gap: 2px; border: 1px solid var(--outline-variant); border-radius: var(--radius-sm); overflow: auto; }
+.ri-amount-head, .ri-amount-row { display: grid; grid-template-columns: minmax(120px, 1.6fr) minmax(70px, 1fr) minmax(70px, 1fr) minmax(90px, 1.4fr); gap: 6px; padding: 4px 8px; }
+.ri-amount-head { background: var(--surface-container-low); font-weight: 800; font-size: 11px; }
+.ri-amount-row { border-top: 1px solid var(--outline-variant); }
+
 /* v0.6.0 P4-E3: Kullanıcı kaynağı (yerel kullanıcı bilgi deposu) sonuçlarını seed sonuçlardan ayıran salt-okunur etiket. */
 .status-chip.user-source {
   color: var(--on-primary);
@@ -4999,3 +5016,550 @@ html.dark .case-virtual-row.selected {
 }
 
 .focus-risk-section { margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--outline-variant); }
+
+/* ===== v0.6.4: Gorsel polish / sade operasyon arayuzu ===== */
+.nav-section-label {
+  margin: 10px 8px 3px;
+  color: var(--on-surface-variant);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.nav-item {
+  position: relative;
+  min-height: 38px;
+  border: 1px solid transparent;
+}
+
+.nav-item.active {
+  border-color: color-mix(in srgb, var(--primary) 32%, transparent);
+  box-shadow: inset 3px 0 0 var(--on-primary-container), 0 1px 0 rgba(9, 20, 38, .06);
+}
+
+.nav-item.active .ui-icon {
+  color: var(--on-primary);
+}
+
+.nav-item:focus-visible,
+.primary:focus-visible,
+.secondary:focus-visible,
+.ghost:focus-visible,
+.filter-chip:focus-visible,
+.quick-filter-chip:focus-visible,
+.pager-num:focus-visible,
+.pager-nav:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.primary,
+.secondary,
+.ghost,
+.filter-chip,
+.quick-filter-chip,
+.pager-num,
+.pager-nav {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ghost {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ghost:hover,
+.ghost.active {
+  border-color: var(--outline-variant);
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+}
+
+.section-heading,
+.settings-heading,
+.status-board-heading,
+.folders-heading,
+.home-heading,
+.focus-header {
+  min-width: 0;
+}
+
+.section-heading > div,
+.settings-heading > div,
+.status-board-heading > div,
+.folders-heading > div,
+.home-heading > div,
+.focus-title-block {
+  min-width: 0;
+}
+
+.section-heading p,
+.settings-heading p,
+.status-board-heading p,
+.folders-heading p,
+.home-heading p,
+.focus-title-block p,
+.info-card > p,
+.settings-help {
+  max-width: 92ch;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.app-alert,
+.closed-warning,
+.deployment-banner {
+  align-items: flex-start;
+  line-height: 1.4;
+}
+
+.app-alert .ui-icon,
+.closed-warning .ui-icon,
+.deployment-banner .ui-icon {
+  margin-top: 1px;
+}
+
+.status-chip,
+.priority-chip,
+.version-chip,
+.knowledge-chip,
+.knowledge-badge,
+.quick-filter-chip {
+  letter-spacing: 0;
+}
+
+.summary-strip {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.kpi-card {
+  min-height: 76px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  padding: 9px;
+}
+
+.kpi-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.kpi-value {
+  font-size: 24px;
+  line-height: 26px;
+}
+
+.kpi-label,
+.kpi-caption {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-toolbar {
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.list-title h2,
+.status-board-heading h2,
+.settings-heading h2 {
+  line-height: 1.2;
+}
+
+.filter-selects {
+  gap: 8px;
+}
+
+.filter-selects label {
+  flex: 1 1 132px;
+}
+
+.filter-selects select {
+  width: 100%;
+}
+
+.table-wrap {
+  border-radius: var(--radius-sm);
+  scrollbar-gutter: stable;
+}
+
+.case-table th,
+.status-table th {
+  height: 32px;
+  background: var(--surface-container);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.case-table td,
+.status-table td {
+  line-height: 1.35;
+}
+
+.case-row.selected,
+.case-virtual-row.selected,
+.status-row.selected {
+  outline: 1px solid color-mix(in srgb, var(--primary) 36%, transparent);
+  outline-offset: -1px;
+}
+
+.case-row td,
+.case-virtual-row > div,
+.status-table td,
+.status-table td small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.note-cell,
+.todo-cell {
+  max-width: 280px;
+  white-space: normal;
+}
+
+.report-invoice-card {
+  width: min(100%, 1120px);
+  align-self: start;
+}
+
+.page-rapor-fatura {
+  align-items: start;
+}
+
+.report-invoice-card > h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.report-invoice-picks {
+  gap: 10px;
+}
+
+.report-invoice-pick {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+}
+
+.report-invoice-pick .secondary {
+  justify-content: flex-start;
+}
+
+.report-invoice-file,
+.report-invoice-pick > .muted {
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  padding: 7px 9px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container-low);
+}
+
+.report-invoice-file b,
+.report-invoice-file small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-invoice-file.scanned small {
+  white-space: normal;
+}
+
+.report-invoice-actions {
+  align-items: center;
+  padding-top: 4px;
+}
+
+.report-invoice-result {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.report-invoice-verdict {
+  padding: 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container-low);
+}
+
+.report-invoice-block {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container-lowest);
+}
+
+.report-invoice-block p,
+.report-invoice-block li,
+.report-invoice-verdict p {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.report-invoice-amounts {
+  min-width: 0;
+}
+
+.ri-amount-head,
+.ri-amount-row {
+  min-width: 620px;
+  grid-template-columns: minmax(150px, 1.6fr) minmax(92px, .9fr) minmax(92px, .9fr) minmax(150px, 1.4fr);
+  align-items: center;
+  padding: 6px 8px;
+}
+
+.ri-amount-head > b:nth-child(2),
+.ri-amount-head > b:nth-child(3),
+.ri-amount-row > span:nth-child(2),
+.ri-amount-row > span:nth-child(3),
+.labor-amount-cell,
+.labor-preview-table.price-list > div > span:nth-child(3),
+.parts-table > div > span:nth-child(4) {
+  justify-self: end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ri-amount-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.status-board {
+  gap: 10px;
+  padding: 10px;
+}
+
+.status-board-heading {
+  padding: 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container-lowest);
+}
+
+.status-summary {
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container-lowest);
+}
+
+.status-summary-total,
+.status-summary-chip {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-summary-total {
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 900;
+}
+
+.status-board-toolbar,
+.status-advanced-filters {
+  padding: 8px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container-lowest);
+}
+
+.status-search,
+.labor-learning-search,
+.knowledge-search-input {
+  background: var(--surface-container-lowest);
+}
+
+.settings-workspace {
+  scrollbar-gutter: stable;
+}
+
+.settings-page {
+  gap: 10px;
+}
+
+.settings-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  align-items: start;
+  gap: 10px;
+}
+
+.settings-page .info-card,
+.knowledge-panel,
+.labor-learning-card {
+  gap: 10px;
+}
+
+.settings-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.path-picker-row,
+.inline-add {
+  align-items: stretch;
+}
+
+.labor-learning-header {
+  align-items: center;
+}
+
+.labor-learning-stats {
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 6px;
+}
+
+.labor-learning-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(160px, 220px);
+  gap: 8px;
+  align-items: end;
+}
+
+.labor-learning-search {
+  min-width: 0;
+  margin: 0;
+}
+
+.labor-learning-list {
+  max-height: min(560px, 58vh);
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
+}
+
+.labor-learning-row {
+  background: var(--surface-container-lowest);
+}
+
+.labor-learning-row.compact {
+  padding: 7px 9px;
+}
+
+.labor-learning-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.labor-learning-summary-main b,
+.labor-learning-summary-main small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.labor-learning-meta {
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+
+.labor-learning-actions {
+  justify-content: flex-end;
+}
+
+.knowledge-summary {
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 6px;
+}
+
+.knowledge-workspace {
+  grid-template-columns: minmax(230px, .7fr) minmax(320px, 1.3fr);
+}
+
+.knowledge-source-list,
+.knowledge-result-list {
+  max-height: min(460px, 52vh);
+  scrollbar-gutter: stable;
+}
+
+.knowledge-source-row,
+.knowledge-result-row,
+.knowledge-detail-card,
+.knowledge-filter-panel,
+.knowledge-empty,
+.labor-learning-empty,
+.empty-state {
+  overflow-wrap: anywhere;
+}
+
+.version-client-list {
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 1280px) {
+  .nav-section-label {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .report-invoice-pick,
+  .labor-learning-toolbar,
+  .knowledge-workspace,
+  .status-board-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .report-invoice-pick .secondary,
+  .report-invoice-actions .primary,
+  .report-invoice-actions .secondary {
+    width: 100%;
+  }
+
+  .status-board-heading {
+    display: grid;
+  }
+
+  .status-board-heading .primary,
+  .settings-header-actions .primary,
+  .settings-header-actions .secondary {
+    width: 100%;
+  }
+
+  .labor-learning-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .labor-learning-toggle {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}

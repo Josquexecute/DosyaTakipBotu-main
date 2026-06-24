@@ -69,6 +69,52 @@ export async function callGeminiVision(
   }
 }
 
+/**
+ * v0.6.3: Metin-tabanlı Gemini çağrısı (görsel yok). Rapor/Fatura uyum kontrolü gibi metin analizleri için.
+ * Aynı transport + GEÇİCİ hata yönetimini (5xx/timeout/network → createTransientAiError) kullanır.
+ */
+export async function callGeminiText(apiKey: string, prompt: string, options: GeminiVisionOptions = {}): Promise<string> {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('Gemini API anahtarı tanımlı değil. Ayarlar ekranından anahtarınızı girin.');
+  }
+  const model = options.model || DEFAULT_GEMINI_MODEL;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${GEMINI_BASE}/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.trim() },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0 }
+      }),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      if (response.status >= 500) throw createTransientAiError(mapHttpError(response.status, body));
+      throw new Error(mapHttpError(response.status, body));
+    }
+    const data = (await response.json()) as GeminiResponse;
+    if (data.promptFeedback?.blockReason) {
+      throw new Error(`Gemini içeriği işleyemedi (${data.promptFeedback.blockReason}). Farklı içerik deneyin.`);
+    }
+    const text = (data.candidates?.[0]?.content?.parts ?? []).map((part) => part.text ?? '').join('');
+    if (!text.trim()) throw new Error('Gemini boş yanıt döndü. Lütfen tekrar deneyin.');
+    return text;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw createTransientAiError('Gemini isteği zaman aşımına uğradı. İnternet bağlantısını kontrol edip tekrar deneyin.');
+    }
+    if (error instanceof TypeError) {
+      throw createTransientAiError('Gemini sunucusuna ulaşılamadı. İnternet bağlantınızı kontrol edin.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function mapHttpError(status: number, body: string): string {
   if (status === 400 && /API_KEY_INVALID|api key not valid/i.test(body)) {
     return 'Gemini API anahtarı geçersiz. Ayarlar ekranından doğru anahtarı girin.';

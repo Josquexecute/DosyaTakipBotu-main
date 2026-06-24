@@ -19,7 +19,26 @@ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-office-audit-'))
 const appData = path.join(root, 'appdata');
 const yearRoot = path.join(root, 'pCloud Drive (P)', 'BARAN GLOBAL EKSPERTİZ', '2026');
 const pkg = JSON.parse(await fs.readFile('package.json', 'utf-8'));
-assert(pkg.version === '0.6.2', 'Paket sürümü v0.6.2 olarak sabitlendi', `version=${pkg.version}`);
+const agentsGuide = await fs.readFile('AGENTS.md', 'utf-8');
+assert(
+  agentsGuide.length < 1800
+    && agentsGuide.includes('Electron + TypeScript')
+    && agentsGuide.includes('takip.json')
+    && agentsGuide.includes('Yeni dependency ekleme')
+    && agentsGuide.includes('UI metinleri Türkçe')
+    && agentsGuide.includes('P4-E2-B')
+    && agentsGuide.includes('Dashboard gate')
+    && agentsGuide.includes('Gemini 503 hotfix')
+    && agentsGuide.includes('Araç Bağlamı')
+    && agentsGuide.includes('AI İşçilik Sözlüğü')
+    && agentsGuide.includes('npm run typecheck')
+    && agentsGuide.includes('npm audit')
+    && agentsGuide.includes('node_modules')
+    && agentsGuide.includes('user-knowledge-store.json'),
+  'Codex proje ayari AGENTS.md kisa ve kritik guvenlik kurallarini icerir',
+  `AGENTS.md length=${agentsGuide.length}`
+);
+assert(pkg.version === '0.6.4', 'Paket sürümü v0.6.4 olarak sabitlendi', `version=${pkg.version}`);
 assert(APP_VERSION === pkg.version, 'APP_VERSION package.json ile uyumlu', `APP_VERSION=${APP_VERSION}, package=${pkg.version}`);
 assert(Boolean(pkg.scripts?.['live:version-check']) && Boolean(pkg.scripts?.['release:hash']) && Boolean(pkg.scripts?.['release:notes']), 'v0.3.14 Windows rollout scriptleri package.json içinde mevcut', JSON.stringify(pkg.scripts));
 assert(Boolean(pkg.scripts?.['test:behavior']) && String(pkg.scripts?.ci || '').includes('test:behavior'), 'v0.3.18 davranış regresyon testleri CI zincirine bağlı', JSON.stringify(pkg.scripts));
@@ -586,7 +605,7 @@ async function pathExists(targetPath) {
 // --- v0.6.0 UI/Runtime stability: manuel calisma-klasoru secim kilidi + scroll koruma guardlari ---
 const rendererStateSource = await fs.readFile('src/renderer/app/state.ts', 'utf-8');
 assert(rendererStateSource.includes('hasManualWorkingFolderSelection: boolean') && rendererStateSource.includes('hasManualWorkingFolderSelection: false'), 'v0.6.0 UI-stability manuel calisma-klasoru secim bayragi state icinde tanimli ve baslangicta kapali', 'hasManualWorkingFolderSelection state alani eksik');
-assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'settings']") && rendererSource.includes('isTabAllowedNow') && rendererSource.includes('if (!isTabAllowedNow(targetTab))') && rendererSource.includes('Önce Dosyalar bölümünden çalışma klasörü seçiniz.'), 'v0.6.1 UI-stability manuel secim yapilmadan Dosyalar/Durum Panosu/Ayarlar disi sekme kilitli (tab gate + uyari)', 'manuel secim tab gate eksik');
+assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'settings']") && rendererSource.includes('isTabAllowedNow') && rendererSource.includes('if (!isTabAllowedNow(targetTab))') && rendererSource.includes('Önce Dosyalar bölümünden çalışma klasörü seçiniz.'), 'v0.6.3 UI-stability manuel secim yapilmadan Dosyalar/Durum/Rapor-Fatura/Ayarlar disi sekme kilitli (tab gate + uyari)', 'manuel secim tab gate eksik');
 const reloadCacheSlice = rendererSource.slice(rendererSource.indexOf('async function reloadCache'), rendererSource.indexOf('interface FocusSnapshot'));
 assert(reloadCacheSlice.length > 0 && reloadCacheSlice.includes('state.cases[0]') && !reloadCacheSlice.includes('markManualWorkingFolderSelection'), 'v0.6.0 UI-stability otomatik son-klasor/ilk-dosya secimi kilidi ACMAZ (manuel bayragi set etmez)', 'otomatik klasor secimi kilidi aciyor');
 assert((rendererSource.match(/markManualWorkingFolderSelection\(\)/g) || []).length >= 2, 'v0.6.0 UI-stability manuel dosya secimi (liste tiklamasi + panodan acma) kilidi acar', 'manuel secim bayragi set edilmiyor');
@@ -669,6 +688,29 @@ assert(rendererSource.includes('generateHeavyDamageAssessmentNote(assessment, ve
 const auditCasesSource = await fs.readFile('src/renderer/app/components/cases.ts', 'utf-8');
 const auditSettingsSource = await fs.readFile('src/renderer/app/components/settings.ts', 'utf-8');
 assert(auditCasesSource.includes("(Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0)") && auditSettingsSource.includes("(Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0)"), 'audit-fix gecersiz/bos tarihli kayitlarin siralamasi NaN comparator yerine kararli (NaN->0)', 'updatedAt sort comparator NaN korumasi eksik');
+
+// --- v0.6.3: Rapor / Fatura Uyum Kontrolü + sol menü temizliği guardlari ---
+const v63oTypesSource = await fs.readFile('src/shared/report-invoice/report-invoice-types.ts', 'utf-8');
+assert(v63oTypesSource.includes('parseComplianceResponse') && v63oTypesSource.includes("'Kontrol gerekli'") && v63oTypesSource.includes('normalizeComplianceResult') && !/\bfetch\(|axios|from ['"]node:fs|\.write\(/.test(v63oTypesSource), 'v0.6.3 rapor/fatura tip+ayristirici saf; bozuk yanit Kontrol gerekli; ag/dosya/yazma yok', 'v0.6.3 rapor/fatura tip/ayristirici eksik');
+const v63oServiceSource = await fs.readFile('src/main/services/report-invoice-service.ts', 'utf-8');
+assert(v63oServiceSource.includes('extractPdfText') && v63oServiceSource.includes('callGeminiText') && v63oServiceSource.includes('path.basename(selectedPath)') && !v63oServiceSource.includes('extracted.reason') && !/atomicWrite|writeFile|appendFile|tracking\.mutate|\.write\(|takip\.json|\.xlsx|UserKnowledgeStoreFile|writeCategoryLaborExcel/i.test(v63oServiceSource), 'v0.6.3 rapor/fatura servisi PDF+AI kullanir; KALICI YAZMA yok ve ham PDF hata detayi/full path sizdirmaz', 'v0.6.3 servis kalici yazma veya ham hata izi');
+assert(!/selectedPath|filePath|result\.filePaths/.test(v63oServiceSource.slice(v63oServiceSource.indexOf('function buildCompliancePrompt'))), 'v0.6.3 AI promptu tam dosya yolu icermez', 'v0.6.3 prompt full path sizdiriyor');
+const v63oGeminiSource = await fs.readFile('src/main/import/gemini-client.ts', 'utf-8');
+assert(v63oGeminiSource.includes('export async function callGeminiText') && /callGeminiText[\s\S]*?status >= 500[\s\S]*?createTransientAiError/.test(v63oGeminiSource), 'v0.6.3 callGeminiText 5xx geçici hata yonetimini (503 hotfix) korur', 'v0.6.3 callGeminiText transient eksik');
+assert(ipcContractSource.includes("reportInvoiceChoosePdf: 'report-invoice:choose-pdf'") && ipcContractSource.includes("reportInvoiceCompliance: 'report-invoice:compliance'") && ipcSource.includes('IPC.reportInvoiceCompliance') && preloadSource.includes('checkReportInvoiceCompliance'), 'v0.6.3 rapor/fatura 2 IPC kanali kontrat/handler/preload ile bagli', 'v0.6.3 rapor/fatura IPC eksik');
+const v63oLayoutSource = await fs.readFile('src/renderer/app/components/layout.ts', 'utf-8');
+assert(v63oLayoutSource.includes("'Rapor / Fatura Uyum'") && v63oLayoutSource.includes('renderReportInvoicePanel') && v63oLayoutSource.includes("case 'rapor-fatura'") && !/navItem\('(issue|rucu|ktt)'/.test(v63oLayoutSource), 'v0.6.3 sol menu Rapor/Fatura eklendi + renderPage bagli; Sorunlar/Rucu/KTT nav kaldirildi (model korunur)', 'v0.6.3 sol menu/renderPage baglantisi eksik');
+const v63oComponentSource = await fs.readFile('src/renderer/app/components/report-invoice.ts', 'utf-8');
+assert(v63oComponentSource.includes('Rapor / Fatura Uyum Kontrolü') && v63oComponentSource.includes('AI servisine gönderilebilir') && v63oComponentSource.includes('Tekrar Dene') && v63oComponentSource.includes('const canRun = !loading') && !v63oComponentSource.includes('filePath'), 'v0.6.3 panel Turkce + gizlilik notu + Tekrar Dene; eksik PDF uyarisina izin verir; full path gostermez', 'v0.6.3 panel eksik');
+assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'settings']") && rendererSource.includes('runReportInvoiceComplianceAction'), 'v0.6.3 Rapor/Fatura standalone (manuel klasor secimi gerektirmez) + AI aksiyonu bagli', 'v0.6.3 renderer rapor/fatura aksiyon/gate eksik');
+
+// --- v0.6.3 final-risk-fix guardlari: AI baglanti testi + taranmis/gorsel PDF fallback + GUI guvenligi ---
+assert(v63oTypesSource.includes('buildScannedPdfNotice') && v63oTypesSource.includes('SCANNED_PDF_NOTICE') && v63oTypesSource.includes('ReportInvoiceAiTestResult') && !/\bfetch\(|axios|from ['"]node:fs|\.write\(/.test(v63oTypesSource), 'v0.6.3 final tip modulu: taranmis-PDF uyarisi + AI test sonucu saf (ag/dosya/yazma yok)', 'v0.6.3 final tip modulu eksik/yasak iz');
+assert(v63oServiceSource.includes('testReportInvoiceAiConnection') && v63oServiceSource.includes('MIN_USABLE_PDF_TEXT_CHARS') && v63oServiceSource.includes('PDF_PAGE_BREAK_MARKER') && v63oServiceSource.includes('scanned: true'), 'v0.6.3 final servis: AI baglanti testi + bos/kisa metin -> taranmis kabul (sahte Uyumlu yok)', 'v0.6.3 final servis scanned/AI-test izi eksik');
+assert(ipcContractSource.includes("reportInvoiceTestAi: 'report-invoice:test-ai'") && ipcSource.includes('IPC.reportInvoiceTestAi') && preloadSource.includes('testReportInvoiceAi'), 'v0.6.3 final AI baglanti testi 3. IPC kanali kontrat/handler/preload ile bagli', 'v0.6.3 final AI test IPC eksik');
+assert(v63oComponentSource.includes('AI Bağlantısını Test Et') && v63oComponentSource.includes('report-invoice-test-ai') && v63oComponentSource.includes('taranmış/görsel') && !v63oComponentSource.includes('filePath'), 'v0.6.3 final panel: AI test butonu + taranmis PDF uyarisi; full path gostermez', 'v0.6.3 final panel eksik');
+const v63oRunSlice = rendererSource.slice(rendererSource.indexOf('async function runReportInvoiceComplianceAction'), rendererSource.indexOf('function clearReportInvoice'));
+assert(v63oRunSlice.includes('buildScannedPdfNotice') && /report\.scanned|invoice\.scanned/.test(v63oRunSlice) && rendererSource.includes('testReportInvoiceAiAction'), 'v0.6.3 final renderer: taranmis PDF AI cagrisini atlar + AI test aksiyonu bagli', 'v0.6.3 final renderer scanned/AI-test guard eksik');
 
 // --- Eksik relative JS import guard: dist-ui build ciktisindaki her relative .js referansinin
 // diskte gercekten var oldugunu dogrular; barrel klasor importunun yanlis dosyaya cevrilmesinden

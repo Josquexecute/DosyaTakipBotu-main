@@ -23,6 +23,8 @@ import type {
   TrackingWriteResult
 } from './types';
 import type { VehicleContext } from './vehicle/vehicle-context';
+import type { ReportInvoiceAiTestResult, ReportInvoiceComplianceArgs, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from './report-invoice/report-invoice-types';
+export type { ReportInvoiceAiTestResult, ReportInvoiceComplianceArgs, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from './report-invoice/report-invoice-types';
 import type { UserPartTerm } from './parca-sozlugu';
 import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from './labor-learning-dictionary';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageClearArgs, HeavyDamageGenerateNoteArgs, HeavyDamageGetArgs, HeavyDamagePreviewArgs, HeavyDamageSaveArgs } from './heavy-damage-types';
@@ -79,6 +81,9 @@ export const IPC_INVOKE_CHANNELS = {
   knowledgeImportChooseFilesDryRun: 'knowledge-import:choose-files-dry-run',
   knowledgeImportPreviewTextFile: 'knowledge-import:preview-text-file',
   knowledgeImportCommitApprovedTextPreview: 'knowledge-import:commit-approved-text-preview',
+  reportInvoiceChoosePdf: 'report-invoice:choose-pdf',
+  reportInvoiceCompliance: 'report-invoice:compliance',
+  reportInvoiceTestAi: 'report-invoice:test-ai',
   heavyDamagePreview: 'heavy-damage:preview',
   heavyDamageGet: 'heavy-damage:get',
   heavyDamageSave: 'heavy-damage:save',
@@ -220,6 +225,9 @@ export interface HasarbotuApi {
   inspectLaborExcel<T = ExcelLaborPreview>(args: LaborInspectExcelArgs): Promise<ApiResult<T>>;
   distributeLaborExcel<T = ExcelLaborDistributeResult>(args: LaborDistributeExcelArgs): Promise<ApiResult<T>>;
   analyzePartsPhoto<T = PartsPhotoAnalysis>(args?: PartsAnalyzePhotoArgs): Promise<ApiResult<T>>;
+  chooseReportInvoicePdf<T = ReportInvoicePdfPick>(): Promise<ApiResult<T>>;
+  checkReportInvoiceCompliance<T = ReportInvoiceComplianceResult>(args: ReportInvoiceComplianceArgs): Promise<ApiResult<T>>;
+  testReportInvoiceAi<T = ReportInvoiceAiTestResult>(): Promise<ApiResult<T>>;
   autoLaborPreview<T = AutoLaborPreview>(): Promise<ApiResult<T>>;
   autoLaborSave<T = AutoLaborSaveResult>(args: LaborAutoSaveArgs): Promise<ApiResult<T>>;
   laborLearningList<T = LaborLearningEntry[]>(): Promise<ApiResult<T>>;

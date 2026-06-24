@@ -28,6 +28,7 @@ import type {
   HeavyDamageSaveArgs,
   KnowledgeImportCommitInput,
   KnowledgeImportDryRunPlanArgs,
+  ReportInvoiceComplianceArgs,
   LaborDistributeExcelArgs,
   LaborInspectExcelArgs,
   KnowledgeSearchQuery,
@@ -58,6 +59,7 @@ import { buildDryRunPlan } from './services/knowledge/knowledge-import-planner';
 import { chooseFilesForKnowledgeImportDryRun } from './services/knowledge/knowledge-import-dry-run-service';
 import { previewTextFileForKnowledgeImport } from './services/knowledge/knowledge-import-text-preview-service';
 import { commitApprovedKnowledgeImportTextPreview } from './services/knowledge/knowledge-import-commit-service';
+import { chooseReportInvoicePdf, checkReportInvoiceCompliance, testReportInvoiceAiConnection } from './services/report-invoice-service';
 import {
   CasesQueryService,
   ConflictResolverService,
@@ -149,6 +151,15 @@ export class IpcController {
     ipcMain.handle(IPC.knowledgeImportChooseFilesDryRun, () => this.safe(async () => chooseFilesForKnowledgeImportDryRun(this.mainWindowProvider())));
     ipcMain.handle(IPC.knowledgeImportPreviewTextFile, () => this.safe(async () => previewTextFileForKnowledgeImport(this.mainWindowProvider())));
     ipcMain.handle(IPC.knowledgeImportCommitApprovedTextPreview, (_event, args: KnowledgeImportCommitInput) => this.safe(async () => commitApprovedKnowledgeImportTextPreview(this.cache.cacheRoot, args)));
+    ipcMain.handle(IPC.reportInvoiceChoosePdf, () => this.safe(() => chooseReportInvoicePdf(this.mainWindowProvider())));
+    ipcMain.handle(IPC.reportInvoiceCompliance, (_event, args: ReportInvoiceComplianceArgs) => this.safe(async () => {
+      const settings = await this.context.getSettings();
+      return checkReportInvoiceCompliance((settings.geminiApiKey ?? '').trim(), args);
+    }));
+    ipcMain.handle(IPC.reportInvoiceTestAi, () => this.safe(async () => {
+      const settings = await this.context.getSettings();
+      return testReportInvoiceAiConnection((settings.geminiApiKey ?? '').trim());
+    }));
     ipcMain.handle(IPC.heavyDamagePreview, (_event, args: HeavyDamagePreviewArgs) => this.safe(() => this.heavyDamage.preview(args)));
     ipcMain.handle(IPC.heavyDamageGet, (_event, args: HeavyDamageGetArgs) => this.safe(() => this.heavyDamage.get(args)));
     ipcMain.handle(IPC.heavyDamageSave, (_event, args: HeavyDamageSaveArgs) => this.safe(() => this.heavyDamage.save(args)));

@@ -28,6 +28,8 @@ import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../shared/ai/ai-q
 import { AI_TRANSIENT_ERROR_CODE, AI_TRANSIENT_USER_MESSAGE } from '../shared/ai/ai-transient-error';
 import { vehicleContextForAi } from '../shared/vehicle/vehicle-context';
 import { vehicleContextAiLine } from '../shared/vehicle/vehicle-context-ai';
+import type { ReportInvoiceAiTestResult, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from '../shared/report-invoice/report-invoice-types';
+import { buildScannedPdfNotice } from '../shared/report-invoice/report-invoice-types';
 import type { KnowledgeImportCommitInput, KnowledgeImportCommitResult, KnowledgeImportDryRunResponse, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceType } from '../shared/knowledge';
 import { applyKnowledgeImportApprovalDecision, buildKnowledgeImportCommitPlan, createKnowledgeImportApprovalState, isKnowledgeSourceFilter } from '../shared/knowledge';
 import { applyHeavyDamageEdits, generateHeavyDamageAssessmentNote, HEAVY_DAMAGE_FILTERS, type HeavyDamageFilter } from '../shared/heavy-damage-rules';
@@ -551,7 +553,7 @@ function restoreScrollPositions(positions: Map<string, number>): void {
 // diğer operasyonel ekranlar (Operasyon, Özet, Evrak, Excel, Rücu, KTT, Ağır Hasar, Klasörler, Ana Sayfa) kilitlidir.
 // Durum Panosu da daima açıktır; oradan dosya seçimi (openCaseFromBoard) aktif seçim sayılır ve kilidi açar.
 // Otomatik son-klasör yükleme/geri-yükleme bu kilidi AÇMAZ; yalnız manuel seçim açar.
-const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'settings'];
+const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'settings'];
 
 function isTabAllowedNow(tab: DetailTab): boolean {
   return state.hasManualWorkingFolderSelection || TABS_ALLOWED_WHILE_FOLDER_LOCKED.includes(tab);
@@ -1188,6 +1190,11 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'labor-learning-export': await exportLaborLearning(); break;
     case 'labor-learning-import': await importLaborLearning(); break;
     case 'analyze-parts-photo': await analyzePartsPhotoAction(); break;
+    case 'report-invoice-choose-report': await chooseReportInvoicePdfAction('report'); break;
+    case 'report-invoice-choose-invoice': await chooseReportInvoicePdfAction('invoice'); break;
+    case 'report-invoice-run': await runReportInvoiceComplianceAction(); break;
+    case 'report-invoice-test-ai': await testReportInvoiceAiAction(); break;
+    case 'report-invoice-clear': clearReportInvoice(); break;
     case 'clear-parts-analysis': state.partsAnalysis = null; render(); break;
     case 'learn-part-term': await learnPartTermAction(Number(element?.dataset.partIndex ?? -1)); break;
     case 'copy-parts-list': await copyPartsList(); break;
@@ -1453,6 +1460,112 @@ async function deleteNote(id: string): Promise<void> {
     (current, allowClosedMutation) => window.hasarbotu.deleteNote<TrackingWriteResult>({ folderPath: current.folderPath, allowClosedMutation, expectedRevision: current.revision, expectedWriteId: current.tracking.metadata.writeId, id }),
     (tracking) => { tracking.notes = tracking.notes.filter((x) => x.id !== id); }
   );
+}
+
+// v0.6.3: Rapor / Fatura Uyum Kontrolü — bellek-içi PDF seçimi + AI karşılaştırma. Kalıcı yazma YOK.
+async function chooseReportInvoicePdfAction(kind: 'report' | 'invoice'): Promise<void> {
+  if (state.reportInvoicePicking !== '' || state.reportInvoiceLoading) return;
+  if (!state.settings?.geminiApiKey) {
+    state.error = 'Önce Ayarlar → "AI / Parça Okuma" bölümünden Gemini API anahtarınızı girin.';
+    state.activeTab = 'settings';
+    render();
+    return;
+  }
+  state.reportInvoicePicking = kind;
+  state.reportInvoiceError = '';
+  render();
+  const result = await window.hasarbotu.chooseReportInvoicePdf<ReportInvoicePdfPick>();
+  state.reportInvoicePicking = '';
+  if (!result.ok) {
+    if (/iptal/i.test(result.error.message)) setToast('PDF seçimi iptal edildi.', 'info');
+    else reportOperationError(result.error.message);
+    return;
+  }
+  if (kind === 'report') state.reportInvoiceReportPick = result.data;
+  else state.reportInvoiceInvoicePick = result.data;
+  state.reportInvoiceResult = null;
+  // v0.6.3: Taranmış/görsel PDF → kullanıcıyı uyar; metin AI'ya gitmez, sahte "Uyumlu" üretilmez.
+  if (result.data.scanned) {
+    setToast(`${kind === 'report' ? 'Rapor' : 'Fatura'} PDF metni net okunamadı: ${result.data.fileName}. Taranmış/görsel olabilir; manuel kontrol gerekli.`, 'warning');
+  } else {
+    setToast(`${kind === 'report' ? 'Rapor' : 'Fatura'} PDF okundu: ${result.data.fileName}.`, 'success');
+  }
+  render();
+}
+
+async function runReportInvoiceComplianceAction(): Promise<void> {
+  if (state.reportInvoiceLoading) return;
+  const report = state.reportInvoiceReportPick;
+  const invoice = state.reportInvoiceInvoicePick;
+  if (!report || !invoice) { setToast('Önce hem rapor hem fatura PDF dosyasını seçin.', 'warning'); render(); return; }
+  // v0.6.3: Taranmış/görsel (metni okunamayan) PDF → AI çağrısı YAPMA; "Kontrol gerekli" sonucu göster.
+  // Boş metinle AI'ya gidip sahte "Uyumlu" sonucu üretilmesini engeller.
+  if (report.scanned || invoice.scanned) {
+    state.reportInvoiceResult = buildScannedPdfNotice(report.fileName, report.scanned, invoice.fileName, invoice.scanned);
+    state.reportInvoiceError = '';
+    setToast('PDF metni net okunamadı; taranmış/görsel olabilir. Sonuç: Kontrol gerekli.', 'warning');
+    render();
+    return;
+  }
+  if (!state.settings?.geminiApiKey) {
+    state.error = 'Önce Ayarlar → "AI / Parça Okuma" bölümünden Gemini API anahtarınızı girin.';
+    state.activeTab = 'settings'; render(); return;
+  }
+  const activeCase = selectedCase();
+  state.reportInvoiceLoading = true;
+  state.reportInvoiceError = '';
+  render();
+  const result = await window.hasarbotu.checkReportInvoiceCompliance<ReportInvoiceComplianceResult>({
+    reportText: report.text,
+    invoiceText: invoice.text,
+    ...(activeCase ? { context: { fileNo: activeCase.officeFileNo || activeCase.dosyaNo, plate: activeCase.plate, serviceName: activeCase.serviceName ?? '' } } : {})
+  });
+  state.reportInvoiceLoading = false;
+  if (!result.ok) {
+    // v0.6.3: Geçici AI hatası (503/timeout/network) → uygulama kilitlenmez; Türkçe mesaj + Tekrar Dene.
+    if (result.error.code === AI_TRANSIENT_ERROR_CODE) {
+      state.reportInvoiceError = AI_TRANSIENT_USER_MESSAGE;
+      state.error = '';
+      setToast(AI_TRANSIENT_USER_MESSAGE, 'warning');
+      render();
+      return;
+    }
+    reportOperationError(result.error.message);
+    return;
+  }
+  state.reportInvoiceResult = result.data;
+  setToast(`Uyum kontrolü tamamlandı: ${result.data.overall}.`, result.data.overall === 'Uyumlu' ? 'success' : 'warning');
+  render();
+}
+
+// v0.6.3: AI bağlantı testi — mevcut Gemini ayarını kullanır; kısa Türkçe test promptu atar. Uygulama kilitlenmez.
+async function testReportInvoiceAiAction(): Promise<void> {
+  if (state.reportInvoiceAiTesting || state.reportInvoiceLoading) return;
+  state.reportInvoiceAiTesting = true;
+  state.reportInvoiceAiTestResult = null;
+  render();
+  const result = await window.hasarbotu.testReportInvoiceAi<ReportInvoiceAiTestResult>();
+  state.reportInvoiceAiTesting = false;
+  if (!result.ok) {
+    // Geçici hata (503/zaman aşımı/ağ) → tek ve anlaşılır Türkçe mesaj; ham stack gösterilmez.
+    const message = result.error.code === AI_TRANSIENT_ERROR_CODE ? AI_TRANSIENT_USER_MESSAGE : result.error.message;
+    state.reportInvoiceAiTestResult = { ok: false, message };
+    setToast(message, 'warning');
+    render();
+    return;
+  }
+  state.reportInvoiceAiTestResult = result.data;
+  setToast(result.data.message, result.data.ok ? 'success' : 'warning');
+  render();
+}
+
+function clearReportInvoice(): void {
+  state.reportInvoiceReportPick = null;
+  state.reportInvoiceInvoicePick = null;
+  state.reportInvoiceResult = null;
+  state.reportInvoiceError = '';
+  state.reportInvoiceAiTestResult = null;
+  render();
 }
 
 async function analyzePartsPhotoAction(): Promise<void> {

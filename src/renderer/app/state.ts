@@ -6,6 +6,7 @@ import type { HeavyDamageAssessmentPreview, HeavyDamageRowEdit } from '../../sha
 import type { HeavyDamageFilter } from '../../shared/heavy-damage-rules';
 import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../../shared/ai/ai-queue-types';
 import type { KnowledgeImportApprovalReducerState, KnowledgeImportCommitResult, KnowledgeImportPlan, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceFilter, KnowledgeSourceType } from '../../shared/knowledge';
+import type { ReportInvoiceAiTestResult, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from '../../shared/report-invoice/report-invoice-types';
 
 export interface UiState {
   settings: AppSettings | null;
@@ -59,6 +60,16 @@ export interface UiState {
   partsAnalyzing: boolean;
   /** v0.6.1: AI parça okuma geçici hata mesajı (HTTP 503/zaman aşımı/ağ). Set ise "Tekrar Dene" gösterilir; analiz/seçim bozulmaz. */
   partsAnalysisError: string;
+  /** v0.6.3: Rapor / Fatura Uyum Kontrolü — bellek-içi seçimler ve sonuç. Kalıcı yazma YOK. */
+  reportInvoiceReportPick: ReportInvoicePdfPick | null;
+  reportInvoiceInvoicePick: ReportInvoicePdfPick | null;
+  reportInvoiceResult: ReportInvoiceComplianceResult | null;
+  reportInvoiceLoading: boolean;
+  reportInvoicePicking: '' | 'report' | 'invoice';
+  reportInvoiceError: string;
+  /** v0.6.3: AI bağlantı testi durumu/sonucu (yalnız UI belleği; kalıcı değil). */
+  reportInvoiceAiTesting: boolean;
+  reportInvoiceAiTestResult: ReportInvoiceAiTestResult | null;
   /** Kullanıcının öğrettiği parça terimleri (kalıcı, kişisel sözlük). */
   partsUserTerms: UserPartTerm[];
   laborLearningEntries: LaborLearningEntry[];
@@ -160,7 +171,7 @@ export type CaseSortMode = 'plate-az' | 'plate-za' | 'office-az' | 'notice-az' |
  * 'klasorler' (yalnızca-okunur klasör gezgini) yeni sayfalardır. 'ozet' yalnızca detay
  * özet görünümünde kullanılır.
  */
-export type DetailTab = 'home' | 'dosyalar' | 'klasorler' | 'durum' | 'ozet' | 'issues' | 'operasyon' | 'evrak' | 'portal' | 'labor' | 'rucu' | 'ktt' | 'heavy' | 'ai' | 'settings';
+export type DetailTab = 'home' | 'dosyalar' | 'klasorler' | 'durum' | 'ozet' | 'issues' | 'operasyon' | 'evrak' | 'portal' | 'labor' | 'rucu' | 'ktt' | 'heavy' | 'ai' | 'rapor-fatura' | 'settings';
 
 export type StatusBoardSort = 'dosya-az' | 'plate-az' | 'updated-desc' | 'durum';
 export type { AutoLaborPreviewFilter };
@@ -226,6 +237,14 @@ export const state: UiState = {
   partsAnalysis: null,
   partsAnalyzing: false,
   partsAnalysisError: '',
+  reportInvoiceReportPick: null,
+  reportInvoiceInvoicePick: null,
+  reportInvoiceResult: null,
+  reportInvoiceLoading: false,
+  reportInvoicePicking: '',
+  reportInvoiceError: '',
+  reportInvoiceAiTesting: false,
+  reportInvoiceAiTestResult: null,
   partsUserTerms: [],
   laborLearningEntries: [],
   laborLearningSearch: '',

@@ -7,6 +7,7 @@ import { renderSettingsPage } from './settings';
 import { renderHome } from './home';
 import { renderFolders } from './folders';
 import { renderStatusBoard } from './status-board';
+import { renderReportInvoicePanel } from './report-invoice';
 import { APP_VERSION } from '../../../shared/constants';
 import { icon } from '../icons';
 
@@ -37,17 +38,18 @@ export function renderApp(state: UiState): string {
       ${icon(state.scanRunning ? 'close' : 'sync')}<span>${state.scanRunning ? 'Taramayı Durdur' : 'Yeniden Tara'}</span>
     </button>
     <div class="nav-links">
+      <div class="nav-section-label">Genel</div>
       ${navItem('dashboard', 'Ana Sayfa', 'home', activePage === 'home', folderLocked)}
       ${navItem('folder', 'Dosyalar', 'dosyalar', activePage === 'dosyalar', false)}
+      ${navItem('document', 'Rapor / Fatura Uyum', 'rapor-fatura', activePage === 'rapor-fatura', false)}
+      <div class="nav-section-label">İş Akışı</div>
       ${navItem('details', 'Klasörler', 'klasorler', activePage === 'klasorler', folderLocked)}
       ${navItem('operation', 'Operasyon', 'operasyon', activePage === 'operasyon', folderLocked)}
       ${navItem('photo', 'Evrak & Fotoğraf', 'evrak', activePage === 'evrak', folderLocked)}
-      ${navItem('issue', 'Sorunlar / Risk', 'issues', activePage === 'issues', folderLocked)}
       ${navItem('portal', 'Portal', 'portal', activePage === 'portal', folderLocked)}
       ${navItem('excel', 'Excel Araçları', 'labor', activePage === 'labor', folderLocked)}
-      ${navItem('rucu', 'Rücu', 'rucu', activePage === 'rucu', folderLocked)}
-      ${navItem('ktt', 'KTT / Kusur', 'ktt', activePage === 'ktt', folderLocked)}
       ${navItem('warning', 'Ağır Hasar', 'heavy', activePage === 'heavy', folderLocked)}
+      <div class="nav-section-label">Kontrol</div>
       ${navItem('board', 'Durum Panosu', 'durum', activePage === 'durum', false)}
       ${navItem('settings', 'Ayarlar', 'settings', activePage === 'settings', false)}
     </div>
@@ -98,6 +100,7 @@ function renderPage(state: UiState, page: DetailTab): string {
     case 'dosyalar': return renderCaseList(state);
     case 'klasorler': return renderFolders(state);
     case 'durum': return renderStatusBoard(state);
+    case 'rapor-fatura': return renderReportInvoicePanel(state);
     case 'issues': return renderIssuesPage(state);
     case 'operasyon':
     case 'evrak':
