@@ -214,7 +214,7 @@ function sortCases(cases: CaseIndexItem[], sortMode: CaseSortMode): CaseIndexIte
     case 'plate-za': return sorted.sort((a, b) => b.plate.localeCompare(a.plate, 'tr'));
     case 'office-az': return sorted.sort((a, b) => (a.officeFileNo || a.dosyaNo).localeCompare(b.officeFileNo || b.dosyaNo, 'tr', { numeric: true }));
     case 'notice-az': return sorted.sort((a, b) => (a.claimNoticeNo || '').localeCompare(b.claimNoticeNo || '', 'tr', { numeric: true }));
-    case 'updated-desc': return sorted.sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''));
+    case 'updated-desc': return sorted.sort((a, b) => (Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0));
     case 'followup-asc': return sorted.sort((a, b) => (a.takipTarihi || '9999-12-31').localeCompare(b.takipTarihi || '9999-12-31'));
     default: return sorted.sort((a, b) => a.plate.localeCompare(b.plate, 'tr'));
   }

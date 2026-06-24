@@ -225,7 +225,7 @@ function filteredLaborLearningEntries(state: UiState): LaborLearningEntry[] {
 function sortedLaborLearningEntries(entries: LaborLearningEntry[], filter: string): LaborLearningEntry[] {
   const copy = [...entries];
   if (filter === 'top') return copy.sort((a, b) => (b.useCount ?? 0) - (a.useCount ?? 0));
-  return copy.sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''));
+  return copy.sort((a, b) => (Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0));
 }
 
 function laborLearningSourceLabel(source?: string): string {

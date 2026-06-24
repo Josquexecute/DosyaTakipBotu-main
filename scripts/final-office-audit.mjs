@@ -665,6 +665,11 @@ const v62rHeavyComp = await fs.readFile('src/renderer/app/components/heavy-damag
 assert(v62rHeavyComp.includes('vehicleContextForAi(item.tracking.vehicleContext)') && v62rHeavyComp.includes('generateHeavyDamageAssessmentMailDraft(assessment, vehicleContext)'), 'v0.6.2 revize Agir Hasar komponenti AKTIF dosya AI-guvenli baglamini not/mail taslaklarina gecirir', 'v0.6.2 heavy damage komponent baglam gecmiyor');
 assert(rendererSource.includes('generateHeavyDamageAssessmentNote(assessment, vehicleContextForAi(tracking.vehicleContext))') && rendererSource.includes('vehicleContextAiLine(vehicleContextForAi(selectedCase()?.tracking?.vehicleContext))'), 'v0.6.2 revize kaydedilen Agir Hasar notu + parca-liste kopyasi AKTIF dosya AI-guvenli baglamini kullanir', 'v0.6.2 renderer not/kopya baglami eksik');
 
+// --- Audit fix: gecersiz tarih (Date.parse -> NaN) sort comparator'lari kararli kalmali (NaN -> 0) ---
+const auditCasesSource = await fs.readFile('src/renderer/app/components/cases.ts', 'utf-8');
+const auditSettingsSource = await fs.readFile('src/renderer/app/components/settings.ts', 'utf-8');
+assert(auditCasesSource.includes("(Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0)") && auditSettingsSource.includes("(Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0)"), 'audit-fix gecersiz/bos tarihli kayitlarin siralamasi NaN comparator yerine kararli (NaN->0)', 'updatedAt sort comparator NaN korumasi eksik');
+
 // --- Eksik relative JS import guard: dist-ui build ciktisindaki her relative .js referansinin
 // diskte gercekten var oldugunu dogrular; barrel klasor importunun yanlis dosyaya cevrilmesinden
 // dogan net::ERR_FILE_NOT_FOUND (orn. knowledge.js) beyaz ekranini gelecekte yakalar. ---
