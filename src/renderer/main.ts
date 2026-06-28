@@ -338,7 +338,7 @@ async function commitApprovedKnowledgeImportTextPreviewAction(): Promise<void> {
   if (state.knowledgeImportCommitting) return;
   const item = knowledgeImportCommittableItem();
   if (!item) return;
-  const confirmed = window.confirm('Bu islem secili TXT/MD icerigini yerel kullanici bilgi deposuna kalici olarak yazacak.\ntakip.json, Excel ve dosya klasorlerine dokunulmayacak.\nDevam etmek istiyor musunuz?');
+  const confirmed = await confirmDialog('Bu işlem seçili TXT/MD içeriğini yerel kullanıcı bilgi deposuna kalıcı olarak yazacak.\ntakip.json, Excel ve dosya klasörlerine dokunulmayacak.\nDevam etmek istiyor musunuz?', { title: 'Bilgi Bankasına kalıcı yazma', confirmLabel: 'Evet, yaz', danger: true });
   if (!confirmed) return;
   state.knowledgeImportCommitting = true;
   render();
@@ -1107,6 +1107,12 @@ function wireEvents(): void {
 
   window.addEventListener('keydown', (event) => {
     const target = event.target;
+    // v0.6.4: Onay modalı açıkken Esc=Vazgeç, Enter=Onayla. Modal hiçbir koşulda asılı kalmaz.
+    if (state.confirmModal) {
+      if (event.key === 'Escape') { event.preventDefault(); resolveConfirmModal(false); return; }
+      if (event.key === 'Enter') { event.preventDefault(); resolveConfirmModal(true); return; }
+      return;
+    }
     if (target instanceof HTMLInputElement && target.id === 'knowledge-search' && event.key === 'Enter') {
       event.preventDefault();
       void searchKnowledgeAction();
@@ -1133,7 +1139,7 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'scan': await scanNow(); break;
     case 'refresh-case': await refreshSelectedCase(); break;
     case 'folder-refresh': await loadFolders(state.folderBrowse?.currentPath); break;
-    case 'toggle-closed-unlock': toggleClosedUnlock(); break;
+    case 'toggle-closed-unlock': await toggleClosedUnlock(); break;
     case 'scan-cancel': await cancelScan(); break;
     case 'toggle-theme': await toggleTheme(); break;
     case 'zoom-reset': await resetZoom(); break;
@@ -1217,6 +1223,8 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'conflict-use-local': await resolveConflict('use-local'); break;
     case 'conflict-dismiss': state.conflict = null; render(); break;
     case 'dismiss-block-modal': state.blockModal = null; render(); break;
+    case 'confirm-modal-ok': resolveConfirmModal(true); break;
+    case 'confirm-modal-cancel': resolveConfirmModal(false); break;
     case 'inspect-conflict-copy': await inspectConflictCopy(element?.dataset.folder); break;
     case 'accept-disk-baseline': await acceptDiskBaseline(element?.dataset.folder); break;
     case 'health': await showHealth(); break;
@@ -1362,7 +1370,7 @@ function clearScanIssuesForCase(folderPath: string): void {
   };
 }
 
-function toggleClosedUnlock(): void {
+async function toggleClosedUnlock(): Promise<void> {
   const item = selectedCase();
   if (!item) return;
   const isClosed = item.isClosedFolder === true || item.statusIsClosed === true || item.workflowStatus === 'Kapalı' || item.tracking.status.kapaliMi === true;
@@ -1372,7 +1380,7 @@ function toggleClosedUnlock(): void {
     delete state.closedMutationUnlocks[item.folderPath];
     setToast('Kapalı dosya düzenleme kilidi tekrar kapatıldı.', 'info');
   } else {
-    const ok = window.confirm('Bu kapalı dosyada düzenleme izni bu oturum için açılacak. Devam edilsin mi?');
+    const ok = await confirmDialog('Bu kapalı dosyada düzenleme izni bu oturum için açılacak. Devam edilsin mi?', { title: 'Kapalı dosyayı düzenleme' });
     if (!ok) return;
     state.closedMutationUnlocks[item.folderPath] = true;
     setToast('Kapalı dosya bu oturum için düzenlemeye açıldı.', 'warning');
@@ -1445,7 +1453,7 @@ async function updateTodoWithCandidate(id: string, patch: { completed?: boolean;
 async function deleteTodo(id: string): Promise<void> {
   const item = selectedCase();
   if (!item || !id) return;
-  if (!window.confirm('Bu görevi silmek istiyor musunuz?')) return;
+  if (!(await confirmDialog('Bu görevi silmek istiyor musunuz?', { title: 'Görevi sil', confirmLabel: 'Sil', danger: true }))) return;
   await guardedMutation(
     (current, allowClosedMutation) => window.hasarbotu.deleteTodo<TrackingWriteResult>({ folderPath: current.folderPath, allowClosedMutation, expectedRevision: current.revision, expectedWriteId: current.tracking.metadata.writeId, id }),
     (tracking) => { tracking.todos = tracking.todos.filter((x) => x.id !== id); }
@@ -1455,7 +1463,7 @@ async function deleteTodo(id: string): Promise<void> {
 async function deleteNote(id: string): Promise<void> {
   const item = selectedCase();
   if (!item || !id) return;
-  if (!window.confirm('Bu notu silmek istiyor musunuz?')) return;
+  if (!(await confirmDialog('Bu notu silmek istiyor musunuz?', { title: 'Notu sil', confirmLabel: 'Sil', danger: true }))) return;
   await guardedMutation(
     (current, allowClosedMutation) => window.hasarbotu.deleteNote<TrackingWriteResult>({ folderPath: current.folderPath, allowClosedMutation, expectedRevision: current.revision, expectedWriteId: current.tracking.metadata.writeId, id }),
     (tracking) => { tracking.notes = tracking.notes.filter((x) => x.id !== id); }
@@ -1703,7 +1711,7 @@ async function setLaborLearningEntryActive(element: HTMLElement | undefined, act
 async function deleteLaborLearningEntry(element?: HTMLElement): Promise<void> {
   const key = laborLearningKeyFromElement(element);
   if (!key) return;
-  if (!window.confirm('Bu öğrenme kaydını silmek istediğinize emin misiniz? Silinen kayıt AI kararlarında kullanılmaz.')) return;
+  if (!(await confirmDialog('Bu öğrenme kaydını silmek istediğinize emin misiniz? Silinen kayıt AI kararlarında kullanılmaz.', { title: 'Öğrenme kaydını sil', confirmLabel: 'Sil', danger: true }))) return;
   const result = await window.hasarbotu.laborLearningDelete<LaborLearningEntry[]>(key);
   if (result.ok) {
     state.laborLearningEntries = result.data;
@@ -2195,7 +2203,7 @@ async function heavyDamageSaveAction(): Promise<void> {
 async function clearHeavyDamageAssessment(): Promise<void> {
   const item = selectedCase();
   if (!item || state.heavyDamageSaving) return;
-  const ok = window.confirm('Kayıtlı ağır hasar ön değerlendirmesi temizlenecek. Devam edilsin mi?');
+  const ok = await confirmDialog('Kayıtlı ağır hasar ön değerlendirmesi temizlenecek. Devam edilsin mi?', { title: 'Ağır hasar değerlendirmesini temizle', confirmLabel: 'Temizle', danger: true });
   if (!ok) return;
   state.heavyDamageSaving = true;
   state.error = '';
@@ -2468,7 +2476,7 @@ async function inspectConflictCopy(folderPath?: string): Promise<void> {
 async function acceptDiskBaseline(folderPath?: string): Promise<void> {
   const item = folderPath ? state.cases.find((caseItem) => caseItem.folderPath === folderPath) : selectedCase();
   if (!item) return;
-  const ok = window.confirm('Diskteki takip.json bu bilgisayar için yeni güvenli baseline kabul edilecek. Bu işlem rollback sonrası kalıcı revizyon gerilemesi uyarısını temizlemek içindir. Emin misiniz?');
+  const ok = await confirmDialog('Diskteki takip.json bu bilgisayar için yeni güvenli baseline kabul edilecek. Bu işlem rollback sonrası kalıcı revizyon gerilemesi uyarısını temizlemek içindir. Emin misiniz?', { title: 'Diski baseline kabul et', confirmLabel: 'Kabul et', danger: true });
   if (!ok) return;
   const result = await window.hasarbotu.acceptDiskBaseline(item.folderPath);
   if (!result.ok) {
@@ -2485,7 +2493,7 @@ async function resolveConflict(strategy: ConflictResolutionStrategy): Promise<vo
   const conflict = state.conflict;
   if (!conflict) return;
   if (strategy === 'use-local') {
-    const ok = window.confirm('Bendeki yerel sürüm diskteki güncel sürümün üzerine yazılacak. Emin misiniz?');
+    const ok = await confirmDialog('Bendeki yerel sürüm diskteki güncel sürümün üzerine yazılacak. Emin misiniz?', { title: 'Yerel sürümü yaz', confirmLabel: 'Üzerine yaz', danger: true });
     if (!ok) return;
   }
   const result = await window.hasarbotu.resolveConflict<TrackingWriteResult>({
@@ -2775,6 +2783,39 @@ function setToast(message: string, kind: 'info' | 'success' | 'warning' = 'info'
   state.toastKind = kind;
 }
 
+// v0.6.4: Uygulama-içi onay. Native window.confirm Electron'da (sandbox + contextIsolation) bloklayan
+// nested modal döngüsü açtığından donma/deadlock riski taşır; onayı bloklamayan modalla alırız.
+let pendingConfirmResolver: ((value: boolean) => void) | null = null;
+
+function confirmDialog(
+  message: string,
+  options: { title?: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean } = {}
+): Promise<boolean> {
+  // Açık bir onay zaten bekliyorsa onu iptal say (modal birikmesini/asılı kalan promise'i önler).
+  if (pendingConfirmResolver) {
+    const previous = pendingConfirmResolver;
+    pendingConfirmResolver = null;
+    previous(false);
+  }
+  state.confirmModal = {
+    title: options.title ?? 'Onay gerekli',
+    message,
+    confirmLabel: options.confirmLabel ?? 'Evet',
+    cancelLabel: options.cancelLabel ?? 'Vazgeç',
+    danger: options.danger ?? false
+  };
+  render();
+  return new Promise<boolean>((resolve) => { pendingConfirmResolver = resolve; });
+}
+
+function resolveConfirmModal(result: boolean): void {
+  const resolver = pendingConfirmResolver;
+  pendingConfirmResolver = null;
+  state.confirmModal = null;
+  render();
+  resolver?.(result);
+}
+
 // v0.4.2: Kullanıcı iptali (örn. Excel kaydetme/dışa aktarma iptali) kalıcı hata bandı yerine
 // kendiliğinden kapanan bir uyarı olarak gösterilir; gerçek hatalar hata bandında kalır.
 function reportOperationError(message: string): void {
@@ -2892,7 +2933,7 @@ async function executeGuardedMutation(
   let allowClosedMutation = false;
   if (isClosed) {
     if (state.closedMutationUnlocks[item.folderPath] !== true) {
-      const ok = window.confirm('Bu dosya kapalı. Bu oturum için düzenleme izni açılsın mı?');
+      const ok = await confirmDialog('Bu dosya kapalı. Bu oturum için düzenleme izni açılsın mı?', { title: 'Kapalı dosyayı düzenleme' });
       if (!ok) { render(); return; }
       state.closedMutationUnlocks[item.folderPath] = true;
       setToast('Kapalı dosya bu oturum için düzenlemeye açıldı.', 'warning');

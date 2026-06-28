@@ -712,6 +712,14 @@ assert(v63oComponentSource.includes('AI Bağlantısını Test Et') && v63oCompon
 const v63oRunSlice = rendererSource.slice(rendererSource.indexOf('async function runReportInvoiceComplianceAction'), rendererSource.indexOf('function clearReportInvoice'));
 assert(v63oRunSlice.includes('buildScannedPdfNotice') && /report\.scanned|invoice\.scanned/.test(v63oRunSlice) && rendererSource.includes('testReportInvoiceAiAction'), 'v0.6.3 final renderer: taranmis PDF AI cagrisini atlar + AI test aksiyonu bagli', 'v0.6.3 final renderer scanned/AI-test guard eksik');
 
+// --- v0.6.4: not/gorev silme donma duzeltmesi. Bloklayan native window.confirm/alert/prompt
+// Electron'da (sandbox + contextIsolation) donma/deadlock acabildigi icin tum onaylar uygulama-ici
+// bloklamayan modalla (confirmDialog + renderConfirmModal) alinir. ---
+assert(!/window\.(confirm|alert|prompt)\(/.test(rendererSource), 'v0.6.4 renderer bloklayan native window.confirm/alert/prompt kullanmaz (silme/onay donmasi yok)', 'v0.6.4 renderer hala native window.confirm kullaniyor');
+assert(rendererSource.includes('function confirmDialog') && rendererSource.includes('function resolveConfirmModal') && rendererSource.includes('await confirmDialog(') && v63oLayoutSource.includes('function renderConfirmModal') && v63oLayoutSource.includes('state.confirmModal ? renderConfirmModal(state)'), 'v0.6.4 uygulama-ici onay modali (confirmDialog/renderConfirmModal) bagli; silme onayi bloklamadan alinir', 'v0.6.4 uygulama-ici onay modali baglantisi eksik');
+const v64DeleteTodoSlice = rendererSource.slice(rendererSource.indexOf('async function deleteTodo'), rendererSource.indexOf('async function deleteNote'));
+assert(v64DeleteTodoSlice.includes('await confirmDialog(') && !v64DeleteTodoSlice.includes('window.confirm'), 'v0.6.4 deleteTodo onayi bloklamayan modaldan gecer (donma yok)', 'v0.6.4 deleteTodo hala bloklayan confirm kullaniyor');
+
 // --- Eksik relative JS import guard: dist-ui build ciktisindaki her relative .js referansinin
 // diskte gercekten var oldugunu dogrular; barrel klasor importunun yanlis dosyaya cevrilmesinden
 // dogan net::ERR_FILE_NOT_FOUND (orn. knowledge.js) beyaz ekranini gelecekte yakalar. ---

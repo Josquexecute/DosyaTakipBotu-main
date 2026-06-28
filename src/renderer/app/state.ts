@@ -34,6 +34,11 @@ export interface UiState {
   conflict: ConflictDialogState | null;
   /** v0.4.7: Sert engelleme modalı (ör. yanlış plakalı fotoğraf). Kapatılmadan işlem sürmez. */
   blockModal: { title: string; message: string } | null;
+  /**
+   * v0.6.4: Uygulama-içi onay modalı. Electron'da bloklayan native window.confirm donma/deadlock
+   * riski taşıdığından (sandbox + contextIsolation) onaylar bu modalla alınır; uygulama kilitlenmez.
+   */
+  confirmModal: { title: string; message: string; confirmLabel: string; cancelLabel: string; danger: boolean } | null;
   rootSetupRequired: boolean;
   laborExcelPreview: ExcelLaborPreview | null;
   laborExcelResult: ExcelLaborDistributeResult | null;
@@ -216,6 +221,7 @@ export const state: UiState = {
   caseListScrollTop: 0,
   conflict: null,
   blockModal: null,
+  confirmModal: null,
   rootSetupRequired: false,
   laborExcelPreview: null,
   laborExcelResult: null,

@@ -61,6 +61,7 @@ export function renderApp(state: UiState): string {
   </nav>
   ${state.conflict ? renderConflictDialog(state) : ''}
   ${state.blockModal ? renderBlockModal(state) : ''}
+  ${state.confirmModal ? renderConfirmModal(state) : ''}
   <div class="main-area ${settingsMode ? 'settings-mode' : 'operations-mode'}">
     <header class="top-app-bar">
       <div class="brand-block">
@@ -212,6 +213,26 @@ function renderBlockModal(state: UiState): string {
       <div class="app-alert error">${icon('warning')}<span>${escapeHtml(modal.message)}</span></div>
       <div class="conflict-actions">
         <button class="primary" data-action="dismiss-block-modal" autofocus>Anladım, kapat</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/**
+ * v0.6.4: Uygulama-içi onay modalı (native window.confirm yerine). Native dialog Electron'da
+ * (sandbox + contextIsolation) donmaya/deadlock'a yol açabildiğinden onaylar bu bloklamayan modalla alınır.
+ */
+function renderConfirmModal(state: UiState): string {
+  const modal = state.confirmModal;
+  if (!modal) return '';
+  const messageHtml = escapeHtml(modal.message).replace(/\n/g, '<br>');
+  return `<div class="conflict-overlay block-overlay" role="alertdialog" aria-modal="true">
+    <div class="conflict-card block-card">
+      <h2>${icon(modal.danger ? 'warning' : 'help')} ${escapeHtml(modal.title)}</h2>
+      <div class="app-alert ${modal.danger ? 'error' : 'info'}">${icon(modal.danger ? 'warning' : 'info')}<span>${messageHtml}</span></div>
+      <div class="conflict-actions">
+        <button class="primary ${modal.danger ? 'danger' : ''}" data-action="confirm-modal-ok" autofocus>${escapeHtml(modal.confirmLabel)}</button>
+        <button class="secondary" data-action="confirm-modal-cancel">${escapeHtml(modal.cancelLabel)}</button>
       </div>
     </div>
   </div>`;
