@@ -1,5 +1,9 @@
 import type { HeavyDamageAssessmentRecord } from './heavy-damage-types';
 import type { VehicleContext } from './vehicle/vehicle-context';
+import type { AiHelperContext } from './ai-context/ai-helper-context-types';
+import type { ExpertLaborDiffView } from './labor/expert-approved-learning-types';
+import type { LaborVehicleContext } from './labor/labor-vehicle-context';
+import type { AiModeCandidateRowEvidence } from './labor/ai-mode-part-candidate-store-types';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -151,6 +155,11 @@ export interface TrackingFile {
   heavyDamageAssessment?: HeavyDamageAssessmentRecord;
   /** v0.6.2: Bu dosyaya ÖZEL araç bağlamı (Şase/Motor/marka/model/yıl/yakıt…). Opsiyonel; yalnız bu takip.json'da. */
   vehicleContext?: VehicleContext;
+  /**
+   * v0.6.x: AI Yardımcıları için KONTROLLÜ, GERİYE UYUMLU ek bağlam. Yalnız kullanıcı "Kaydet" deyince
+   * oluşur; eski dosyalarda yoktur (undefined güvenli). Ana hasar/evrak/Excel alanlarını etkilemez.
+   */
+  aiHelperContext?: AiHelperContext;
   audit: AuditItem[];
 }
 
@@ -507,6 +516,20 @@ export interface AutoLaborRowPreview {
   hasFormula: boolean;
   /** Bu satırda mevcut değer değişecek mi (eski≠yeni). */
   changed: boolean;
+  /** v3 (opsiyonel, geriye uyumlu): tespit edilen işlem türü onarim/degisim/belirsiz. */
+  operationType?: 'onarim' | 'degisim' | 'belirsiz';
+  /** v3: F = Parça Sahiplenme Bedeli (okunabildiyse). */
+  salvagePrice?: number | null;
+  /** v3: G = Parça Orijinal Bedeli (okunabildiyse). */
+  originalPrice?: number | null;
+  /** v3: onarım/değişim ekonomi değerlendirmesi sonucu (gerekçe reason'a da eklenir). */
+  economicVerdict?: 'onarim-ekonomik' | 'degisim-uygun' | 'kontrol-gerekli';
+  /** v3.3: eksper onaylı eşleşme seviyesi (varsa). */
+  expertMatchLevel?: 'strong' | 'medium' | 'low' | 'control-needed';
+  /** v3.3: AI önerisi ↔ eksper dağıtımı diff görünümü (yalnız gösterim; Excel'e yazmaz). */
+  expertDiff?: ExpertLaborDiffView;
+  /** v3.6: onaylı AI Mode parça kodu adayı evidence (mevcut D kodu karşılaştırması; Excel'e yazmaz). */
+  aiModeCandidate?: AiModeCandidateRowEvidence;
 }
 
 export interface AutoLaborSummary {
@@ -528,6 +551,16 @@ export interface AutoLaborPreview {
   groupColumn: string;
   partCodeColumn: string;
   partAmountColumn: string;
+  /** v3 (opsiyonel): F = Parça Sahiplenme Bedeli sütunu (başlıktan tespit edilen). */
+  salvageColumn?: string;
+  /** v3 (opsiyonel): G = Parça Orijinal Bedeli sütunu (başlıktan tespit edilen). */
+  originalColumn?: string;
+  /** v3.1 (opsiyonel): E = İşlem Türü sütunu (başlıktan tespit edilen). */
+  operationColumn?: string;
+  /** v3.1 (opsiyonel): T = Kalibrasyon sütunu (başlıktan tespit edilen). */
+  calibrationColumn?: string;
+  /** v3.4 (opsiyonel): Excel + (varsa) aktif dosya araç bağlamı (eksper öğrenme önizleme/eşleşme için). */
+  vehicleContext?: LaborVehicleContext;
   rows: AutoLaborRowPreview[];
   summary: AutoLaborSummary;
   warnings: string[];

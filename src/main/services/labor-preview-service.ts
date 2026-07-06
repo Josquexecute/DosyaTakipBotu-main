@@ -3,6 +3,17 @@ import { normalizeSearch } from '../../shared/turkish';
 import { LABOR_CATEGORIES, type LaborCategory } from '../../shared/labor-rules';
 import type { LaborLearningEntry } from '../../shared/labor-learning-dictionary';
 import { classifyLaborRow } from './labor-classifier-service';
+import { buildLaborV3Context } from '../../shared/labor/part-economic-context';
+import { readPriceCell } from '../../shared/labor/part-price-parser';
+import { adjustLaborDecisionV3 } from '../../shared/labor/labor-decision-adjuster';
+import { isCriticalSafetyPart } from '../../shared/labor/critical-safety-parts';
+import { matchExpertLearning } from '../../shared/labor/expert-approved-learning-matcher';
+import { aiAmountsToDistribution, buildExpertLaborDiffView } from '../../shared/labor/expert-approved-learning-diff';
+import { buildLaborVehicleContext } from '../../shared/labor/labor-vehicle-context-extractor';
+import { matchAiModePartCandidate } from '../../shared/labor/ai-mode-part-candidate-matcher';
+import type { ExpertApprovedLaborLearningEntry } from '../../shared/labor/expert-approved-learning-types';
+import type { ApprovedAiModePartCandidateEntry } from '../../shared/labor/ai-mode-part-candidate-store-types';
+import type { LaborVehicleContext } from '../../shared/labor/labor-vehicle-context';
 import type { AutoLaborColumnInfo, AutoLaborPreview, AutoLaborRowPreview, AutoLaborSummary } from '../../shared/types';
 
 /**
@@ -70,8 +81,19 @@ function detectCategoryColumns(headerCells: SheetCell[]): AutoLaborColumnInfo[] 
   return out.sort((a, b) => (a.column.length - b.column.length) || a.column.localeCompare(b.column));
 }
 
-export async function buildAutoLaborPreview(filePath: string, learned: readonly LaborLearningEntry[] = []): Promise<AutoLaborPreview> {
+export async function buildAutoLaborPreview(
+  filePath: string,
+  learned: readonly LaborLearningEntry[] = [],
+  expertLearned: readonly ExpertApprovedLaborLearningEntry[] = [],
+  vehicle: LaborVehicleContext = {},
+  aiModeCandidates: readonly ApprovedAiModePartCandidateEntry[] = []
+): Promise<AutoLaborPreview> {
   const workbook = await loadWorkbook(filePath);
+  // v3.3/v3.4: araç bağlamı — aktif dosya (vehicle, öncelikli) + Excel hücrelerinden çıkarım birleştirilir.
+  const caseHasVehicle = Boolean(vehicle.vehicleModel || vehicle.chassisPrefix || vehicle.chassisNo || vehicle.engineCode || vehicle.engineNo || vehicle.plate);
+  const vehicleContext = buildLaborVehicleContext(workbook.sheet.cells.map((c) => c.value), vehicle);
+  const mergedHasVehicle = Boolean(vehicleContext.vehicleModel || vehicleContext.chassisPrefix || vehicleContext.engineCode || vehicleContext.plate);
+  const vehicleSource: 'active-file' | 'excel' | 'unknown' = caseHasVehicle ? 'active-file' : mergedHasVehicle ? 'excel' : 'unknown';
   const fileName = filePath.replace(/^.*[\\/]/, '');
   const rows = groupByRow(workbook.sheet.cells);
   const warnings: string[] = [];
@@ -96,6 +118,12 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
   const groupColumn = findColumnByKeywords(headerCells, /(DVN|GRUP|GRUBU)/, /KOD/);
   const partCodeColumn = findColumnByKeywords(headerCells, /KOD/);
   const partAmountColumn = findColumnByKeywords(headerCells, /(SAHIPLENME|PARCA TUTAR|PARCA ORIJINAL|BEDEL|FIYAT|TUTAR)/, new RegExp(`(ISCILIK|${CATEGORY_WORDS.source.slice(1, -1)})`));
+  // v3 (additive): F = Parça Sahiplenme Bedeli, G = Parça Orijinal Bedeli — ayrı tespit (mevcut tespit değişmez).
+  const salvageColumn = findColumnByKeywords(headerCells, /SAHIPLENME/, CATEGORY_WORDS);
+  const originalColumn = findColumnByKeywords(headerCells, /ORIJINAL/, CATEGORY_WORDS);
+  // v3.1 (additive): İşlem Türü (E) ve Kalibrasyon (T) sütunları — varsa işlem/kalibrasyon bağlamı buradan okunur.
+  const operationColumn = findColumnByKeywords(headerCells, /ISLEM/, /(ACIKLAMA|ISCILIK)/);
+  const calibrationColumn = findColumnByKeywords(headerCells, /KALIBRASYON/, CATEGORY_WORDS);
   const reserved = new Set([groupColumn, partCodeColumn, partAmountColumn, ...columns.map((c) => c.column)].filter(Boolean));
   // 1) Açıklama/İşçilik/Parça Adı başlığı (asıl parça açıklaması), kod/bedel/grup/kategori dışlanır.
   const partExclude = new RegExp(`(KOD|TUTAR|BEDEL|FIYAT|TOPLAM|SAHIPLENME|ORIJINAL|DVN|GRUP|GRUBU|\\bKDV\\b|ISK|${CATEGORY_WORDS.source.slice(1, -1)})`);
@@ -166,9 +194,90 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
       ? `${decision.reason} (Not: ${missingCols.join(', ')} sütunu Excel'de yok, yazılamaz.)`
       : decision.reason;
 
+    // v3 (additive): işlem türü (E) + Sahiplenme(F)/Orijinal(G) bedel + kalibrasyon (T) + onarım/değişim ekonomisi.
+    const salvageCell = salvageColumn ? cellAt(cells, salvageColumn) : undefined;
+    const originalCell = originalColumn ? cellAt(cells, originalColumn) : undefined;
+    const salvagePrice = readPriceCell(salvageCell?.numeric ?? null, salvageCell?.value).value;
+    const originalPrice = readPriceCell(originalCell?.numeric ?? null, originalCell?.value).value;
+    const operationHint = operationColumn ? (cellAt(cells, operationColumn)?.value ?? '').trim() : '';
+    const calRaw = calibrationColumn ? (cellAt(cells, calibrationColumn)?.value ?? '').trim() : '';
+    const calibrationHint = calRaw && !/^0+([.,]0+)?$/.test(calRaw) ? calRaw : '';
+    const laborTotal = Object.values(amounts).reduce((sum, v) => sum + (v ?? 0), 0);
+    const v3 = buildLaborV3Context({
+      partName,
+      group,
+      partCode,
+      operationHint,
+      calibrationHint,
+      salvagePrice,
+      originalPrice,
+      repairLaborTotal: laborTotal > 0 ? laborTotal : null
+    });
+
+    // v3.1: ekonomik/işlem/kalibrasyon bağlamı kararı KONTROLLÜ etkiler (kategori/tutar değişmez).
+    // Etki yalnız F/G ekonomik bağlam sütunu olan portal sayfalarında uygulanır.
+    const critical = isCriticalSafetyPart(partName, group);
+    const adj = adjustLaborDecisionV3(
+      { confidence: decision.confidence, needsReview: decision.needsReview, reason, source: decision.source },
+      v3,
+      { critical, hasPriceContext: Boolean(salvageColumn || originalColumn) }
+    );
+
+    // v3.1 (opsiyonel, preview-only): eksper onaylı geçmiş dağıtım örneği eşleşmesi yalnız EVIDENCE + güven/uyarı.
+    // Excel'e otomatik UYGULAMAZ; kategori/tutar değişmez. Liste boşsa hiçbir etki olmaz (geriye uyumlu).
+    let finalConfidence = adj.confidence;
+    let finalNeedsReview = adj.needsReview;
+    let finalReason = adj.reason;
+    let expertMatchLevel: AutoLaborRowPreview['expertMatchLevel'];
+    let expertDiff: AutoLaborRowPreview['expertDiff'];
+    if (expertLearned.length) {
+      const expertMatch = matchExpertLearning(
+        {
+          partName, partGroup: group, partCode, operationType: v3.operation.type, salvagePrice, critical,
+          ...(vehicleContext.vehicleModel ? { vehicleModel: vehicleContext.vehicleModel } : {}),
+          ...(vehicleContext.chassisPrefix ? { chassisPrefix: vehicleContext.chassisPrefix } : {}),
+          ...(vehicleContext.engineCode ? { engineCode: vehicleContext.engineCode } : {})
+        },
+        expertLearned
+      );
+      if (expertMatch.level !== 'none' && expertMatch.entry) {
+        finalReason = `${finalReason} | Eksper öğrenme: ${expertMatch.reason}`;
+        expertMatchLevel = expertMatch.level;
+        // Diff görünümü (preview-only); Excel'e otomatik UYGULANMAZ.
+        expertDiff = buildExpertLaborDiffView(
+          rowNumber, expertMatch.level, expertMatch.reasons ?? [], expertMatch.warnings ?? [],
+          aiAmountsToDistribution(amounts), expertMatch.entry.laborDistribution, vehicleSource
+        );
+        if (expertMatch.level === 'control-needed') finalNeedsReview = true;
+        else if (expertMatch.level === 'strong' && !critical && finalConfidence !== 'Yüksek') {
+          finalConfidence = finalConfidence === 'Düşük' ? 'Orta' : 'Yüksek';
+        }
+      }
+    }
+
+    // v3.6 (opsiyonel, preview-only): onaylı AI Mode parça kodu adayı evidence + mevcut D kodu karşılaştırması.
+    // Excel'e/D sütununa UYGULAMAZ. Liste boşsa hiçbir etki olmaz (geriye uyumlu).
+    let aiModeCandidate: AutoLaborRowPreview['aiModeCandidate'];
+    if (aiModeCandidates.length) {
+      const candMatch = matchAiModePartCandidate(
+        {
+          partName, partCode, partGroup: group,
+          ...(vehicleContext.vehicleModel ? { vehicleModel: vehicleContext.vehicleModel } : {}),
+          ...(vehicleContext.chassisPrefix ? { chassisPrefix: vehicleContext.chassisPrefix } : {}),
+          ...(vehicleContext.engineCode ? { engineCode: vehicleContext.engineCode } : {})
+        },
+        aiModeCandidates
+      );
+      if (candMatch) {
+        finalReason = `${finalReason} | AI Mode aday: ${candMatch.reason}`;
+        aiModeCandidate = candMatch.evidence;
+        if (candMatch.evidence.status === 'different') finalNeedsReview = true;
+      }
+    }
+
     if (changed) changedRows += 1;
-    if (decision.confidence === 'Yüksek') highConfidence += 1;
-    if (decision.needsReview) needsReviewCount += 1;
+    if (finalConfidence === 'Yüksek') highConfidence += 1;
+    if (finalNeedsReview) needsReviewCount += 1;
 
     previewRows.push({
       rowNumber,
@@ -179,12 +288,19 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
       categories: decision.categories,
       amounts,
       oldByColumn,
-      confidence: decision.confidence,
-      needsReview: decision.needsReview,
-      reason,
+      confidence: finalConfidence,
+      needsReview: finalNeedsReview,
+      reason: finalReason,
       source: decision.source,
       hasFormula,
-      changed
+      changed,
+      operationType: v3.operation.type,
+      salvagePrice,
+      originalPrice,
+      economicVerdict: v3.economic.verdict,
+      ...(expertMatchLevel ? { expertMatchLevel } : {}),
+      ...(expertDiff ? { expertDiff } : {}),
+      ...(aiModeCandidate ? { aiModeCandidate } : {})
     });
     void rowText;
   }
@@ -209,6 +325,11 @@ export async function buildAutoLaborPreview(filePath: string, learned: readonly 
     groupColumn,
     partCodeColumn,
     partAmountColumn,
+    salvageColumn,
+    originalColumn,
+    operationColumn,
+    calibrationColumn,
+    ...(mergedHasVehicle ? { vehicleContext } : {}),
     rows: previewRows,
     summary,
     warnings,

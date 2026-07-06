@@ -663,6 +663,65 @@ export async function writeCategoryLaborExcel(
   return { outputPath: absoluteOutput, writtenCells: cleanWrites.length, formulaCellsReplaced: formulaCells.length };
 }
 
+function buildInlineStringCellXml(cellRef: string, attrs: string, text: string): string {
+  const style = getXmlAttribute(attrs, 's');
+  return `<c r="${cellRef}"${style ? ` s="${escapeXml(style)}"` : ''} t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
+}
+
+export interface PartCodeCellWriteResult {
+  outputPath: string;
+  oldValue: string;
+  newValue: string;
+}
+
+/**
+ * v3.8: TEK bir hücreye (ör. D sütunu parça kodu) METİN yazar; diğer hücreler/formüller/stiller korunur.
+ * Formüllü hedef hücreye YAZMAZ (hata fırlatır). Çıktı ayrı dosyaya yazılır (orijinal korunur; çağıran yer değiştirir).
+ */
+export async function writePartCodeCellExcel(
+  filePath: string,
+  outputPath: string,
+  rowNumber: number,
+  column: string,
+  code: string
+): Promise<PartCodeCellWriteResult> {
+  const absolutePath = path.resolve(filePath);
+  const absoluteOutput = path.resolve(outputPath);
+  assertXlsxPath(absolutePath);
+  if (path.extname(absoluteOutput).toLowerCase() !== '.xlsx') throw new Error('Çıktı dosyası .xlsx olmalıdır.');
+  if (samePath(absolutePath, absoluteOutput)) throw new Error('Çıktı dosyası girdi Excel dosyasıyla aynı olamaz.');
+  if (!Number.isInteger(rowNumber) || rowNumber <= 1) throw new Error('Geçersiz satır numarası.');
+  const col = column.toUpperCase();
+  if (!/^[A-Z]+$/.test(col)) throw new Error('Geçersiz sütun.');
+  const text = String(code ?? '').trim();
+  if (!text) throw new Error('Yazılacak parça kodu boş olamaz.');
+
+  const workbook = await loadWorkbook(absolutePath);
+  const cellRef = `${col}${rowNumber}`;
+  const cell = workbook.sheet.cells.find((c) => c.ref === cellRef);
+  if (cell?.hasFormula) throw new Error('Hedef hücre formül içeriyor; parça kodu yazılamaz.');
+  const oldValue = cell?.value ?? '';
+
+  let nextXml = workbook.sheet.xml;
+  const existingCellRegex = new RegExp(`<c\\b(?=[^>]*\\br="${escapeRegExp(cellRef)}")([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/c>)`);
+  if (existingCellRegex.test(nextXml)) {
+    nextXml = nextXml.replace(existingCellRegex, (_m: string, attrs: string) => buildInlineStringCellXml(cellRef, attrs, text));
+  } else {
+    const rowRegex = new RegExp(`(<row\\b(?=[^>]*\\br="${rowNumber}")[^>]*>)([\\s\\S]*?)(<\\/row>)`);
+    if (!rowRegex.test(nextXml)) throw new Error('Hedef satır Excel içinde bulunamadı.');
+    nextXml = nextXml.replace(rowRegex, (_match, open: string, body: string, close: string) => `${open}${insertCellXmlInColumnOrder(body, col, rowNumber, buildInlineStringCellXml(cellRef, '', text))}${close}`);
+  }
+
+  const entries = workbook.entries.map((entry) => {
+    if (entry.name === workbook.sheet.path) return { ...entry, data: Buffer.from(nextXml, 'utf-8'), method: 8 };
+    if (entry.name === 'xl/workbook.xml') return { ...entry, data: Buffer.from(ensureFullCalcOnLoad(entry.data.toString('utf-8')), 'utf-8'), method: 8 };
+    return entry;
+  });
+  await fs.mkdir(path.dirname(absoluteOutput), { recursive: true });
+  await fs.writeFile(absoluteOutput, writeZip(entries));
+  return { outputPath: absoluteOutput, oldValue, newValue: text };
+}
+
 function parseSheetCells(xml: string, sharedStrings: string[]): SheetCell[] {
   const cells: SheetCell[] = [];
   const cellRegex = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;

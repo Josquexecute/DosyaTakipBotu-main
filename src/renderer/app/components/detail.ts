@@ -3,6 +3,11 @@ import type { UiState, DetailTab, AutoLaborPreviewFilter } from '../state';
 import { selectedCase } from '../state';
 import { CLAIM_TYPES, DOSYA_DURUMLARI, PRIORITIES, WORKFLOW_STATUSES } from '../../../shared/workflow';
 import { escapeHtml, formatDate, pct } from '../validation';
+import { renderExpertLearningPanel } from './expert-learning-panel';
+import { renderExpertLearningDiffCard } from './expert-learning-diff-card';
+import { renderAiModePartSearchPanel } from './ai-mode-part-search-panel';
+import { renderAiModeLinkedEvidence } from './ai-mode-part-search-candidates';
+import { renderAiModeApplyButton } from './ai-mode-part-code-apply-modal';
 import { partCanonicalSuggestions, partCanonicalGroups } from '../../../shared/parca-sozlugu';
 import { IS_NOTLARI } from '../../../shared/is-notlari';
 import { icon } from '../icons';
@@ -313,6 +318,8 @@ function renderLabor(item: CaseIndexItem, state: UiState): string {
       ${result ? `<div class="app-alert success">${icon('check')}<span>Dağıtılmış Excel kaydedildi: ${escapeHtml(result.outputPath)} • Toplam: ${formatMoney(result.distributedTotal)} • Doğrulanan: ${formatMoney(result.verifiedExistingTotal)}</span></div>` : ''}
     </div>
     ${renderAutoLaborCard(state)}
+    ${renderAiModePartSearchPanel(state)}
+    ${renderExpertLearningPanel(state)}
     ${renderIsNotlari()}
   </div>`;
 }
@@ -512,7 +519,7 @@ function renderAutoLaborRow(state: UiState, preview: AutoLaborPreview, row: Auto
     <span><span class="status-chip ${CONFIDENCE_TONE[row.confidence] ?? ''}">${escapeHtml(row.confidence)}</span></span>
     <span><label class="auto-labor-mini-check"><input type="checkbox" data-auto-labor-review="${row.rowNumber}" ${needsReview ? 'checked' : ''} aria-label="Satır ${row.rowNumber} kontrol gerekli" /><small>Kontrol</small></label></span>
     <span><label class="auto-labor-mini-check ${learningCandidate ? 'learning' : ''}"><input type="checkbox" data-auto-labor-approve="${row.rowNumber}" ${state.autoLaborApprovedRows[row.rowNumber] ? 'checked' : ''} aria-label="Satır ${row.rowNumber} kararını öğren" /><small>Öğren</small></label></span>
-    <span><details class="auto-labor-reason" data-default-closed="true"><summary>Gerekçe</summary><small>${escapeHtml(autoLaborRowReason(state, row))}</small></details></span>
+    <span><details class="auto-labor-reason" data-default-closed="true"><summary>Gerekçe</summary><small>${escapeHtml(autoLaborRowReason(state, row))}</small>${renderAiModeLinkedEvidence(state, row.rowNumber)}${renderExpertLearningDiffCard(row.expertDiff)}${renderAiModeApplyButton(state, row)}</details></span>
   </div>`;
 }
 

@@ -1,0 +1,98 @@
+{
+  "preSelection": [
+    {
+      "tried": "operasyon",
+      "opened": false,
+      "activePage": "dosyalar",
+      "hintPresent": true,
+      "topbar": "HasarBotu v0.6.4 80HB0241 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür",
+      "lockedNavCount": 7
+    },
+    {
+      "tried": "evrak",
+      "opened": false,
+      "activePage": "dosyalar",
+      "hintPresent": true,
+      "topbar": "HasarBotu v0.6.4 80HB0241 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür",
+      "lockedNavCount": 7
+    },
+    {
+      "tried": "portal",
+      "opened": false,
+      "activePage": "dosyalar",
+      "hintPresent": true,
+      "topbar": "HasarBotu v0.6.4 80HB0241 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür",
+      "lockedNavCount": 7
+    },
+    {
+      "tried": "labor",
+      "opened": false,
+      "activePage": "dosyalar",
+      "hintPresent": true,
+      "topbar": "HasarBotu v0.6.4 80HB0241 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür",
+      "lockedNavCount": 7
+    },
+    {
+      "tried": "heavy",
+      "opened": false,
+      "activePage": "dosyalar",
+      "hintPresent": true,
+      "topbar": "HasarBotu v0.6.4 80HB0241 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür",
+      "lockedNavCount": 7
+    },
+    {
+      "tried": "ai-yardimcilari",
+      "opened": true,
+      "activePage": "ai-yardimcilari",
+      "hintPresent": true,
+      "topbar": "HasarBotu v0.6.4 80HB0241 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür",
+      "lockedNavCount": 7
+    }
+  ],
+  "selection": {
+    "topbarBefore": "HasarBotu v0.6.4 80HB0241 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür",
+    "topbarAfter": "HasarBotu v0.6.4 01HB0000 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür",
+    "topbarChanged": true,
+    "hintAfter": false,
+    "lockedNavAfter": 0
+  },
+  "postSelection": [
+    {
+      "page": "operasyon",
+      "opened": true,
+      "hintPresent": false,
+      "topbar": "HasarBotu v0.6.4 01HB0000 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür"
+    },
+    {
+      "page": "evrak",
+      "opened": true,
+      "hintPresent": false,
+      "topbar": "HasarBotu v0.6.4 01HB0000 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür"
+    },
+    {
+      "page": "portal",
+      "opened": true,
+      "hintPresent": false,
+      "topbar": "HasarBotu v0.6.4 01HB0000 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür"
+    },
+    {
+      "page": "labor",
+      "opened": true,
+      "hintPresent": false,
+      "topbar": "HasarBotu v0.6.4 01HB0000 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür"
+    },
+    {
+      "page": "heavy",
+      "opened": true,
+      "hintPresent": false,
+      "topbar": "HasarBotu v0.6.4 01HB0000 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür"
+    },
+    {
+      "page": "ai-yardimcilari",
+      "opened": true,
+      "hintPresent": false,
+      "topbar": "HasarBotu v0.6.4 01HB0000 • Yeni Dosya ▣ C:\\Users\\user\\Desktop\\project\\DosyaTakipBotu-main\\.fixtures\\2026 ⌕ ↻ Tara ✓ Sür"
+    }
+  ],
+  "scanCases": 250
+}

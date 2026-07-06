@@ -1,0 +1,468 @@
+{
+  "results": [
+    {
+      "file": "02_Dosyalar_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "03_Rapor_Fatura_Uyum_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "04_Mevzuat_AI_Yardimcilari_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "04_Mevzuat_AI_Yardimcilari_bottom.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "13_Mevzuat_AI_Deger_Kaybi_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "13_Mevzuat_AI_Deger_Kaybi_bottom.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "14_Mevzuat_Bilgi_Bankasi_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "14_Mevzuat_Bilgi_Bankasi_bottom.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "11_Durum_Panosu_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "12_Ayarlar_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "12_Ayarlar_bottom.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "18_Dosya_Detay_top.png",
+      "ok": true,
+      "note": "Dosyalar + secili dosya calisma alani"
+    },
+    {
+      "file": "01_Ana_Sayfa_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "05_Klasorler_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "06_Operasyon_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "07_Evrak_Fotograf_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "17_Evrak_Fotograf_Thumbnail_View_top.png",
+      "ok": true,
+      "note": "Evrak sayfasi kucuk resim alani (fixture gorselleri sahte bayt icerir)"
+    },
+    {
+      "file": "08_Portal_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "09_Excel_Araclari_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "15_Excel_Iscilik_Dagitici_top.png",
+      "ok": true,
+      "note": "Excel Araclari icindeki dagitici paneli (Excel dosyasi secilmemis durum)"
+    },
+    {
+      "file": "10_Agir_Hasar_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "16_Agir_Hasar_AI_Detay_top.png",
+      "ok": true,
+      "note": "Agir Hasar sayfasi AI degerlendirme bolumu"
+    },
+    {
+      "file": "13_zoom90_Mevzuat_AI_Deger_Kaybi_zoom90_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "13_zoom90_Mevzuat_AI_Deger_Kaybi_zoom90_bottom.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "13_zoom125_Mevzuat_AI_Deger_Kaybi_zoom125_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "13_zoom125_Mevzuat_AI_Deger_Kaybi_zoom125_bottom.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "13_dark_Mevzuat_AI_Deger_Kaybi_dark_top.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "13_dark_Mevzuat_AI_Deger_Kaybi_dark_bottom.png",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "file": "01_dark_Ana_Sayfa_dark_top.png",
+      "ok": true,
+      "note": ""
+    }
+  ],
+  "pageMetrics": [
+    {
+      "step": "scan",
+      "cases": 250
+    },
+    {
+      "order": "02",
+      "name": "Dosyalar",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "03",
+      "name": "Rapor_Fatura_Uyum",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "04",
+      "name": "Mevzuat_AI_Yardimcilari",
+      "metrics": {
+        "sh": 1851,
+        "ch": 1006,
+        "sw": 1665,
+        "cw": 1665,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": true
+    },
+    {
+      "order": "13",
+      "name": "Mevzuat_AI_Deger_Kaybi",
+      "metrics": {
+        "sh": 3026,
+        "ch": 1006,
+        "sw": 1665,
+        "cw": 1665,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": true
+    },
+    {
+      "order": "14",
+      "name": "Mevzuat_Bilgi_Bankasi",
+      "metrics": {
+        "sh": 1851,
+        "ch": 1006,
+        "sw": 1665,
+        "cw": 1665,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": true
+    },
+    {
+      "order": "11",
+      "name": "Durum_Panosu",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "12",
+      "name": "Ayarlar",
+      "metrics": {
+        "sh": 5826,
+        "ch": 1006,
+        "sw": 1665,
+        "cw": 1665,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": true
+    },
+    {
+      "step": "unlock",
+      "clicked": ".case-row",
+      "unlocked": true
+    },
+    {
+      "order": "18",
+      "name": "Dosya_Detay",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "01",
+      "name": "Ana_Sayfa",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "05",
+      "name": "Klasorler",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "06",
+      "name": "Operasyon",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "07",
+      "name": "Evrak_Fotograf",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "17",
+      "name": "Evrak_Fotograf_Thumbnail_View",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "08",
+      "name": "Portal",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "09",
+      "name": "Excel_Araclari",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "15",
+      "name": "Excel_Iscilik_Dagitici",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "10",
+      "name": "Agir_Hasar",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "16",
+      "name": "Agir_Hasar_AI_Detay",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    },
+    {
+      "order": "13_zoom90",
+      "name": "Mevzuat_AI_Deger_Kaybi_zoom90",
+      "metrics": {
+        "sh": 2591,
+        "ch": 1006,
+        "sw": 1665,
+        "cw": 1665,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": true
+    },
+    {
+      "order": "13_zoom125",
+      "name": "Mevzuat_AI_Deger_Kaybi_zoom125",
+      "metrics": {
+        "sh": 2738,
+        "ch": 1006,
+        "sw": 1665,
+        "cw": 1665,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": true
+    },
+    {
+      "order": "13_dark",
+      "name": "Mevzuat_AI_Deger_Kaybi_dark",
+      "metrics": {
+        "sh": 2611,
+        "ch": 1006,
+        "sw": 1665,
+        "cw": 1665,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": true
+    },
+    {
+      "order": "01_dark",
+      "name": "Ana_Sayfa_dark",
+      "metrics": {
+        "sh": 1006,
+        "ch": 1006,
+        "sw": 1680,
+        "cw": 1680,
+        "sidebar": true,
+        "topbar": true,
+        "statusbar": true
+      },
+      "scrollable": false
+    }
+  ]
+}

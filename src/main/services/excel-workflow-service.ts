@@ -14,6 +14,11 @@ import type {
 import type { LaborAutoSaveArgs, PartsAnalyzePhotoArgs } from '../../shared/ipc-contract';
 import type { UserPartTerm } from '../../shared/parca-sozlugu';
 import { lookupLearned } from '../../shared/labor-learning-dictionary';
+import { listUsableExpertEntries } from '../../shared/labor/expert-approved-learning-store';
+import { listUsableCandidates } from '../../shared/labor/ai-mode-part-candidate-store';
+import type { LaborVehicleContext } from '../../shared/labor/labor-vehicle-context';
+import { ExpertApprovedLearningStoreFile } from '../local-cache/expert-approved-learning-store-file';
+import { AiModePartCandidateStoreFile } from '../local-cache/ai-mode-part-candidate-store-file';
 import { buildMultiMoneyLaborWorkbook, distributeLaborExcel, inspectLaborExcel } from '../import/excel-importer';
 import { analyzePartsPhoto } from '../import/parts-list-analyzer';
 import { assertSelectedPhotoMatchesCase } from './case-asset-guard';
@@ -70,7 +75,7 @@ export class ExcelWorkflowService {
    * v0.4.11 AI İşçilik Dağıtıcı — adım 1: Excel seç, TÜM satırları analiz et, H..N işçilik sütunlarını
    * öğrenen sözlük + kural + fiyat listesiyle otomatik doldur, ÖNİZLEME döndür (dosyaya YAZMAZ).
    */
-  async autoLaborPreview(): Promise<AutoLaborPreview> {
+  async autoLaborPreview(vehicle: LaborVehicleContext = {}): Promise<AutoLaborPreview> {
     const settings = await this.context.getSettings();
     const window = this.context.mainWindowProvider();
     const dialogOptions: OpenDialogOptions = {
@@ -84,7 +89,10 @@ export class ExcelWorkflowService {
     const excelPath = path.resolve(result.filePaths[0]);
     this.context.state.approvedExcelFiles.add(excelPath);
     const learned = await this.context.cache.readLaborLearning();
-    const preview = await buildAutoLaborPreview(excelPath, learned);
+    // v3.2: aktif eksper onaylı kayıtlar matcher'a verilir (yalnız evidence/öneri; Excel'e otomatik UYGULANMAZ).
+    const expertEntries = await this.readUsableExpertEntries();
+    const aiModeCandidates = await this.readUsableAiModeCandidates();
+    const preview = await buildAutoLaborPreview(excelPath, learned, expertEntries, vehicle, aiModeCandidates);
     const usages = preview.rows
       .filter((row) => row.source === 'learned')
       .map((row) => lookupLearned(learned, row.partName, row.partCode)?.entry)
@@ -92,6 +100,26 @@ export class ExcelWorkflowService {
       .map((entry) => ({ normalizedName: entry.normalizedName, ...(entry.partCode ? { partCode: entry.partCode } : {}) }));
     if (usages.length > 0) await this.context.cache.touchLaborLearningUsage(usages);
     return preview;
+  }
+
+  /** Aktif + onaylı eksper öğrenme kayıtlarını okur (bozuk/eksik depo Excel akışını bozmaz → boş döner). */
+  private async readUsableExpertEntries() {
+    try {
+      const { entries } = await new ExpertApprovedLearningStoreFile(this.context.cache.cacheRoot).read();
+      return listUsableExpertEntries(entries);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Aktif + onaylı AI Mode parça kodu adaylarını okur (bozuk/eksik depo Excel akışını bozmaz → boş döner). */
+  private async readUsableAiModeCandidates() {
+    try {
+      const { entries } = await new AiModePartCandidateStoreFile(this.context.cache.cacheRoot).read();
+      return listUsableCandidates(entries);
+    } catch {
+      return [];
+    }
   }
 
   /**

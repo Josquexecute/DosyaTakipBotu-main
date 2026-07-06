@@ -31,6 +31,15 @@ import type {
   ReportInvoiceComplianceArgs,
   LaborDistributeExcelArgs,
   LaborInspectExcelArgs,
+  AiModeBackupDeleteArg,
+  AiModeBackupListArg,
+  AiModeCandidateReplaceArgs,
+  ApplyAiModePartCodeArg,
+  RestoreAiModeBackupArg,
+  RestoreAiModePartCodeArg,
+  ExpertLearningIdArg,
+  ExpertLearningReplaceArgs,
+  LaborVehicleContext,
   KnowledgeSearchQuery,
   LaborLearningAdminKey,
   LaborLearningUpdateInput,
@@ -44,6 +53,8 @@ import type {
   TrackingDeleteTodoArgs,
   TrackingUpdateChecklistArgs,
   TrackingUpdateFieldArgs,
+  TrackingUpdateAiHelperContextArgs,
+  TrackingUpdateValueLossContextArgs,
   TrackingUpdateNoteArgs,
   TrackingUpdateTodoArgs
 } from '../shared/ipc-contract';
@@ -64,7 +75,14 @@ import {
   CasesQueryService,
   ConflictResolverService,
   DeploymentService,
+  AiModePartCandidateService,
+  AiModePartCodeApplyService,
+  AiModePartCodeRestoreService,
+  AiModePartCodeBackupService,
+  AiModePartCodeBackupRestoreService,
+  AiModePartCodeHistoryService,
   ExcelWorkflowService,
+  ExpertApprovedLearningService,
   FoldersService,
   HeavyDamageAssessmentService,
   IpcDomainContext,
@@ -88,6 +106,13 @@ export class IpcController {
   private readonly conflicts: ConflictResolverService;
   private readonly excel: ExcelWorkflowService;
   private readonly laborLearning: LaborLearningAdminService;
+  private readonly expertLearning: ExpertApprovedLearningService;
+  private readonly aiModeCandidates: AiModePartCandidateService;
+  private readonly aiModePartCodeApply: AiModePartCodeApplyService;
+  private readonly aiModePartCodeRestore: AiModePartCodeRestoreService;
+  private readonly aiModePartCodeBackups: AiModePartCodeBackupService;
+  private readonly aiModePartCodeBackupRestore: AiModePartCodeBackupRestoreService;
+  private readonly aiModePartCodeHistory: AiModePartCodeHistoryService;
   private readonly aiQueue: AiTaskQueueService;
   private readonly knowledge: KnowledgeSearchService;
   private readonly heavyDamage: HeavyDamageAssessmentService;
@@ -103,6 +128,13 @@ export class IpcController {
     this.conflicts = new ConflictResolverService(this.context, this.cases);
     this.excel = new ExcelWorkflowService(this.context);
     this.laborLearning = new LaborLearningAdminService(this.context);
+    this.expertLearning = new ExpertApprovedLearningService(this.context);
+    this.aiModeCandidates = new AiModePartCandidateService(this.context);
+    this.aiModePartCodeApply = new AiModePartCodeApplyService(this.context);
+    this.aiModePartCodeRestore = new AiModePartCodeRestoreService(this.context);
+    this.aiModePartCodeBackups = new AiModePartCodeBackupService(this.context);
+    this.aiModePartCodeBackupRestore = new AiModePartCodeBackupRestoreService(this.context);
+    this.aiModePartCodeHistory = new AiModePartCodeHistoryService(this.context);
     this.aiQueue = new AiTaskQueueService();
     this.aiQueue.start();
     this.knowledge = new KnowledgeSearchService();
@@ -128,7 +160,7 @@ export class IpcController {
     ipcMain.handle(IPC.laborInspectExcel, (_event, args: LaborInspectExcelArgs) => this.safe((): Promise<ExcelLaborPreview> => this.excel.inspectExcel(args)));
     ipcMain.handle(IPC.laborDistributeExcel, (_event, args: LaborDistributeExcelArgs) => this.safe((): Promise<ExcelLaborDistributeResult> => this.excel.distributeExcel(args)));
     ipcMain.handle(IPC.partsAnalyzePhoto, (_event, args?: PartsAnalyzePhotoArgs) => this.safe((): Promise<PartsPhotoAnalysis> => this.excel.analyzePartsPhoto(args)));
-    ipcMain.handle(IPC.laborAutoPreview, () => this.safe((): Promise<AutoLaborPreview> => this.excel.autoLaborPreview()));
+    ipcMain.handle(IPC.laborAutoPreview, (_event, vehicle?: LaborVehicleContext) => this.safe((): Promise<AutoLaborPreview> => this.excel.autoLaborPreview(vehicle)));
     ipcMain.handle(IPC.laborAutoSave, (_event, args: LaborAutoSaveArgs) => this.safe((): Promise<AutoLaborSaveResult> => this.excel.autoLaborSave(args)));
     ipcMain.handle(IPC.laborLearningList, () => this.safe(() => this.laborLearning.list()));
     ipcMain.handle(IPC.laborLearningUpdate, (_event, args: LaborLearningUpdateInput) => this.safe(() => this.laborLearning.update(args)));
@@ -137,6 +169,25 @@ export class IpcController {
     ipcMain.handle(IPC.laborLearningDelete, (_event, args: LaborLearningAdminKey) => this.safe(() => this.laborLearning.delete(args)));
     ipcMain.handle(IPC.laborLearningExport, () => this.safe(() => this.laborLearning.export()));
     ipcMain.handle(IPC.laborLearningImport, () => this.safe(() => this.laborLearning.import()));
+    ipcMain.handle(IPC.expertLearningPreviewExcel, () => this.safe(() => this.expertLearning.previewExcel()));
+    ipcMain.handle(IPC.expertLearningList, () => this.safe(() => this.expertLearning.list()));
+    ipcMain.handle(IPC.expertLearningApprove, (_event, candidates: unknown) => this.safe(() => this.expertLearning.approve(candidates)));
+    ipcMain.handle(IPC.expertLearningDeactivate, (_event, args: ExpertLearningIdArg) => this.safe(() => this.expertLearning.deactivate(args)));
+    ipcMain.handle(IPC.expertLearningReactivate, (_event, args: ExpertLearningIdArg) => this.safe(() => this.expertLearning.reactivate(args)));
+    ipcMain.handle(IPC.expertLearningReplaceDuplicate, (_event, args: ExpertLearningReplaceArgs) => this.safe(() => this.expertLearning.replaceDuplicate(args)));
+    ipcMain.handle(IPC.expertLearningDelete, (_event, args: ExpertLearningIdArg) => this.safe(() => this.expertLearning.delete(args)));
+    ipcMain.handle(IPC.aiModePartCandidatesList, () => this.safe(() => this.aiModeCandidates.list()));
+    ipcMain.handle(IPC.aiModePartCandidatesApprove, (_event, candidates: unknown) => this.safe(() => this.aiModeCandidates.approve(candidates)));
+    ipcMain.handle(IPC.aiModePartCandidatesDeactivate, (_event, args: ExpertLearningIdArg) => this.safe(() => this.aiModeCandidates.deactivate(args)));
+    ipcMain.handle(IPC.aiModePartCandidatesReactivate, (_event, args: ExpertLearningIdArg) => this.safe(() => this.aiModeCandidates.reactivate(args)));
+    ipcMain.handle(IPC.aiModePartCandidatesReplaceDuplicate, (_event, args: AiModeCandidateReplaceArgs) => this.safe(() => this.aiModeCandidates.replaceDuplicate(args)));
+    ipcMain.handle(IPC.aiModePartCandidatesApplyToDColumn, (_event, args: ApplyAiModePartCodeArg) => this.safe(() => this.aiModePartCodeApply.applyToDColumn(args)));
+    ipcMain.handle(IPC.aiModePartCandidatesRestoreLastApply, (_event, args: RestoreAiModePartCodeArg) => this.safe(() => this.aiModePartCodeRestore.restoreLastApply(args)));
+    ipcMain.handle(IPC.aiModePartCodeBackupsList, (_event, args: AiModeBackupListArg) => this.safe(() => this.aiModePartCodeBackups.list(args)));
+    ipcMain.handle(IPC.aiModePartCodeBackupsDelete, (_event, args: AiModeBackupDeleteArg) => this.safe(() => this.aiModePartCodeBackups.delete(args)));
+    ipcMain.handle(IPC.aiModePartCodeBackupsRestore, (_event, args: RestoreAiModeBackupArg) => this.safe(() => this.aiModePartCodeBackupRestore.restoreFromBackup(args)));
+    ipcMain.handle(IPC.aiModePartCodeHistoryList, () => this.safe(() => this.aiModePartCodeHistory.list()));
+    ipcMain.handle(IPC.aiModePartCandidatesDelete, (_event, args: ExpertLearningIdArg) => this.safe(() => this.aiModeCandidates.delete(args)));
     ipcMain.handle(IPC.aiQueueGetSnapshot, () => this.safe(async () => this.aiQueue.getSnapshot()));
     ipcMain.handle(IPC.aiQueueGetEvents, (_event, limit?: number) => this.safe(async () => this.aiQueue.getEvents(Number(limit))));
     ipcMain.handle(IPC.aiQueueGetTask, (_event, queueTaskId: string) => this.safe(async () => this.aiQueue.getTask(String(queueTaskId || '')) ?? null));
@@ -178,6 +229,8 @@ export class IpcController {
     ipcMain.handle(IPC.trackingUpdateNote, (_event, args: TrackingUpdateNoteArgs) => this.safe(() => this.tracking.updateNote(args)));
     ipcMain.handle(IPC.trackingDeleteNote, (_event, args: TrackingDeleteNoteArgs) => this.safe(() => this.tracking.deleteNote(args)));
     ipcMain.handle(IPC.trackingUpdateField, (_event, args: TrackingUpdateFieldArgs) => this.safe(() => this.tracking.updateField(args)));
+    ipcMain.handle(IPC.trackingUpdateAiHelperContext, (_event, args: TrackingUpdateAiHelperContextArgs) => this.safe(() => this.tracking.updateAiHelperContext(args)));
+    ipcMain.handle(IPC.trackingUpdateValueLossContext, (_event, args: TrackingUpdateValueLossContextArgs) => this.safe(() => this.tracking.updateValueLossContext(args)));
 
     ipcMain.handle(IPC.trackingResolveConflict, (_event, args: ConflictResolutionArgs) => this.safe(() => this.conflicts.resolveConflict(args)));
     ipcMain.handle(IPC.trackingInspectConflictCopy, (_event, folderPath: string) => this.safe(() => this.conflicts.inspectConflictCopy(folderPath)));

@@ -11,6 +11,9 @@ import { assertSafeCasePath } from '../security';
 import { safeFileDisplayName } from '../../shared/turkish';
 import { chooseTrackingItemId } from '../../shared/tracking-item-id';
 import { nowIso } from '../tracking/tracking-defaults';
+import { sanitizeAiHelperContext } from '../../shared/ai-context/ai-helper-context-merge';
+import { AI_HELPER_CONTEXT_VERSION } from '../../shared/ai-context/ai-helper-context-types';
+import { normalizeValueLossContext } from '../../shared/value-loss/value-loss-context-normalizer';
 import { CLAIM_TYPES, DOSYA_DURUMLARI, PRIORITIES, WORKFLOW_STATUSES } from '../../shared/workflow';
 import { VEHICLE_CONTEXT_FIELDS } from '../../shared/vehicle/vehicle-context';
 import { normalizeSettings } from './settings-normalizer';
@@ -21,6 +24,13 @@ import { existsDirectory } from './fs-utils';
 export { existsDirectory } from './fs-utils';
 export { ExcelWorkflowService } from './excel-workflow-service';
 export { LaborLearningAdminService } from './labor-learning-admin-service';
+export { ExpertApprovedLearningService } from './expert-approved-learning-service';
+export { AiModePartCandidateService } from './ai-mode-part-candidate-service';
+export { AiModePartCodeApplyService } from './ai-mode-part-code-apply-service';
+export { AiModePartCodeRestoreService } from './ai-mode-part-code-restore-service';
+export { AiModePartCodeBackupService } from './ai-mode-part-code-backup-service';
+export { AiModePartCodeBackupRestoreService } from './ai-mode-part-code-backup-restore-service';
+export { AiModePartCodeHistoryService } from './ai-mode-part-code-history-service';
 export { HeavyDamageAssessmentService } from './heavy-damage-assessment-service';
 export { DeploymentService } from './deployment-service';
 export { FoldersService } from './folders-service';
@@ -260,6 +270,44 @@ export class TrackingMutationService {
         tracking.service.updatedBy = settings.activeUser;
       }
       tracking.status.kapaliMi = tracking.status.workflowStatus === 'Kapalı' || tracking.caseIdentity.isClosedFolder;
+    });
+    await this.cases.refreshMutationResult(args.folderPath, result);
+    return result;
+  }
+
+  /**
+   * v0.6.x: AI Yardımcıları "Dosya Ek Bilgileri"ni KULLANICI ONAYIYLA kaydeder.
+   * YALNIZ `tracking.aiHelperContext` alanını yazar (ana hasar/evrak/Excel/ağır hasar alanlarına dokunmaz).
+   * Mevcut güvenli mutate (atomic write + revision/writeId/conflict) mekanizmasını kullanır.
+   */
+  async updateAiHelperContext(args: MutationArgsBase & { context: unknown }) {
+    const settings = await this.context.getSettings();
+    assertSafeCasePath(args.folderPath, settings.rootPath);
+    await this.cases.assertMutationAllowed(args.folderPath, args.allowClosedMutation === true);
+    const result = await this.context.tracking.mutate(args.folderPath, args.expectedRevision, this.cases.expectedWriteIdFor(args), settings.activeUser, (tracking) => {
+      // v2: Ek Bilgiler kaydı Değer Kaybı formunu SİLMEZ; mevcut valueLoss korunur (ayrı kaydetme akışı).
+      const previousValueLoss = tracking.aiHelperContext?.valueLoss;
+      tracking.aiHelperContext = sanitizeAiHelperContext(args.context, { updatedAt: nowIso(), updatedBy: settings.activeUser });
+      if (previousValueLoss && !tracking.aiHelperContext.valueLoss) tracking.aiHelperContext.valueLoss = previousValueLoss;
+    });
+    await this.cases.refreshMutationResult(args.folderPath, result);
+    return result;
+  }
+
+  /**
+   * v0.6.x v2: Değer Kaybı Ek Bilgi Formu'nu KULLANICI ONAYIYLA kaydeder.
+   * YALNIZ `tracking.aiHelperContext.valueLoss` alanını günceller; diğer ek bağlam alanları ve ana
+   * hasar/evrak/Excel alanları AYNEN korunur. Mevcut güvenli mutate (atomic write + revision/writeId)
+   * mekanizmasını kullanır; tutar hesabı yapılmaz.
+   */
+  async updateValueLossContext(args: MutationArgsBase & { valueLoss: unknown }) {
+    const settings = await this.context.getSettings();
+    assertSafeCasePath(args.folderPath, settings.rootPath);
+    await this.cases.assertMutationAllowed(args.folderPath, args.allowClosedMutation === true);
+    const result = await this.context.tracking.mutate(args.folderPath, args.expectedRevision, this.cases.expectedWriteIdFor(args), settings.activeUser, (tracking) => {
+      const current = tracking.aiHelperContext ?? { version: AI_HELPER_CONTEXT_VERSION };
+      current.valueLoss = normalizeValueLossContext(args.valueLoss, { updatedAt: nowIso() });
+      tracking.aiHelperContext = current;
     });
     await this.cases.refreshMutationResult(args.folderPath, result);
     return result;

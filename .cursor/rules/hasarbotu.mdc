@@ -1,0 +1,14 @@
+---
+description: HasarBotu bağlayıcı geliştirme kuralları (özet — ayrıntı AGENTS.md'de)
+alwaysApply: true
+---
+
+Önce repo kökündeki `AGENTS.md`'yi oku; bağlayıcı kurallar oradadır. Kritik özet:
+
+- `takip.json` source of truth'tur; büyük rewrite yapma.
+- Tüm AI çıktıları preview-first; açık kullanıcı onayı olmadan yazma yok.
+- Ücretli API yasak (no paid API); otomatik ağ/scraping/tarayıcı otomasyonu yasak.
+- Excel yazımı: preview/diff/confirm zorunlu; kolon eşleşmesini ve yedek zincirini bozma.
+- Değer Kaybı: kesin tazminat dili yasak; katsayı uydurma yasak.
+- 400 satır sınırı; testleri/guard'ları zayıflatma; EXE üretme.
+- Zorunlu testler: typecheck, build, test:behavior, ci, final-office-audit, npm audit.

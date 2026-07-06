@@ -23,6 +23,10 @@ import type {
   TrackingWriteResult
 } from './types';
 import type { VehicleContext } from './vehicle/vehicle-context';
+import type { AiHelperContextInput } from './ai-context/ai-helper-context-types';
+export type { AiHelperContextInput } from './ai-context/ai-helper-context-types';
+import type { ValueLossContextInput } from './value-loss/value-loss-context-types';
+export type { ValueLossContextInput } from './value-loss/value-loss-context-types';
 import type { ReportInvoiceAiTestResult, ReportInvoiceComplianceArgs, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from './report-invoice/report-invoice-types';
 export type { ReportInvoiceAiTestResult, ReportInvoiceComplianceArgs, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from './report-invoice/report-invoice-types';
 import type { UserPartTerm } from './parca-sozlugu';
@@ -31,8 +35,24 @@ import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDa
 import type { AiQueueHistoryEvent, AiQueuedTask, AiTaskQueuePriority, AiTaskQueueSnapshot } from './ai/ai-queue-types';
 import type { AiPrivacyLevel, AiTaskType } from './ai/ai-task-types';
 import type { KnowledgeChunk, KnowledgeImportCommitInput, KnowledgeImportCommitResult, KnowledgeImportDryRunResponse, KnowledgeImportTextPreview, KnowledgeSearchQuery, KnowledgeSearchResponse, KnowledgeSource } from './knowledge';
+import type { ExpertApprovedLaborLearningEntry, ExpertLearningApproveResult, ExpertLearningPreviewResponse, ExpertLearningStoreState } from './labor/expert-approved-learning-types';
+import type { LaborVehicleContext } from './labor/labor-vehicle-context';
+import type { AiModePartCandidateApproveResult, AiModePartCandidateStoreState, ApprovedAiModePartCandidateEntry } from './labor/ai-mode-part-candidate-store-types';
+import type { ApplyAiModePartCodeArg, ApplyAiModePartCodeResult } from './labor/ai-mode-part-code-apply-types';
+import type { RestoreAiModePartCodeArg, RestoreAiModePartCodeResult } from './labor/ai-mode-part-code-restore-types';
+import type { AiModeBackupDeleteArg, AiModeBackupDeleteResult, AiModeBackupListArg, AiModeBackupListResult } from './labor/ai-mode-part-code-backup-types';
+import type { AiModePartCodeHistoryListResult } from './labor/ai-mode-part-code-history-types';
+import type { RestoreAiModeBackupArg, RestoreAiModeBackupResult } from './labor/ai-mode-part-code-backup-restore-types';
 
 export type { ApiResult };
+export type { ExpertApprovedLaborLearningEntry, ExpertLearningApproveResult, ExpertLearningPreviewResponse, ExpertLearningStoreState } from './labor/expert-approved-learning-types';
+export type { LaborVehicleContext } from './labor/labor-vehicle-context';
+export type { AiModePartCandidateApproveResult, AiModePartCandidateStoreState, ApprovedAiModePartCandidateEntry } from './labor/ai-mode-part-candidate-store-types';
+export type { ApplyAiModePartCodeArg, ApplyAiModePartCodeResult } from './labor/ai-mode-part-code-apply-types';
+export type { RestoreAiModePartCodeArg, RestoreAiModePartCodeResult } from './labor/ai-mode-part-code-restore-types';
+export type { AiModeBackupDeleteArg, AiModeBackupDeleteResult, AiModeBackupFileInfo, AiModeBackupListArg, AiModeBackupListResult } from './labor/ai-mode-part-code-backup-types';
+export type { AiModePartCodeHistoryEntry, AiModePartCodeHistoryListResult } from './labor/ai-mode-part-code-history-types';
+export type { RestoreAiModeBackupArg, RestoreAiModeBackupResult } from './labor/ai-mode-part-code-backup-restore-types';
 export type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from './labor-learning-dictionary';
 export type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageClearArgs, HeavyDamageGenerateNoteArgs, HeavyDamageGetArgs, HeavyDamagePreviewArgs, HeavyDamageSaveArgs } from './heavy-damage-types';
 export type { AiQueueHistoryEvent, AiQueuedTask, AiTaskQueuePriority, AiTaskQueueSnapshot } from './ai/ai-queue-types';
@@ -98,13 +118,34 @@ export const IPC_INVOKE_CHANNELS = {
   trackingUpdateNote: 'tracking:update-note',
   trackingDeleteNote: 'tracking:delete-note',
   trackingUpdateField: 'tracking:update-field',
+  trackingUpdateAiHelperContext: 'tracking:update-ai-helper-context',
+  trackingUpdateValueLossContext: 'tracking:update-value-loss-context',
   trackingResolveConflict: 'tracking:resolve-conflict',
   trackingInspectConflictCopy: 'tracking:inspect-conflict-copy',
   trackingAcceptDiskBaseline: 'tracking:accept-disk-baseline',
   systemOpenFolder: 'system:open-folder',
   healthGet: 'health:get',
   deploymentGetStatus: 'deployment:get-status',
-  deploymentRegisterClient: 'deployment:register-client'
+  deploymentRegisterClient: 'deployment:register-client',
+  expertLearningPreviewExcel: 'expert-learning:preview-excel',
+  expertLearningList: 'expert-learning:list',
+  expertLearningApprove: 'expert-learning:approve',
+  expertLearningDeactivate: 'expert-learning:deactivate',
+  expertLearningReactivate: 'expert-learning:reactivate',
+  expertLearningReplaceDuplicate: 'expert-learning:replace-duplicate',
+  expertLearningDelete: 'expert-learning:delete',
+  aiModePartCandidatesList: 'ai-mode-part-candidates:list',
+  aiModePartCandidatesApprove: 'ai-mode-part-candidates:approve',
+  aiModePartCandidatesDeactivate: 'ai-mode-part-candidates:deactivate',
+  aiModePartCandidatesReactivate: 'ai-mode-part-candidates:reactivate',
+  aiModePartCandidatesReplaceDuplicate: 'ai-mode-part-candidates:replace-duplicate',
+  aiModePartCandidatesApplyToDColumn: 'ai-mode-part-candidates:apply-to-excel-d-column',
+  aiModePartCandidatesRestoreLastApply: 'ai-mode-part-candidates:restore-last-d-column-apply',
+  aiModePartCandidatesDelete: 'ai-mode-part-candidates:delete',
+  aiModePartCodeBackupsList: 'ai-mode-part-code-backups:list',
+  aiModePartCodeBackupsDelete: 'ai-mode-part-code-backups:delete',
+  aiModePartCodeBackupsRestore: 'ai-mode-part-code-backups:restore',
+  aiModePartCodeHistoryList: 'ai-mode-part-code-history:list'
 } as const;
 
 export const IPC_SEND_CHANNEL = {
@@ -208,6 +249,11 @@ export type TrackingAddNoteArgs = TrackingMutationArgsBase & { id?: string; text
 export type TrackingUpdateNoteArgs = TrackingMutationArgsBase & { id: string; text: string };
 export type TrackingDeleteNoteArgs = TrackingMutationArgsBase & { id: string };
 export type TrackingUpdateFieldArgs = TrackingMutationArgsBase & { path: string; value: unknown };
+export type TrackingUpdateAiHelperContextArgs = TrackingMutationArgsBase & { context: AiHelperContextInput };
+export type TrackingUpdateValueLossContextArgs = TrackingMutationArgsBase & { valueLoss: ValueLossContextInput };
+export interface ExpertLearningIdArg { id: string }
+export interface ExpertLearningReplaceArgs { entry: ExpertApprovedLaborLearningEntry; duplicateId: string }
+export interface AiModeCandidateReplaceArgs { entry: ApprovedAiModePartCandidateEntry; duplicateId: string }
 
 export interface HasarbotuApi {
   getSettings<T = AppSettings>(): Promise<ApiResult<T>>;
@@ -228,7 +274,7 @@ export interface HasarbotuApi {
   chooseReportInvoicePdf<T = ReportInvoicePdfPick>(): Promise<ApiResult<T>>;
   checkReportInvoiceCompliance<T = ReportInvoiceComplianceResult>(args: ReportInvoiceComplianceArgs): Promise<ApiResult<T>>;
   testReportInvoiceAi<T = ReportInvoiceAiTestResult>(): Promise<ApiResult<T>>;
-  autoLaborPreview<T = AutoLaborPreview>(): Promise<ApiResult<T>>;
+  autoLaborPreview<T = AutoLaborPreview>(vehicle?: LaborVehicleContext): Promise<ApiResult<T>>;
   autoLaborSave<T = AutoLaborSaveResult>(args: LaborAutoSaveArgs): Promise<ApiResult<T>>;
   laborLearningList<T = LaborLearningEntry[]>(): Promise<ApiResult<T>>;
   laborLearningUpdate<T = LaborLearningEntry[]>(args: LaborLearningUpdateInput): Promise<ApiResult<T>>;
@@ -237,6 +283,25 @@ export interface HasarbotuApi {
   laborLearningDelete<T = LaborLearningEntry[]>(args: LaborLearningAdminKey): Promise<ApiResult<T>>;
   laborLearningExport<T = LaborLearningExportResult>(): Promise<ApiResult<T>>;
   laborLearningImport<T = LaborLearningImportResult>(): Promise<ApiResult<T>>;
+  expertLearningPreviewExcel<T = ExpertLearningPreviewResponse>(): Promise<ApiResult<T>>;
+  expertLearningList<T = ExpertLearningStoreState>(): Promise<ApiResult<T>>;
+  expertLearningApprove<T = ExpertLearningApproveResult>(candidates: ExpertApprovedLaborLearningEntry[]): Promise<ApiResult<T>>;
+  expertLearningDeactivate<T = ExpertLearningStoreState>(args: ExpertLearningIdArg): Promise<ApiResult<T>>;
+  expertLearningReactivate<T = ExpertLearningStoreState>(args: ExpertLearningIdArg): Promise<ApiResult<T>>;
+  expertLearningReplaceDuplicate<T = ExpertLearningApproveResult>(args: ExpertLearningReplaceArgs): Promise<ApiResult<T>>;
+  expertLearningDelete<T = ExpertLearningStoreState>(args: ExpertLearningIdArg): Promise<ApiResult<T>>;
+  aiModePartCandidatesList<T = AiModePartCandidateStoreState>(): Promise<ApiResult<T>>;
+  aiModePartCandidatesApprove<T = AiModePartCandidateApproveResult>(candidates: ApprovedAiModePartCandidateEntry[]): Promise<ApiResult<T>>;
+  aiModePartCandidatesDeactivate<T = AiModePartCandidateStoreState>(args: ExpertLearningIdArg): Promise<ApiResult<T>>;
+  aiModePartCandidatesReactivate<T = AiModePartCandidateStoreState>(args: ExpertLearningIdArg): Promise<ApiResult<T>>;
+  aiModePartCandidatesReplaceDuplicate<T = AiModePartCandidateApproveResult>(args: AiModeCandidateReplaceArgs): Promise<ApiResult<T>>;
+  aiModePartCandidatesApplyToDColumn<T = ApplyAiModePartCodeResult>(args: ApplyAiModePartCodeArg): Promise<ApiResult<T>>;
+  aiModePartCandidatesRestoreLastApply<T = RestoreAiModePartCodeResult>(args: RestoreAiModePartCodeArg): Promise<ApiResult<T>>;
+  aiModePartCandidatesDelete<T = AiModePartCandidateStoreState>(args: ExpertLearningIdArg): Promise<ApiResult<T>>;
+  aiModePartCodeBackupsList<T = AiModeBackupListResult>(args: AiModeBackupListArg): Promise<ApiResult<T>>;
+  aiModePartCodeBackupsDelete<T = AiModeBackupDeleteResult>(args: AiModeBackupDeleteArg): Promise<ApiResult<T>>;
+  aiModePartCodeBackupsRestore<T = RestoreAiModeBackupResult>(args: RestoreAiModeBackupArg): Promise<ApiResult<T>>;
+  aiModePartCodeHistoryList<T = AiModePartCodeHistoryListResult>(): Promise<ApiResult<T>>;
   getAiQueueSnapshot<T = AiTaskQueueSnapshot>(): Promise<ApiResult<T>>;
   getAiQueueEvents<T = AiQueueHistoryEvent[]>(limit?: number): Promise<ApiResult<T>>;
   getAiQueueTask<T = AiQueuedTask | null>(queueTaskId: string): Promise<ApiResult<T>>;
@@ -271,6 +336,8 @@ export interface HasarbotuApi {
   inspectConflictCopy<T = ConflictTrackingCopyInfo>(folderPath: string): Promise<ApiResult<T>>;
   acceptDiskBaseline<T = { ok: boolean; tracking: TrackingFile }>(folderPath: string): Promise<ApiResult<T>>;
   updateField<T = TrackingWriteResult>(args: TrackingUpdateFieldArgs): Promise<ApiResult<T>>;
+  updateAiHelperContext<T = TrackingWriteResult>(args: TrackingUpdateAiHelperContextArgs): Promise<ApiResult<T>>;
+  updateValueLossContext<T = TrackingWriteResult>(args: TrackingUpdateValueLossContextArgs): Promise<ApiResult<T>>;
   openFolder<T = boolean>(folderPath: string): Promise<ApiResult<T>>;
   getHealth<T = DebugHealthReport>(): Promise<ApiResult<T>>;
   getDeploymentStatus<T = DeploymentStatus>(): Promise<ApiResult<T>>;

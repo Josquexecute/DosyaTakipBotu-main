@@ -19,9 +19,12 @@ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-office-audit-'))
 const appData = path.join(root, 'appdata');
 const yearRoot = path.join(root, 'pCloud Drive (P)', 'BARAN GLOBAL EKSPERTİZ', '2026');
 const pkg = JSON.parse(await fs.readFile('package.json', 'utf-8'));
+// Dev Harness v1: AGENTS.md ana ajan anayasasina genisletildi; sinir 400 satir/12k karakter.
+// Eski kritik token'larin TAMAMI korunur + yeni politika token'lari eklendi (denetim guclendirildi).
 const agentsGuide = await fs.readFile('AGENTS.md', 'utf-8');
 assert(
-  agentsGuide.length < 1800
+  agentsGuide.length < 12000
+    && agentsGuide.split(/\r?\n/).length <= 400
     && agentsGuide.includes('Electron + TypeScript')
     && agentsGuide.includes('takip.json')
     && agentsGuide.includes('Yeni dependency ekleme')
@@ -34,8 +37,14 @@ assert(
     && agentsGuide.includes('npm run typecheck')
     && agentsGuide.includes('npm audit')
     && agentsGuide.includes('node_modules')
-    && agentsGuide.includes('user-knowledge-store.json'),
-  'Codex proje ayari AGENTS.md kisa ve kritik guvenlik kurallarini icerir',
+    && agentsGuide.includes('user-knowledge-store.json')
+    && agentsGuide.includes('source of truth')
+    && agentsGuide.includes('preview-first')
+    && agentsGuide.includes('no paid API')
+    && agentsGuide.includes('user approval')
+    && agentsGuide.includes('Value Loss')
+    && agentsGuide.includes('Teslim Raporu Formatı'),
+  'Dev Harness v1: AGENTS.md ajan anayasasi kritik guvenlik kurallarini ve politika ifadelerini icerir',
   `AGENTS.md length=${agentsGuide.length}`
 );
 assert(pkg.version === '0.6.4', 'Paket sürümü v0.6.4 olarak sabitlendi', `version=${pkg.version}`);
@@ -605,7 +614,7 @@ async function pathExists(targetPath) {
 // --- v0.6.0 UI/Runtime stability: manuel calisma-klasoru secim kilidi + scroll koruma guardlari ---
 const rendererStateSource = await fs.readFile('src/renderer/app/state.ts', 'utf-8');
 assert(rendererStateSource.includes('hasManualWorkingFolderSelection: boolean') && rendererStateSource.includes('hasManualWorkingFolderSelection: false'), 'v0.6.0 UI-stability manuel calisma-klasoru secim bayragi state icinde tanimli ve baslangicta kapali', 'hasManualWorkingFolderSelection state alani eksik');
-assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'settings']") && rendererSource.includes('isTabAllowedNow') && rendererSource.includes('if (!isTabAllowedNow(targetTab))') && rendererSource.includes('Önce Dosyalar bölümünden çalışma klasörü seçiniz.'), 'v0.6.3 UI-stability manuel secim yapilmadan Dosyalar/Durum/Rapor-Fatura/Ayarlar disi sekme kilitli (tab gate + uyari)', 'manuel secim tab gate eksik');
+assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'ai-yardimcilari', 'settings']") && rendererSource.includes('isTabAllowedNow') && rendererSource.includes('if (!isTabAllowedNow(targetTab))') && rendererSource.includes('Önce Dosyalar bölümünden çalışma klasörü seçiniz.'), 'v0.6.3 UI-stability manuel secim yapilmadan Dosyalar/Durum/Rapor-Fatura/Ayarlar disi sekme kilitli (tab gate + uyari)', 'manuel secim tab gate eksik');
 const reloadCacheSlice = rendererSource.slice(rendererSource.indexOf('async function reloadCache'), rendererSource.indexOf('interface FocusSnapshot'));
 assert(reloadCacheSlice.length > 0 && reloadCacheSlice.includes('state.cases[0]') && !reloadCacheSlice.includes('markManualWorkingFolderSelection'), 'v0.6.0 UI-stability otomatik son-klasor/ilk-dosya secimi kilidi ACMAZ (manuel bayragi set etmez)', 'otomatik klasor secimi kilidi aciyor');
 assert((rendererSource.match(/markManualWorkingFolderSelection\(\)/g) || []).length >= 2, 'v0.6.0 UI-stability manuel dosya secimi (liste tiklamasi + panodan acma) kilidi acar', 'manuel secim bayragi set edilmiyor');
@@ -702,7 +711,7 @@ const v63oLayoutSource = await fs.readFile('src/renderer/app/components/layout.t
 assert(v63oLayoutSource.includes("'Rapor / Fatura Uyum'") && v63oLayoutSource.includes('renderReportInvoicePanel') && v63oLayoutSource.includes("case 'rapor-fatura'") && !/navItem\('(issue|rucu|ktt)'/.test(v63oLayoutSource), 'v0.6.3 sol menu Rapor/Fatura eklendi + renderPage bagli; Sorunlar/Rucu/KTT nav kaldirildi (model korunur)', 'v0.6.3 sol menu/renderPage baglantisi eksik');
 const v63oComponentSource = await fs.readFile('src/renderer/app/components/report-invoice.ts', 'utf-8');
 assert(v63oComponentSource.includes('Rapor / Fatura Uyum Kontrolü') && v63oComponentSource.includes('AI servisine gönderilebilir') && v63oComponentSource.includes('Tekrar Dene') && v63oComponentSource.includes('const canRun = !loading') && !v63oComponentSource.includes('filePath'), 'v0.6.3 panel Turkce + gizlilik notu + Tekrar Dene; eksik PDF uyarisina izin verir; full path gostermez', 'v0.6.3 panel eksik');
-assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'settings']") && rendererSource.includes('runReportInvoiceComplianceAction'), 'v0.6.3 Rapor/Fatura standalone (manuel klasor secimi gerektirmez) + AI aksiyonu bagli', 'v0.6.3 renderer rapor/fatura aksiyon/gate eksik');
+assert(rendererSource.includes("TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'ai-yardimcilari', 'settings']") && rendererSource.includes('runReportInvoiceComplianceAction'), 'v0.6.3 Rapor/Fatura standalone (manuel klasor secimi gerektirmez) + AI aksiyonu bagli', 'v0.6.3 renderer rapor/fatura aksiyon/gate eksik');
 
 // --- v0.6.3 final-risk-fix guardlari: AI baglanti testi + taranmis/gorsel PDF fallback + GUI guvenligi ---
 assert(v63oTypesSource.includes('buildScannedPdfNotice') && v63oTypesSource.includes('SCANNED_PDF_NOTICE') && v63oTypesSource.includes('ReportInvoiceAiTestResult') && !/\bfetch\(|axios|from ['"]node:fs|\.write\(/.test(v63oTypesSource), 'v0.6.3 final tip modulu: taranmis-PDF uyarisi + AI test sonucu saf (ag/dosya/yazma yok)', 'v0.6.3 final tip modulu eksik/yasak iz');

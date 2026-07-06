@@ -7,6 +7,61 @@ import type { HeavyDamageFilter } from '../../shared/heavy-damage-rules';
 import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../../shared/ai/ai-queue-types';
 import type { KnowledgeImportApprovalReducerState, KnowledgeImportCommitResult, KnowledgeImportPlan, KnowledgeImportTextPreview, KnowledgeSearchResponse, KnowledgeSource, KnowledgeSourceFilter, KnowledgeSourceType } from '../../shared/knowledge';
 import type { ReportInvoiceAiTestResult, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from '../../shared/report-invoice/report-invoice-types';
+import type { AiDraftTaskType, AiDraftTaskResult } from '../../shared/ai/ai-task-result-types';
+import type { ExpertLearningPreviewResponse, ExpertLearningStoreState } from '../../shared/labor/expert-approved-learning-types';
+import type { AiModeDataMode, AiModePartCandidate } from '../../shared/labor/ai-mode-part-search-types';
+import type { AiModePartCandidateStoreState, ApprovedAiModePartCandidateEntry } from '../../shared/labor/ai-mode-part-candidate-store-types';
+import type { AiModeCandidateFilter } from '../../shared/labor/ai-mode-part-candidate-store';
+import type { ApplyAiModePartCodeResult, LastPartCodeApplyUndoState } from '../../shared/labor/ai-mode-part-code-apply-types';
+import type { RestoreAiModePartCodeResult } from '../../shared/labor/ai-mode-part-code-restore-types';
+import type { AiModeBackupListResult } from '../../shared/labor/ai-mode-part-code-backup-types';
+import type { AiModePartCodeHistoryListResult } from '../../shared/labor/ai-mode-part-code-history-types';
+import type { RestoreAiModeBackupResult } from '../../shared/labor/ai-mode-part-code-backup-restore-types';
+import { emptyValueLossForm, type ValueLossForm, type ValueLossPartFormRow } from './utils/value-loss-form-mapping';
+
+export type { ValueLossForm, ValueLossPartFormRow };
+
+/** v3.5 Google AI Mode MANUEL parça araştırma köprüsü UI durumu (yalnız prompt + parse; ağ YOK). */
+export interface AiModePartSearchUiState {
+  selectedRowNumber: number | null;
+  mode: AiModeDataMode;
+  generatedPrompt: string;
+  pastedResponse: string;
+  candidates: AiModePartCandidate[];
+  /** Satır no → kullanıcının evidence olarak bağladığı aday (session-only). */
+  linkedByRow: Record<number, AiModePartCandidate>;
+  /** v3.6 kullanıcı onaylı kalıcı aday havuzu durumu (yüklendiyse). */
+  store: AiModePartCandidateStoreState | null;
+  /** v3.7 duplicate onay bekleyen aday (kullanıcı onaylı yenileme için). */
+  pendingDuplicate: { newEntry: ApprovedAiModePartCandidateEntry; existing: ApprovedAiModePartCandidateEntry } | null;
+  /** v3.7 yönetim paneli filtresi/araması/kaynak açık kayıtları. */
+  storeFilter: AiModeCandidateFilter;
+  storeSearch: string;
+  sourcesExpanded: Record<string, boolean>;
+  /** v3.8 son D sütunu yazma işlemi raporu (session; kalıcı değil). */
+  applyResult: ApplyAiModePartCodeResult | null;
+  /** v3.9 son yazma için geri alma hazırlığı; v3.10 tek-tık restore için kullanılır. */
+  lastApplyUndo: LastPartCodeApplyUndoState | null;
+  /** v3.10 son restore/geri alma işlemi sonucu (session). */
+  restoreResult: RestoreAiModePartCodeResult | null;
+  /** v3.11 yedek yönetim listesi + son işlem geçmişi (yüklendiyse). */
+  backupList: AiModeBackupListResult | null;
+  history: AiModePartCodeHistoryListResult | null;
+  /** v3.12 genel yedekten geri yükleme sonucu (session; son-undo restore'dan AYRI). */
+  backupRestoreResult: RestoreAiModeBackupResult | null;
+  message: string | null;
+}
+
+/** v3.2 "Eksper Onaylı İşçilikten Öğren" UI durumu (yalnız önizleme + onay akışı). */
+export interface ExpertLearningUiState {
+  preview: ExpertLearningPreviewResponse | null;
+  /** Onaylanmak için seçili öğrenme satırı id'leri (derivedEntry.id). */
+  selectedIds: string[];
+  store: ExpertLearningStoreState | null;
+  busy: boolean;
+  message: string | null;
+  error: string | null;
+}
 
 export interface UiState {
   settings: AppSettings | null;
@@ -57,6 +112,10 @@ export interface UiState {
   autoLaborConfirmOpen: boolean;
   autoLaborSaveError: AutoLaborSaveErrorState | null;
   autoLaborReportSnapshot: AutoLaborReportSnapshot | null;
+  /** v3.2 Eksper Onaylı İşçilikten Öğren paneli durumu. */
+  expertLearning: ExpertLearningUiState;
+  /** v3.5 Google AI Mode parça araştırma köprüsü durumu. */
+  aiModePartSearch: AiModePartSearchUiState;
   /** İşçilik tablosunda kullanıcının elle değiştirdiği satır tutarları (satır no → tutar). */
   laborRowOverrides: Record<number, number>;
   /** AI ile okunan parça listesi fotoğrafı analizi. */
@@ -75,6 +134,8 @@ export interface UiState {
   /** v0.6.3: AI bağlantı testi durumu/sonucu (yalnız UI belleği; kalıcı değil). */
   reportInvoiceAiTesting: boolean;
   reportInvoiceAiTestResult: ReportInvoiceAiTestResult | null;
+  /** v0.6.x: AI Yardımcıları (Mevzuat & AI) ekranı UI durumu (salt-okunur; kalıcı değil). */
+  aiHelpers: AiHelpersState;
   /** Kullanıcının öğrettiği parça terimleri (kalıcı, kişisel sözlük). */
   partsUserTerms: UserPartTerm[];
   laborLearningEntries: LaborLearningEntry[];
@@ -176,7 +237,126 @@ export type CaseSortMode = 'plate-az' | 'plate-za' | 'office-az' | 'notice-az' |
  * 'klasorler' (yalnızca-okunur klasör gezgini) yeni sayfalardır. 'ozet' yalnızca detay
  * özet görünümünde kullanılır.
  */
-export type DetailTab = 'home' | 'dosyalar' | 'klasorler' | 'durum' | 'ozet' | 'issues' | 'operasyon' | 'evrak' | 'portal' | 'labor' | 'rucu' | 'ktt' | 'heavy' | 'ai' | 'rapor-fatura' | 'settings';
+export type DetailTab = 'home' | 'dosyalar' | 'klasorler' | 'durum' | 'ozet' | 'issues' | 'operasyon' | 'evrak' | 'portal' | 'labor' | 'rucu' | 'ktt' | 'heavy' | 'ai' | 'rapor-fatura' | 'ai-yardimcilari' | 'settings';
+
+/** v0.6.x: "AI Yardımcıları" alanındaki alt araç anahtarı. */
+export type AiHelperTool = 'mevzuat' | 'sablon' | 'ucret' | 'sure' | 'deger-kaybi';
+
+/** v0.6.x: AI Değer Kaybı Yardımcısı'nda önizlenen taslak türü. */
+export type ValueLossDraftKind = 'internal_note' | 'report_explanation' | 'missing_info_mail';
+
+export type AiTriForm = 'var' | 'yok' | 'belirsiz';
+
+/**
+ * v0.6.x: "Dosya Ek Bilgileri" formu (kullanıcı onaylı ek bağlam). Bu form UI bellektedir; yalnız
+ * "Değişiklikleri dosyaya kaydet" deyince takip.json'a (aiHelperContext) yazılır.
+ */
+export interface AiExtraForm {
+  claimType: 'trafik' | 'kasko' | 'ihtiyari' | 'belirsiz';
+  vehicleGroup: 'binek_hafif_ticari_motosiklet' | 'agir_vasita' | 'is_makinesi' | 'belirsiz';
+  hasValueLoss: AiTriForm;
+  cityScope: 'ayni_il' | 'farkli_il' | 'belirsiz';
+  insurerName: string;
+  accidentDocumentType: 'ktt' | 'zabit' | 'beyan' | 'karakol_tutanagi' | 'belirsiz';
+  alcoholDocumentStatus: AiTriForm;
+  driverLicenseStatus: AiTriForm;
+  appointmentDateTime: string;
+  firstInspectionDate: string;
+  preliminaryReportDate: string;
+  reportReadyDate: string;
+  vehicleDeliveredToService: AiTriForm;
+  vehicleDeliveredToServiceDate: string;
+  repairStartedDate: string;
+  repairCompletedDate: string;
+  notes: string;
+}
+
+/**
+ * v0.6.x: AI Yardımcıları (Mevzuat & AI) ekranı UI durumu. SALT-OKUNUR/öneri amaçlı; hiçbir
+ * dosyaya yazma yapmaz, harici servis kullanmaz. Yalnız form girdileri + UI seçimleri tutulur;
+ * sonuçlar saf modüllerle render anında hesaplanır (state'te sonuç saklanmaz).
+ */
+export interface AiHelpersState {
+  activeTool: AiHelperTool;
+  /** Formun en son ön-doldurulduğu dosya (folderPath). Değişince yeniden ön-doldurulur. null = genel mod. */
+  contextFolderPath: string | null;
+  /** Kullanıcının bu bağlamda elle değiştirdiği form alanları (data-aih anahtarı → true). */
+  userEdited: Record<string, boolean>;
+  mevzuatSearch: string;
+  /** Aktif mevzuat filtre terimi ('' = tümü). */
+  mevzuatFilter: string;
+  mevzuatExpanded: Record<string, boolean>;
+  template: {
+    sigortaTuru: 'trafik' | 'ihtiyari-mali-sorumluluk' | 'kasko';
+    degerKaybiDahil: boolean;
+    agirVeyaTamHasar: boolean;
+  };
+  fee: {
+    kapsam: 'motorlu' | 'motorlu-disi';
+    brutHasar: string;
+    vehicleClass: 'binek-hafif-ticari-motosiklet' | 'agir-vasita' | 'is-makinesi';
+    jobType: 'standart' | 'uzaktan-ekspertiz' | 'deger-tespiti';
+    degerKaybi: 'yok' | 'tek-basina' | 'maddi-hasarla-birlikte';
+    kttTanzim: boolean;
+    sehirDisi: boolean;
+    kdvDahil: boolean;
+    kdvOrani: string;
+    riziko: 'sivil' | 'ticari-sinai-endustriyel';
+    travelEnabled: boolean;
+    km: string;
+    epdk: string;
+    fileCount: string;
+    highway: string;
+    bridge: string;
+    ferry: string;
+    parking: string;
+  };
+  deadline: {
+    ilDurumu: 'ayni' | 'farkli';
+    dosyaTuru: 'trafik' | 'diger-motorlu';
+  };
+  /** v0.6.x: Dosya Ek Bilgileri formu (UI bellek; yalnız Kaydet ile takip.json'a yazılır). */
+  extra: AiExtraForm;
+  /** Dosya Ek Bilgileri paneli açık mı (uzun olduğu için katlanabilir). */
+  extraOpen: boolean;
+  /** Kaydetme sürüyor mu. */
+  extraSaving: boolean;
+  /** v0.6.x: AI Taslak Üretici (Orchestrator v1) durumu. Sonuç yalnız UI'da; dosyaya yazılmaz. */
+  task: {
+    taskType: AiDraftTaskType;
+    userInstruction: string;
+    result: AiDraftTaskResult | null;
+    /** Son 5 sonuç (yalnız oturum belleği; kalıcı değil). */
+    history: AiDraftTaskResult[];
+    copyError: string;
+  };
+  /** v0.6.x: AI Değer Kaybı Yardımcısı UI durumu. Taslak seçimi + v2 form panel/önizleme/kaydetme meta. */
+  valueLoss: {
+    activeDraft: ValueLossDraftKind | null;
+    /** v2: Değer Kaybı Ek Bilgi Formu paneli açık mı. */
+    formOpen: boolean;
+    /** v2: Kaydetme öncesi diff önizlemesi açık mı. */
+    previewOpen: boolean;
+    /** v2: Kaydetme sürüyor mu. */
+    saving: boolean;
+    /** v5: hesap gerekçesi kopyalama hata/uyarı mesajı ('' = yok). */
+    copyError: string;
+  };
+  /** v0.6.x v2: Değer Kaybı Ek Bilgi Formu (UI bellek; yalnız onaylı Kaydet ile yazılır). */
+  vlForm: ValueLossForm;
+  /** v0.6.x v4: Parça Bazlı Değer Kaybı satırları (UI bellek; kayıt yalnız v2 onaylı akışla). */
+  vlParts: ValueLossPartFormRow[];
+}
+
+/** Boş (kaydedilmemiş) Dosya Ek Bilgileri formu. */
+export function emptyAiExtraForm(): AiExtraForm {
+  return {
+    claimType: 'belirsiz', vehicleGroup: 'belirsiz', hasValueLoss: 'belirsiz', cityScope: 'belirsiz',
+    insurerName: '', accidentDocumentType: 'belirsiz', alcoholDocumentStatus: 'belirsiz', driverLicenseStatus: 'belirsiz',
+    appointmentDateTime: '', firstInspectionDate: '', preliminaryReportDate: '', reportReadyDate: '',
+    vehicleDeliveredToService: 'belirsiz', vehicleDeliveredToServiceDate: '', repairStartedDate: '', repairCompletedDate: '', notes: ''
+  };
+}
 
 export type StatusBoardSort = 'dosya-az' | 'plate-az' | 'updated-desc' | 'durum';
 export type { AutoLaborPreviewFilter };
@@ -239,6 +419,8 @@ export const state: UiState = {
   autoLaborConfirmOpen: false,
   autoLaborSaveError: null,
   autoLaborReportSnapshot: null,
+  expertLearning: { preview: null, selectedIds: [], store: null, busy: false, message: null, error: null },
+  aiModePartSearch: { selectedRowNumber: null, mode: 'masked', generatedPrompt: '', pastedResponse: '', candidates: [], linkedByRow: {}, store: null, pendingDuplicate: null, storeFilter: 'all', storeSearch: '', sourcesExpanded: {}, applyResult: null, lastApplyUndo: null, restoreResult: null, backupList: null, history: null, backupRestoreResult: null, message: null },
   laborRowOverrides: {},
   partsAnalysis: null,
   partsAnalyzing: false,
@@ -251,6 +433,29 @@ export const state: UiState = {
   reportInvoiceError: '',
   reportInvoiceAiTesting: false,
   reportInvoiceAiTestResult: null,
+  aiHelpers: {
+    activeTool: 'mevzuat',
+    contextFolderPath: null,
+    userEdited: {},
+    mevzuatSearch: '',
+    mevzuatFilter: '',
+    mevzuatExpanded: {},
+    template: { sigortaTuru: 'trafik', degerKaybiDahil: false, agirVeyaTamHasar: false },
+    fee: {
+      kapsam: 'motorlu', brutHasar: '', vehicleClass: 'binek-hafif-ticari-motosiklet',
+      jobType: 'standart', degerKaybi: 'yok', kttTanzim: false, sehirDisi: false,
+      kdvDahil: false, kdvOrani: '20', riziko: 'sivil', travelEnabled: false,
+      km: '', epdk: '', fileCount: '1', highway: '', bridge: '', ferry: '', parking: ''
+    },
+    deadline: { ilDurumu: 'ayni', dosyaTuru: 'trafik' },
+    extra: emptyAiExtraForm(),
+    extraOpen: false,
+    extraSaving: false,
+    task: { taskType: 'case_summary', userInstruction: '', result: null, history: [], copyError: '' },
+    valueLoss: { activeDraft: null, formOpen: false, previewOpen: false, saving: false, copyError: '' },
+    vlForm: emptyValueLossForm(),
+    vlParts: []
+  },
   partsUserTerms: [],
   laborLearningEntries: [],
   laborLearningSearch: '',

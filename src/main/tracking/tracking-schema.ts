@@ -2,6 +2,7 @@ import type { ClaimType, TrackingFile } from '../../shared/types';
 import { CLAIM_TYPES, PRIORITIES, WORKFLOW_STATUSES } from '../../shared/workflow';
 import { normalizeHeavyDamageAssessmentRecord } from '../../shared/heavy-damage-rules';
 import { normalizeVehicleContext } from '../../shared/vehicle/vehicle-context';
+import { normalizeOptionalAiHelperContext } from '../../shared/ai-context/ai-helper-context-merge';
 
 const PRIORITY_SET = new Set(PRIORITIES);
 const WORKFLOW_STATUS_SET = new Set(WORKFLOW_STATUSES);
@@ -93,6 +94,10 @@ export function migrateTracking(value: unknown): TrackingFile | null {
   else delete tracking.heavyDamageAssessment;
   // v0.6.2: Araç bağlamı her zaman normalize bir nesne olur (eski dosyalar boş bağlamla açılır; alan-güncelleme yolu çalışır).
   tracking.vehicleContext = normalizeVehicleContext((tracking as unknown as Record<string, unknown>).vehicleContext);
+  // v0.6.x: AI Yardımcıları ek bağlamı yalnızca VARSA normalize edilir; YOKSA oluşturulmaz (geriye uyum).
+  const aiHelperContext = normalizeOptionalAiHelperContext((tracking as unknown as Record<string, unknown>).aiHelperContext);
+  if (aiHelperContext) tracking.aiHelperContext = aiHelperContext;
+  else delete tracking.aiHelperContext;
   tracking.audit = Array.isArray(tracking.audit) ? tracking.audit : [];
   return tracking;
 }

@@ -1,0 +1,132 @@
+[
+  {
+    "file": "00_SelectionWarning_preSelection.png",
+    "ok": true,
+    "note": "Secim ONCESI durum kaniti (uyarinin gorundugu hal)"
+  },
+  {
+    "file": "01_Ana_Sayfa_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "02_Dosyalar_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "03_Rapor_Fatura_Uyum_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "04_Mevzuat_AI_Yardimcilari_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "04_Mevzuat_AI_Yardimcilari_bottom.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "05_Klasorler_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "06_Operasyon_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "07_Evrak_Fotograf_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "08_Portal_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "09_Excel_Araclari_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "10_Agir_Hasar_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "11_Durum_Panosu_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "12_Ayarlar_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "12_Ayarlar_bottom.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "13_Mevzuat_AI_Deger_Kaybi_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "13_Mevzuat_AI_Deger_Kaybi_bottom.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "14_Mevzuat_Bilgi_Bankasi_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "14_Mevzuat_Bilgi_Bankasi_bottom.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "15_Excel_Iscilik_Dagitici_top.png",
+    "ok": true,
+    "note": "Excel Araclari icindeki dagitici (Excel secilmemis)"
+  },
+  {
+    "file": "16_Agir_Hasar_AI_On_Degerlendirme_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "17_Evrak_Fotograf_Thumbnail_View_top.png",
+    "ok": true,
+    "note": "fixture gorselleri sahte bayt (icerik bos gorunebilir)"
+  },
+  {
+    "file": "18_Dosya_Detay_top.png",
+    "ok": true,
+    "note": "Secili dosya calisma alani"
+  },
+  {
+    "file": "13_dark_Mevzuat_AI_Deger_Kaybi_dark_top.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "13_dark_Mevzuat_AI_Deger_Kaybi_dark_bottom.png",
+    "ok": true,
+    "note": ""
+  },
+  {
+    "file": "01_dark_Ana_Sayfa_dark_top.png",
+    "ok": true,
+    "note": ""
+  }
+]

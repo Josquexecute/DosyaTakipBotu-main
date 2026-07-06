@@ -22,6 +22,24 @@ import type {
   UiFilterPreferences
 } from '../shared/types';
 import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from '../shared/ipc-contract';
+import type { ExpertLearningApproveResult, ExpertLearningPreviewResponse, ExpertLearningStoreState } from '../shared/labor/expert-approved-learning-types';
+import { applyExpertPreview, applyExpertStore, clearExpertLearning, collectSelectedExpertEntries, findExpertPreviewItem, selectSafeExpertRows, toggleExpertRow } from './app/actions/expert-learning-actions';
+import { caseVehicleToLaborContext } from '../shared/labor/labor-vehicle-context-extractor';
+import { applyAiModeStore, buildAiModeApprovalEntry, clearAiModePartSearch, clearPendingDuplicate, generateAiModeBulkEmptyPrompt, generateAiModePrompt, linkAiModeCandidate, parseAiModeResponseAction, selectAiModeRow, setAiModeDataMode, setAiModeResponseText, setAiModeStoreFilter, setAiModeStoreSearch, setPendingDuplicate, toggleAiModeSources } from './app/actions/ai-mode-part-search-actions';
+import { findDuplicateAiModeCandidate, type AiModeCandidateFilter } from '../shared/labor/ai-mode-part-candidate-store';
+import { buildApplyToDColumnArg, applyAiModeApplyResult } from './app/actions/ai-mode-part-code-apply-actions';
+import { buildApplyConfirmMessage } from './app/components/ai-mode-part-code-apply-modal';
+import { buildRestoreArg, applyRestoreResult } from './app/actions/ai-mode-part-code-restore-actions';
+import { buildRestoreConfirmMessage } from './app/components/ai-mode-part-code-restore-panel';
+import { applyBackupList, removeBackupFromList } from './app/actions/ai-mode-part-code-backup-actions';
+import { applyHistoryList } from './app/actions/ai-mode-part-code-history-actions';
+import { applyBackupRestoreResult, buildBackupRestoreConfirmMessage, findBackupByPath } from './app/actions/ai-mode-part-code-backup-restore-actions';
+import type { AiModePartCandidateApproveResult, AiModePartCandidateStoreState } from '../shared/labor/ai-mode-part-candidate-store-types';
+import type { ApplyAiModePartCodeResult } from '../shared/labor/ai-mode-part-code-apply-types';
+import type { RestoreAiModePartCodeResult } from '../shared/labor/ai-mode-part-code-restore-types';
+import type { AiModeBackupDeleteResult, AiModeBackupListResult } from '../shared/labor/ai-mode-part-code-backup-types';
+import type { AiModePartCodeHistoryListResult } from '../shared/labor/ai-mode-part-code-history-types';
+import type { RestoreAiModeBackupResult } from '../shared/labor/ai-mode-part-code-backup-restore-types';
 import type { LaborCategory } from '../shared/labor-rules';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageDamageType, HeavyDamageRepairSeverity, HeavyDamageRowEdit } from '../shared/heavy-damage-types';
 import type { AiQueueHistoryEvent, AiTaskQueueSnapshot } from '../shared/ai/ai-queue-types';
@@ -34,6 +52,19 @@ import type { KnowledgeImportCommitInput, KnowledgeImportCommitResult, Knowledge
 import { applyKnowledgeImportApprovalDecision, buildKnowledgeImportCommitPlan, createKnowledgeImportApprovalState, isKnowledgeSourceFilter } from '../shared/knowledge';
 import { applyHeavyDamageEdits, generateHeavyDamageAssessmentNote, HEAVY_DAMAGE_FILTERS, type HeavyDamageFilter } from '../shared/heavy-damage-rules';
 import { renderApp } from './app/components/layout';
+import { handleAiHelperAction, handleAiHelperInput, syncAiHelpersContext } from './app/actions/ai-helper-actions';
+import { extraFormToInput, savedToExtraForm } from './app/utils/ai-extra-context-mapping';
+import { diffAiHelperContext, sanitizeAiHelperContext } from '../shared/ai-context/ai-helper-context-merge';
+import { valueLossFormToInput, preservedSnapshotFields } from './app/utils/value-loss-form-mapping';
+import { createSnapshotHistoryItem, appendSnapshotHistory } from '../shared/value-loss/value-loss-calculation-history';
+import { normalizeValueLossContext } from '../shared/value-loss/value-loss-context-normalizer';
+import { diffValueLossContext, buildValueLossSaveConfirmMessage } from '../shared/value-loss/value-loss-context-diff';
+import { refreshValueLossFormFromSaved } from './app/actions/value-loss-context-actions';
+import { calculateValueLoss } from '../shared/value-loss/value-loss-calculation-engine';
+import { getActiveValueLossCoefficientProvider } from '../shared/value-loss/value-loss-coefficients';
+import { buildValueLossCalculationCopyText } from '../shared/value-loss/value-loss-calculation-copy';
+import { buildValueLossCalculationSnapshot } from '../shared/value-loss/value-loss-calculation-snapshot';
+import { createValueLossFormFingerprint, buildValueLossInputSummary } from '../shared/value-loss/value-loss-form-fingerprint';
 import { getFilteredCases, getVirtualListTotalHeight, renderCaseVirtualRows } from './app/components/cases';
 import { statusBoardCases, statusBoardPageCount } from './app/components/status-board';
 import { formatMoney, laborWrittenTotal } from './app/components/detail';
@@ -553,7 +584,7 @@ function restoreScrollPositions(positions: Map<string, number>): void {
 // diğer operasyonel ekranlar (Operasyon, Özet, Evrak, Excel, Rücu, KTT, Ağır Hasar, Klasörler, Ana Sayfa) kilitlidir.
 // Durum Panosu da daima açıktır; oradan dosya seçimi (openCaseFromBoard) aktif seçim sayılır ve kilidi açar.
 // Otomatik son-klasör yükleme/geri-yükleme bu kilidi AÇMAZ; yalnız manuel seçim açar.
-const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'settings'];
+const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'ai-yardimcilari', 'settings'];
 
 function isTabAllowedNow(tab: DetailTab): boolean {
   return state.hasManualWorkingFolderSelection || TABS_ALLOWED_WHILE_FOLDER_LOCKED.includes(tab);
@@ -565,6 +596,7 @@ function markManualWorkingFolderSelection(): void {
 
 function render(): void {
   normalizeKnowledgeSelectionsForRender();
+  syncAiHelpersContext();
   const focusSnapshot = captureFocusedControl();
   // Bağlam (aktif sekme veya seçili dosya) değişmediyse scroll'u koru; değiştiyse bilinçli context
   // değişimidir, üstten başlaması normaldir.
@@ -636,7 +668,7 @@ function restoreFocusedControl(snapshot: FocusSnapshot | null): void {
 
 function stableSelectorFor(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): string | null {
   if (element.id) return `#${cssEscape(element.id)}`;
-  for (const attr of ['field', 'checklist', 'todoComplete', 'todoTitle', 'todoPriority', 'todoAssigned', 'todoDue', 'noteText', 'setting', 'settingInterval', 'userRename', 'listFilter', 'laborAmount', 'autoLaborAmount', 'autoLaborApprove', 'autoLaborReview', 'partCanonical', 'statusFilter', 'statusSort', 'statusResponsible', 'statusToggle', 'laborLearningFilter', 'learningCategory', 'learningReview', 'learningActive', 'learningReason', 'heavyRowCategory', 'heavyRowDamage', 'heavyRowSeverity', 'heavyRowScore', 'heavyRowReview', 'heavyRowStructural', 'heavyRowNote']) {
+  for (const attr of ['aih', 'field', 'checklist', 'todoComplete', 'todoTitle', 'todoPriority', 'todoAssigned', 'todoDue', 'noteText', 'setting', 'settingInterval', 'userRename', 'listFilter', 'laborAmount', 'autoLaborAmount', 'autoLaborApprove', 'autoLaborReview', 'partCanonical', 'statusFilter', 'statusSort', 'statusResponsible', 'statusToggle', 'laborLearningFilter', 'learningCategory', 'learningReview', 'learningActive', 'learningReason', 'heavyRowCategory', 'heavyRowDamage', 'heavyRowSeverity', 'heavyRowScore', 'heavyRowReview', 'heavyRowStructural', 'heavyRowNote']) {
     const value = element.dataset[attr];
     if (value !== undefined) return `[data-${camelToKebab(attr)}="${cssEscape(value)}"]`;
   }
@@ -798,6 +830,16 @@ function wireEvents(): void {
   document.addEventListener('input', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+    if (target.dataset.aih !== undefined) { handleAiHelperInput(target); render(); return; }
+    if (target instanceof HTMLSelectElement && target.dataset.aimodeRow !== undefined) {
+      selectAiModeRow(target.value ? Number(target.value) : null); render(); return;
+    }
+    if (target instanceof HTMLTextAreaElement && target.dataset.aimodeResponse !== undefined) {
+      setAiModeResponseText(target.value); return;
+    }
+    if (target instanceof HTMLInputElement && target.dataset.aimodeStoreSearch !== undefined) {
+      setAiModeStoreSearch(target.value); render(); return;
+    }
     if (target.id === 'global-search') {
       queueSearchUpdate(target.value);
       return;
@@ -912,6 +954,7 @@ function wireEvents(): void {
   document.addEventListener('change', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+    if (target.dataset.aih !== undefined) { handleAiHelperInput(target); render(); return; }
     if (target.dataset.setting || target.dataset.settingInterval || target.dataset.userRename) {
       void handleSettingsInputChange(target);
       return;
@@ -1135,6 +1178,13 @@ function wireEvents(): void {
 }
 
 async function handleAction(action: string, element?: HTMLElement): Promise<void> {
+  // v0.6.x: "Mevzuat & AI Yardımcıları" aksiyonları (salt-okunur UI; render caller'da).
+  if (action === 'aih-extra-save') { await saveAiExtraContextAction(); return; }
+  if (action === 'aih-vl-save') { await saveValueLossContextAction(); return; }
+  if (action === 'aih-vl-calc-copy') { await copyValueLossRationaleAction(); return; }
+  if (action === 'aih-vl-snapshot-save') { await saveValueLossSnapshotAction(); return; }
+  if (action === 'aih-task-copy') { await copyAiDraftAction(); return; }
+  if (action.startsWith('aih-')) { handleAiHelperAction(action, element); render(); return; }
   switch (action) {
     case 'scan': await scanNow(); break;
     case 'refresh-case': await refreshSelectedCase(); break;
@@ -1160,6 +1210,39 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'auto-labor-confirm-back': state.autoLaborConfirmOpen = false; render(); break;
     case 'auto-labor-save-cancel': state.autoLaborConfirmOpen = false; setToast('Kaydetme iptal edildi.', 'info'); render(); break;
     case 'auto-labor-clear': resetAutoLaborPreviewState(); render(); break;
+    case 'expert-learning-preview': await expertLearningPreviewAction(); break;
+    case 'expert-learning-toggle-row': toggleExpertRow(element?.dataset.id); render(); break;
+    case 'expert-learning-select-safe': selectSafeExpertRows(); render(); break;
+    case 'expert-learning-approve': await expertLearningApproveAction(); break;
+    case 'expert-learning-clear': clearExpertLearning(); render(); break;
+    case 'expert-learning-manage': await expertLearningManageAction(); break;
+    case 'expert-learning-deactivate': await expertLearningDeactivateAction(element?.dataset.id ?? ''); break;
+    case 'expert-learning-reactivate': await expertLearningReactivateAction(element?.dataset.id ?? ''); break;
+    case 'expert-learning-replace-dup': await expertLearningReplaceDuplicateAction(element?.dataset.id ?? ''); break;
+    case 'expert-learning-delete': await expertLearningDeleteAction(element?.dataset.id ?? ''); break;
+    case 'aimode-mode': setAiModeDataMode(element?.dataset.aimodeMode === 'full' ? 'full' : 'masked'); render(); break;
+    case 'aimode-generate': generateAiModePrompt(); render(); break;
+    case 'aimode-bulk-empty': generateAiModeBulkEmptyPrompt(); render(); break;
+    case 'aimode-copy': await aiModeCopyPromptAction(); break;
+    case 'aimode-parse': parseAiModeResponseAction(); render(); break;
+    case 'aimode-link': linkAiModeCandidate(Number(element?.dataset.aimodeIndex ?? -1)); render(); break;
+    case 'aimode-approve-store': await aiModeApproveStoreAction(Number(element?.dataset.aimodeIndex ?? -1)); break;
+    case 'aimode-store-manage': await aiModeStoreManageAction(); break;
+    case 'aimode-store-deactivate': await aiModeStoreSetActiveAction(element?.dataset.id ?? '', false); break;
+    case 'aimode-store-reactivate': await aiModeStoreSetActiveAction(element?.dataset.id ?? '', true); break;
+    case 'aimode-store-delete': await aiModeStoreDeleteAction(element?.dataset.id ?? ''); break;
+    case 'aimode-store-filter': setAiModeStoreFilter((element?.dataset.filter ?? 'all') as AiModeCandidateFilter); render(); break;
+    case 'aimode-store-toggle-sources': toggleAiModeSources(element?.dataset.id ?? ''); render(); break;
+    case 'aimode-replace-dup': await aiModeReplaceDuplicateAction(); break;
+    case 'aimode-replace-cancel': clearPendingDuplicate(); render(); break;
+    case 'aimode-apply-d': await aiModeApplyToDColumnAction(Number(element?.dataset.row ?? -1)); break;
+    case 'aimode-restore-last': await aiModeRestoreLastApplyAction(); break;
+    case 'aimode-backups-list': await aiModeBackupsListAction(); break;
+    case 'aimode-backup-delete': await aiModeBackupDeleteAction(element?.dataset.path ?? ''); break;
+    case 'aimode-backup-restore': await aiModeBackupRestoreAction(element?.dataset.path ?? ''); break;
+    case 'aimode-history-list': await aiModeHistoryListAction(); break;
+    case 'aimode-copy-path': await copyPathToClipboardAction(element?.dataset.path ?? ''); break;
+    case 'aimode-clear': clearAiModePartSearch(); render(); break;
     case 'heavy-damage-preview': await heavyDamagePreviewAction(); break;
     case 'heavy-damage-filter': setHeavyDamageFilter(element?.dataset.heavyDamageFilter); break;
     case 'heavy-damage-reset': resetHeavyDamagePreviewState(); render(); break;
@@ -1567,6 +1650,188 @@ async function testReportInvoiceAiAction(): Promise<void> {
   render();
 }
 
+// v0.6.x: "Dosya Ek Bilgileri"ni KULLANICI ONAYIYLA takip.json'a kaydeder (yalnız aiHelperContext).
+// Onay modalı değişen alanları gösterir; revision/writeId güvenli mutate kullanılır; başarısızsa "kaydedildi" denmez.
+async function saveAiExtraContextAction(): Promise<void> {
+  const item = selectedCase();
+  if (!item) { setToast('Önce bir dosya seçin.', 'warning'); render(); return; }
+  const input = extraFormToInput(state.aiHelpers.extra);
+  const saved = item.tracking.aiHelperContext ?? null;
+  const candidate = sanitizeAiHelperContext(input);
+  const diff = diffAiHelperContext(saved, candidate);
+  if (diff.length === 0) { setToast('Kaydedilecek değişiklik yok.', 'info'); render(); return; }
+  const lines = diff.map((d) => `• ${d.label}: ${d.oldLabel} → ${d.newLabel}`).join('\n');
+  const message = `Plaka: ${item.plate || '-'}\nDosya No: ${item.officeFileNo || item.dosyaNo || '-'}\n\nKaydedilecek alanlar:\n${lines}\n\nBu bilgiler AI Yardımcıları'nın önerilerini iyileştirmek için dosya bağlamına eklenecektir. Mevcut hasar tespit tutarı, evrak durumu veya dosya ana bilgileri otomatik değiştirilmez.`;
+  const ok = await confirmDialog(message, { title: 'Dosya Ek Bilgileri Kaydedilecek', confirmLabel: 'Kaydet', cancelLabel: 'Geri dön ve düzenle' });
+  if (!ok) return;
+  state.aiHelpers.extraSaving = true;
+  render();
+  const result = await window.hasarbotu.updateAiHelperContext<TrackingWriteResult>({
+    folderPath: item.folderPath,
+    allowClosedMutation: state.closedMutationUnlocks[item.folderPath] === true,
+    expectedRevision: item.revision,
+    expectedWriteId: item.tracking.metadata.writeId,
+    context: input
+  });
+  state.aiHelpers.extraSaving = false;
+  if (!result.ok) { reportOperationError(`${result.error.message} Kaydetme tamamlanmadı.`); return; }
+  if ('conflict' in result.data) {
+    setToast('Dosya bu sırada başka bir bilgisayarda değişti. Yenileyip tekrar deneyin. Kaydetme tamamlanmadı.', 'warning');
+    render();
+    return;
+  }
+  patchTrackingResult(item.folderPath, result.data.tracking);
+  state.aiHelpers.extra = savedToExtraForm(result.data.tracking.aiHelperContext ?? null);
+  setToast('Dosya ek bilgileri kaydedildi.', 'success');
+  await refreshDashboardOnly();
+  render();
+}
+
+// v0.6.x v2: Değer Kaybı Ek Bilgi Formu'nu KULLANICI ONAYIYLA kaydeder (yalnız aiHelperContext.valueLoss).
+// Onay modalı diff gösterir; revision/writeId güvenli mutate kullanılır; başarısızsa "kaydedildi" denmez.
+async function saveValueLossContextAction(): Promise<void> {
+  const item = selectedCase();
+  if (!item) { setToast('Önce bir dosya seçin.', 'warning'); render(); return; }
+  const saved = item.tracking.aiHelperContext?.valueLoss ?? null;
+  // v5/v6: normal kayıt mevcut özeti VE geçmişi KORUR (yalnız kendi onaylı aksiyonlarıyla değişirler).
+  const input = {
+    ...valueLossFormToInput(state.aiHelpers.vlForm, state.aiHelpers.vlParts),
+    ...preservedSnapshotFields(saved)
+  };
+  const candidate = normalizeValueLossContext(input);
+  const diff = diffValueLossContext(saved, candidate);
+  if (diff.length === 0) { setToast('Kaydedilecek değişiklik yok.', 'info'); render(); return; }
+  const header = `Plaka: ${item.plate || '-'}\nDosya No: ${item.officeFileNo || item.dosyaNo || '-'}\n\n`;
+  const ok = await confirmDialog(header + buildValueLossSaveConfirmMessage(diff), {
+    title: 'Değer Kaybı Ek Bilgileri Kaydedilecek', confirmLabel: 'Onaylıyorum, kaydet', cancelLabel: 'Geri dön ve düzenle'
+  });
+  if (!ok) return;
+  state.aiHelpers.valueLoss.saving = true;
+  render();
+  const result = await window.hasarbotu.updateValueLossContext<TrackingWriteResult>({
+    folderPath: item.folderPath,
+    allowClosedMutation: state.closedMutationUnlocks[item.folderPath] === true,
+    expectedRevision: item.revision,
+    expectedWriteId: item.tracking.metadata.writeId,
+    valueLoss: input
+  });
+  state.aiHelpers.valueLoss.saving = false;
+  if (!result.ok) { reportOperationError(`${result.error.message} Kaydetme tamamlanmadı.`); return; }
+  if ('conflict' in result.data) {
+    setToast('Dosya bu sırada başka bir bilgisayarda değişti. Yenileyip tekrar deneyin. Kaydetme tamamlanmadı.', 'warning');
+    render();
+    return;
+  }
+  patchTrackingResult(item.folderPath, result.data.tracking);
+  refreshValueLossFormFromSaved(result.data.tracking.aiHelperContext?.valueLoss ?? null);
+  setToast('Değer kaybı ek bilgileri kaydedildi.', 'success');
+  await refreshDashboardOnly();
+  render();
+}
+
+// v0.6.x v5: mevcut form verisinden ön hesap sonucunu üretir (render ile aynı saf yol; yazma YOK).
+function currentValueLossCalcResult() {
+  const candidate = normalizeValueLossContext(valueLossFormToInput(state.aiHelpers.vlForm, state.aiHelpers.vlParts));
+  return calculateValueLoss(candidate, getActiveValueLossCoefficientProvider());
+}
+
+// v0.6.x v5: hesap gerekçesini panoya kopyalar (mail/rapor üretimi YOK; salt metin).
+async function copyValueLossRationaleAction(): Promise<void> {
+  const text = buildValueLossCalculationCopyText(currentValueLossCalcResult());
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); copied = true; }
+  } catch { copied = false; }
+  if (copied) {
+    state.aiHelpers.valueLoss.copyError = '';
+    setToast('Hesap gerekçesi panoya kopyalandı.', 'success');
+    render();
+    return;
+  }
+  state.aiHelpers.valueLoss.copyError = 'Otomatik kopyalama yapılamadı; aşağıdaki metni seçip (Ctrl+C) kopyalayın.';
+  render();
+  const area = document.getElementById('vl-calc-copy-text');
+  if (area instanceof HTMLTextAreaElement) { area.focus(); area.select(); }
+}
+
+// v0.6.x v5: ön hesap ÖZETİNİ kullanıcı onayıyla kaydeder — YALNIZ aiHelperContext.valueLoss.calculationSnapshot
+// alanı güncellenir (form alanları/parça satırları mevcut haliyle korunur); otomatik kayıt YOKTUR.
+async function saveValueLossSnapshotAction(): Promise<void> {
+  const item = selectedCase();
+  if (!item) { setToast('Önce bir dosya seçin.', 'warning'); render(); return; }
+  const saved = item.tracking.aiHelperContext?.valueLoss ?? null;
+  // v5.1 sıkılaştırma: dar-kapsam sözü TUTULUR — özet kaydı form alanlarını ASLA yazmaz.
+  // Formda kaydedilmemiş değişiklik varsa önce v2 form kaydı istenir (özet, kayıtlı veriyle tutarlı kalır).
+  const formCandidate = normalizeValueLossContext({
+    ...valueLossFormToInput(state.aiHelpers.vlForm, state.aiHelpers.vlParts),
+    ...preservedSnapshotFields(saved)
+  });
+  if (diffValueLossContext(saved, formCandidate).length > 0) {
+    setToast('Formda kaydedilmemiş değişiklik var. Önce "Kaydet (onay istenir)" ile formu kaydedin; ön hesap özeti yalnızca kayıtlı verilerle kaydedilebilir.', 'warning');
+    render();
+    return;
+  }
+  const calc = currentValueLossCalcResult();
+  const savedAt = new Date().toISOString();
+  // v8: özet, KAYITLI form verisinin deterministik parmak iziyle (veri sürümü) ilişkilendirilir.
+  const fingerprint = { inputFingerprint: createValueLossFormFingerprint(formCandidate), inputSummary: buildValueLossInputSummary(formCandidate) };
+  const snapshot = buildValueLossCalculationSnapshot(calc, savedAt, fingerprint);
+  // v6: onaylı kayıt hem güncel özeti hem geçmişi (en yeni başta, en fazla 5) günceller.
+  const history = appendSnapshotHistory(saved?.calculationSnapshotHistory, createSnapshotHistoryItem(snapshot, savedAt, saved?.calculationSnapshotHistory ?? []));
+  const input = { ...(saved ?? {}), calculationSnapshot: snapshot, calculationSnapshotHistory: history };
+  const diff = diffValueLossContext(saved, normalizeValueLossContext(input));
+  if (diff.length === 0) { setToast('Kaydedilecek değişiklik yok.', 'info'); render(); return; }
+  const scopeNote = 'Bu özet, mevcut kayıtlı değer kaybı form verileriyle (veri sürümü) ilişkilendirilecektir.\nBu işlem yalnızca aiHelperContext.valueLoss.calculationSnapshot ve calculationSnapshotHistory alanlarını güncelleyecektir.';
+  const amountNote = calc.status === 'calculated'
+    ? 'Özet, ön hesap niteliğindeki tutarı içerir; bağlayıcı sonuç değildir.'
+    : 'Ödenebilir tutar hesaplanmadı; özet yalnız TANI amaçlı kaydedilecektir.';
+  const lines = diff.map((d) => `• ${d.label}: ${d.oldLabel} → ${d.newLabel}`).join('\n');
+  const message = `Plaka: ${item.plate || '-'}\nDosya No: ${item.officeFileNo || item.dosyaNo || '-'}\n\nÖn hesap özeti kaydedilecek.\n\nDeğişen alanlar:\n${lines}\n\n${amountNote}\n${scopeNote}\nDevam edilsin mi?`;
+  const ok = await confirmDialog(message, { title: 'Ön Hesap Özeti Kaydedilecek', confirmLabel: 'Onaylıyorum, kaydet', cancelLabel: 'Geri dön' });
+  if (!ok) return;
+  state.aiHelpers.valueLoss.saving = true;
+  render();
+  const result = await window.hasarbotu.updateValueLossContext<TrackingWriteResult>({
+    folderPath: item.folderPath,
+    allowClosedMutation: state.closedMutationUnlocks[item.folderPath] === true,
+    expectedRevision: item.revision,
+    expectedWriteId: item.tracking.metadata.writeId,
+    valueLoss: input
+  });
+  state.aiHelpers.valueLoss.saving = false;
+  if (!result.ok) { reportOperationError(`${result.error.message} Kaydetme tamamlanmadı.`); return; }
+  if ('conflict' in result.data) {
+    setToast('Dosya bu sırada başka bir bilgisayarda değişti. Yenileyip tekrar deneyin. Kaydetme tamamlanmadı.', 'warning');
+    render();
+    return;
+  }
+  patchTrackingResult(item.folderPath, result.data.tracking);
+  refreshValueLossFormFromSaved(result.data.tracking.aiHelperContext?.valueLoss ?? null);
+  setToast('Ön hesap özeti kaydedildi.', 'success');
+  await refreshDashboardOnly();
+  render();
+}
+
+// v0.6.x: AI taslağını panoya kopyalar. Clipboard yoksa/başarısızsa metni seçilebilir textarea olarak sunar.
+async function copyAiDraftAction(): Promise<void> {
+  const result = state.aiHelpers.task.result;
+  if (!result) { setToast('Kopyalanacak taslak yok.', 'warning'); render(); return; }
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(result.draftText); copied = true; }
+  } catch { copied = false; }
+  if (copied) {
+    state.aiHelpers.task.copyError = '';
+    setToast('Taslak panoya kopyalandı.', 'success');
+    render();
+    return;
+  }
+  state.aiHelpers.task.copyError = 'Otomatik kopyalama yapılamadı; aşağıdaki metni seçip (Ctrl+C) kopyalayın.';
+  render();
+  const area = document.getElementById('aih-task-draft');
+  if (area instanceof HTMLTextAreaElement) { area.focus(); area.select(); }
+}
+
 function clearReportInvoice(): void {
   state.reportInvoiceReportPick = null;
   state.reportInvoiceInvoicePick = null;
@@ -1950,7 +2215,9 @@ function openAutoLaborConfirm(): void {
 async function autoLaborPreviewAction(): Promise<void> {
   if (state.autoLaborSaving) return;
   setToast('Excel seçiliyor ve tüm satırlar analiz ediliyor…', 'info');
-  const result = await window.hasarbotu.autoLaborPreview<AutoLaborPreview>();
+  // v3.4: aktif dosyanın araç bilgisi (varsa) eksper eşleşmesine öncelikli bağlam olarak geçirilir.
+  const caseVehicle = caseVehicleToLaborContext(selectedCase()?.tracking?.vehicleContext);
+  const result = await window.hasarbotu.autoLaborPreview<AutoLaborPreview>(caseVehicle);
   if (!result.ok) {
     if (!/iptal/i.test(result.error.message)) reportOperationError(result.error.message);
     return;
@@ -1970,6 +2237,232 @@ async function autoLaborPreviewAction(): Promise<void> {
   state.autoLaborConfirmOpen = false;
   const s = result.data.summary;
   setToast(`AI dağıtım hazır: ${s.processed} satır işlendi • ${s.highConfidence} yüksek güven • ${s.needsReview} kontrol gerekli.`, 'success');
+  render();
+}
+
+// === v3.5 Google AI Mode parça araştırma köprüsü (MANUEL; otomatik Google isteği/scraping YOK) ===
+async function aiModeCopyPromptAction(): Promise<void> {
+  const text = state.aiModePartSearch.generatedPrompt;
+  if (!text) { reportOperationError('Önce bir prompt hazırlayın.'); return; }
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); copied = true; }
+  } catch { copied = false; }
+  if (!copied) {
+    const area = document.createElement('textarea');
+    area.value = text; document.body.appendChild(area); area.select();
+    try { copied = document.execCommand('copy'); } catch { copied = false; }
+    area.remove();
+  }
+  setToast(copied ? 'Prompt panoya kopyalandı. Google AI Mode\'a yapıştırabilirsiniz.' : 'Kopyalanamadı; promptu elle seçip kopyalayın.', copied ? 'success' : 'warning');
+}
+
+// === v3.8 Seçili AI Mode adayını D sütununa yazma (yalnız D hücresi; kullanıcı açık onayı ŞART) ===
+async function aiModeApplyToDColumnAction(rowNumber: number): Promise<void> {
+  const preview = state.autoLaborPreview;
+  const row = preview?.rows.find((r) => r.rowNumber === rowNumber);
+  if (!preview || !row) return;
+  const arg = buildApplyToDColumnArg(row);
+  if (!arg) { reportOperationError('Bu satırda yazılabilir AI Mode adayı yok.'); return; }
+  const confirmed = await confirmDialog(buildApplyConfirmMessage(state, row), { title: 'Parça kodunu D sütununa yaz', confirmLabel: 'Onaylıyorum, D sütununa yaz', danger: true });
+  if (!confirmed) return;
+  const result = await window.hasarbotu.aiModePartCandidatesApplyToDColumn<ApplyAiModePartCodeResult>(arg);
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyAiModeApplyResult(result.data);
+  setToast(result.data.message, 'success');
+  render();
+}
+
+// === v3.11 D kodu yedek yönetimi + işlem geçmişi (yalnız yerel; toplu silme/restore YOK) ===
+async function copyPathToClipboardAction(text: string): Promise<void> {
+  if (!text) return;
+  let copied = false;
+  try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); copied = true; } } catch { copied = false; }
+  if (!copied) { const a = document.createElement('textarea'); a.value = text; document.body.appendChild(a); a.select(); try { copied = document.execCommand('copy'); } catch { copied = false; } a.remove(); }
+  setToast(copied ? 'Yol panoya kopyalandı.' : 'Kopyalanamadı; yolu elle seçip kopyalayın.', copied ? 'success' : 'warning');
+}
+
+async function aiModeBackupsListAction(): Promise<void> {
+  const filePath = state.autoLaborPreview?.filePath;
+  if (!filePath) { reportOperationError('Önce bir Excel önizlemesi oluşturun.'); return; }
+  const result = await window.hasarbotu.aiModePartCodeBackupsList<AiModeBackupListResult>({ filePath });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyBackupList(result.data); render();
+}
+
+async function aiModeBackupDeleteAction(backupPath: string): Promise<void> {
+  const filePath = state.autoLaborPreview?.filePath;
+  if (!backupPath || !filePath) return;
+  if (!(await confirmDialog(`Bu yedek dosya kalıcı olarak silinecek:\n${backupPath}\nDevam edilsin mi?`, { title: 'Yedek dosyayı sil', confirmLabel: 'Sil', danger: true }))) return;
+  const result = await window.hasarbotu.aiModePartCodeBackupsDelete<AiModeBackupDeleteResult>({ filePath: backupPath, originalExcelPath: filePath });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  removeBackupFromList(backupPath);
+  setToast(result.data.message, 'success'); render();
+}
+
+async function aiModeHistoryListAction(): Promise<void> {
+  const result = await window.hasarbotu.aiModePartCodeHistoryList<AiModePartCodeHistoryListResult>();
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyHistoryList(result.data); render();
+}
+
+async function aiModeBackupRestoreAction(backupPath: string): Promise<void> {
+  const backup = findBackupByPath(backupPath);
+  if (!backup) { reportOperationError('Seçili yedek bulunamadı.'); return; }
+  if (!(await confirmDialog(buildBackupRestoreConfirmMessage(backup), { title: 'Bu yedekten geri yükle', confirmLabel: 'Onaylıyorum, bu yedekten geri yükle', danger: true }))) return;
+  const kind = backup.backupKind === 'before_restore' ? 'before_restore' : 'before_d_code_apply';
+  const result = await window.hasarbotu.aiModePartCodeBackupsRestore<RestoreAiModeBackupResult>({ filePath: backup.originalExcelPath, backupPath: backup.filePath, backupKind: kind });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyBackupRestoreResult(result.data);
+  setToast(result.data.ok ? 'Yedekten geri yükleme tamamlandı.' : result.data.message, result.data.ok ? 'success' : 'warning');
+  render();
+}
+
+// === v3.10 Son D sütunu yazımını yedekten geri alma (kullanıcı açık onayı ŞART; toplu restore YOK) ===
+async function aiModeRestoreLastApplyAction(): Promise<void> {
+  const arg = buildRestoreArg();
+  if (!arg) { reportOperationError('Geri alınabilecek son D sütunu işlemi bulunamadı.'); return; }
+  const confirmed = await confirmDialog(buildRestoreConfirmMessage(state), { title: 'Son D kodu yazımını geri al', confirmLabel: 'Onaylıyorum, son D kodu yazımını geri al', danger: true });
+  if (!confirmed) return;
+  const result = await window.hasarbotu.aiModePartCandidatesRestoreLastApply<RestoreAiModePartCodeResult>(arg);
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyRestoreResult(result.data);
+  setToast(result.data.ok ? 'Son D kodu yazımı geri alındı.' : result.data.message, result.data.ok ? 'success' : 'warning');
+  render();
+}
+
+// === v3.6 Onaylı AI Mode parça kodu aday havuzu (yerel; Excel'e/D sütununa yazma YOK) ===
+async function aiModeApproveStoreAction(index: number): Promise<void> {
+  const entry = buildAiModeApprovalEntry(index);
+  if (!entry) { reportOperationError('Aday/satır bulunamadı veya aday parça kodu boş.'); return; }
+  if (!(await confirmDialog('Bu parça kodu adayı yerel aday havuzuna kaydedilecek. Excel\'e yazılmayacak. Sonraki işçilik önizlemelerinde yalnız evidence/öneri olarak kullanılacaktır. Devam edilsin mi?', { title: 'Aday havuzuna kaydet', confirmLabel: 'Onayla ve Kaydet' }))) return;
+  const result = await window.hasarbotu.aiModePartCandidatesApprove<AiModePartCandidateApproveResult>([entry]);
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyAiModeStore(result.data);
+  if (result.data.added === 0 && result.data.skippedDuplicates > 0) {
+    const existing = findDuplicateAiModeCandidate(entry, result.data.entries);
+    if (existing) {
+      setPendingDuplicate(entry, existing);
+      setToast('Bu aday için aktif bir kayıt zaten var. İsterseniz eski kaydı pasifleştirip yeni adayı kaydedebilirsiniz.', 'info');
+      render(); return;
+    }
+  }
+  setToast(result.data.added ? 'Aday, yerel havuza kaydedildi (Excel\'e yazılmadı).' : 'Bu aday zaten kayıtlıydı (atlandı).', result.data.added ? 'success' : 'info');
+  render();
+}
+
+async function aiModeReplaceDuplicateAction(): Promise<void> {
+  const pd = state.aiModePartSearch.pendingDuplicate;
+  if (!pd) return;
+  if (!(await confirmDialog('Bu aday için aktif bir kayıt zaten var. Eski kayıt silinmeyecek, sadece pasifleştirilecek. Yeni aday aktif kayıt olarak yerel aday havuzuna eklenecek. Excel\'e yazılmayacak. Devam edilsin mi?', { title: 'Duplicate aday yenileme', confirmLabel: 'Eskiyi pasifleştir + yeniyi kaydet' }))) return;
+  const result = await window.hasarbotu.aiModePartCandidatesReplaceDuplicate<AiModePartCandidateApproveResult>({ entry: pd.newEntry, duplicateId: pd.existing.id });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyAiModeStore(result.data);
+  clearPendingDuplicate();
+  setToast('Eski kayıt pasifleştirildi, yeni aday aktif edildi (Excel\'e yazılmadı).', 'success');
+  render();
+}
+
+async function aiModeStoreManageAction(): Promise<void> {
+  const result = await window.hasarbotu.aiModePartCandidatesList<AiModePartCandidateStoreState>();
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyAiModeStore(result.data); render();
+}
+
+async function aiModeStoreSetActiveAction(id: string, active: boolean): Promise<void> {
+  if (!id) return;
+  const result = active
+    ? await window.hasarbotu.aiModePartCandidatesReactivate<AiModePartCandidateStoreState>({ id })
+    : await window.hasarbotu.aiModePartCandidatesDeactivate<AiModePartCandidateStoreState>({ id });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyAiModeStore(result.data);
+  setToast(active ? 'Aday yeniden aktifleştirildi.' : 'Aday pasifleştirildi.', active ? 'success' : 'info');
+  render();
+}
+
+async function aiModeStoreDeleteAction(id: string): Promise<void> {
+  if (!id) return;
+  if (!(await confirmDialog('Bu onaylı parça kodu adayını silmek istiyor musunuz?', { title: 'Aday kaydını sil', confirmLabel: 'Sil', danger: true }))) return;
+  const result = await window.hasarbotu.aiModePartCandidatesDelete<AiModePartCandidateStoreState>({ id });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyAiModeStore(result.data);
+  setToast('Aday kaydı silindi.', 'info'); render();
+}
+
+// === v3.2 Eksper Onaylı İşçilikten Öğren akışı (preview-first; Excel'e otomatik yazma YOK) ===
+async function expertLearningPreviewAction(): Promise<void> {
+  if (state.expertLearning.busy) return;
+  state.expertLearning.busy = true; render();
+  const result = await window.hasarbotu.expertLearningPreviewExcel<ExpertLearningPreviewResponse>();
+  state.expertLearning.busy = false;
+  if (!result.ok) {
+    if (!/iptal/i.test(result.error.message)) reportOperationError(result.error.message);
+    render(); return;
+  }
+  applyExpertPreview(result.data);
+  setToast(`Eksper dosyası analiz edildi: ${result.data.items.length} öğrenilebilir satır.`, 'success');
+  render();
+}
+
+async function expertLearningApproveAction(): Promise<void> {
+  if (state.expertLearning.busy) return;
+  const candidates = collectSelectedExpertEntries();
+  if (candidates.length === 0) { reportOperationError('Önce onaylanacak en az bir satır seçin.'); return; }
+  state.expertLearning.busy = true; render();
+  const result = await window.hasarbotu.expertLearningApprove<ExpertLearningApproveResult>(candidates);
+  state.expertLearning.busy = false;
+  if (!result.ok) { reportOperationError(result.error.message); render(); return; }
+  applyExpertStore(result.data);
+  clearExpertLearning();
+  const dup = result.data.skippedDuplicates ? ` ${result.data.skippedDuplicates} satır zaten kayıtlıydı (atlandı).` : '';
+  setToast(`${result.data.added} eksper öğrenmesi kaydedildi.${dup}`, 'success');
+  render();
+}
+
+async function expertLearningManageAction(): Promise<void> {
+  const result = await window.hasarbotu.expertLearningList<ExpertLearningStoreState>();
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyExpertStore(result.data);
+  render();
+}
+
+async function expertLearningDeactivateAction(id: string): Promise<void> {
+  if (!id) return;
+  const result = await window.hasarbotu.expertLearningDeactivate<ExpertLearningStoreState>({ id });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyExpertStore(result.data);
+  setToast('Öğrenme kaydı pasifleştirildi.', 'info');
+  render();
+}
+
+async function expertLearningReplaceDuplicateAction(id: string): Promise<void> {
+  if (!id) return;
+  const item = findExpertPreviewItem(id);
+  if (!item || !item.duplicateOfId) { reportOperationError('Yenilenecek mevcut kayıt bulunamadı.'); return; }
+  if (!(await confirmDialog('Bu parça/işlem/araç bağlamında aktif eksper öğrenme kaydı zaten var.\nEski kaydı pasifleştirip bu satırı yeni aktif öğrenme kaydı olarak eklemek istiyor musunuz?\nBu işlem Excel\'e yazmaz; eski kayıt silinmez.', { title: 'Eksper öğrenme kaydını yenile', confirmLabel: 'Eskiyi pasifleştir + yeniyi öğren' }))) return;
+  const result = await window.hasarbotu.expertLearningReplaceDuplicate<ExpertLearningApproveResult>({ entry: item.derivedEntry, duplicateId: item.duplicateOfId });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyExpertStore(result.data);
+  setToast('Eski kayıt pasifleştirildi, yeni onaylı kayıt aktif edildi.', 'success');
+  render();
+}
+
+async function expertLearningReactivateAction(id: string): Promise<void> {
+  if (!id) return;
+  const result = await window.hasarbotu.expertLearningReactivate<ExpertLearningStoreState>({ id });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyExpertStore(result.data);
+  setToast('Öğrenme kaydı yeniden aktifleştirildi.', 'success');
+  render();
+}
+
+async function expertLearningDeleteAction(id: string): Promise<void> {
+  if (!id) return;
+  if (!(await confirmDialog('Bu eksper öğrenme kaydını silmek istiyor musunuz?', { title: 'Öğrenme kaydını sil', confirmLabel: 'Sil', danger: true }))) return;
+  const result = await window.hasarbotu.expertLearningDelete<ExpertLearningStoreState>({ id });
+  if (!result.ok) { reportOperationError(result.error.message); return; }
+  applyExpertStore(result.data);
+  setToast('Öğrenme kaydı silindi.', 'info');
   render();
 }
 

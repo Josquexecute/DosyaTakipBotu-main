@@ -8,6 +8,7 @@ import { renderHome } from './home';
 import { renderFolders } from './folders';
 import { renderStatusBoard } from './status-board';
 import { renderReportInvoicePanel } from './report-invoice';
+import { renderAiHelpers } from './ai-helpers';
 import { APP_VERSION } from '../../../shared/constants';
 import { icon } from '../icons';
 
@@ -42,6 +43,7 @@ export function renderApp(state: UiState): string {
       ${navItem('dashboard', 'Ana Sayfa', 'home', activePage === 'home', folderLocked)}
       ${navItem('folder', 'Dosyalar', 'dosyalar', activePage === 'dosyalar', false)}
       ${navItem('document', 'Rapor / Fatura Uyum', 'rapor-fatura', activePage === 'rapor-fatura', false)}
+      ${navItem('ai', 'Mevzuat & AI Yardımcıları', 'ai-yardimcilari', activePage === 'ai-yardimcilari', false)}
       <div class="nav-section-label">İş Akışı</div>
       ${navItem('details', 'Klasörler', 'klasorler', activePage === 'klasorler', folderLocked)}
       ${navItem('operation', 'Operasyon', 'operasyon', activePage === 'operasyon', folderLocked)}
@@ -66,7 +68,7 @@ export function renderApp(state: UiState): string {
     <header class="top-app-bar">
       <div class="brand-block">
         <div class="brand-title">HasarBotu v${escapeHtml(APP_VERSION)}</div>
-        <div class="brand-subtitle">${escapeHtml(selected?.plate ?? 'Baran Global Ekspertiz')} ${selected ? '• ' + escapeHtml(selected.workflowStatus) : '• Operasyon durumu'}</div>
+        <div class="brand-subtitle">${selected && !state.hasManualWorkingFolderSelection ? 'Önizleme: ' : ''}${escapeHtml(selected?.plate ?? 'Baran Global Ekspertiz')} ${selected ? '• ' + escapeHtml(selected.workflowStatus) : '• Operasyon durumu'}</div>
       </div>
       <button class="root-chip" data-action="choose-root" title="${escapeHtml(shownRootPath)}">${icon('folder')}<span>${escapeHtml(shownRootPath)}</span></button>
       <div class="top-search"><span>${icon('search')}</span><input id="global-search" value="${escapeHtml(state.search)}" placeholder="Dosya, plaka ara..." /></div>
@@ -102,6 +104,7 @@ function renderPage(state: UiState, page: DetailTab): string {
     case 'klasorler': return renderFolders(state);
     case 'durum': return renderStatusBoard(state);
     case 'rapor-fatura': return renderReportInvoicePanel(state);
+    case 'ai-yardimcilari': return renderAiHelpers(state);
     case 'issues': return renderIssuesPage(state);
     case 'operasyon':
     case 'evrak':
@@ -164,7 +167,7 @@ function navItem(iconName: string, label: string, tab: string, active: boolean, 
 // v0.6.0 UI-stability: Kilitliyken Dosyalar ekranında net yönlendirme metni gösterir.
 function renderWorkingFolderGateHint(state: UiState): string {
   if (state.hasManualWorkingFolderSelection) return '';
-  return `<div class="working-folder-gate-hint">${icon('folder')}<span>Devam etmek için önce Dosyalar bölümünden bir çalışma klasörü/dosyası seçiniz. Seçim yapılmadan diğer ekranlar açılmaz.</span></div>`;
+  return `<div class="working-folder-gate-hint">${icon('folder')}<span>Devam etmek için önce Dosyalar bölümünden işlem yapılacak dosyayı seçin. Üstte görünen otomatik bağlam önizlemesi işlem seçimi sayılmaz; seçim yapılmadan diğer ekranlar açılmaz.</span></div>`;
 }
 
 function renderSettingsWorkspace(state: UiState, toastClass: string): string {

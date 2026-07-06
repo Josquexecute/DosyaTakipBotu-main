@@ -45,6 +45,7 @@
     "release:hash": "node scripts/release-hash.mjs",
     "release:notes": "node scripts/release-notes.mjs",
     "test:behavior": "node scripts/behavior-regression-tests.mjs",
+    "test:dev-harness": "node scripts/dev-harness-audit.mjs",
     "release:candidate-check": "node scripts/production-candidate-check.mjs",
     "release:dry-run": "node scripts/release-dry-run.mjs",
     "release:hash:ps": "powershell -ExecutionPolicy Bypass -File scripts/release-hash.ps1",
