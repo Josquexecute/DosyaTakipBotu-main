@@ -1,5 +1,26 @@
 # HasarBotu — Final Build Paket Raporu (2026-07-06)
 
+> **EN GÜNCEL: FINAL CANDIDATE** — `release/HasarBotu-Final-Candidate-20260706/`.
+> Kaynak donduruldu (`FINAL_SOURCE_FREEZE_DECISION.md`: "Final source freeze yapılabilir.");
+> yerel git deposu başlatıldı, `v0.6.4-final-candidate` etiketi atıldı (remote yok → push/
+> release-draft manuel adım olarak belgelendi). Smoke test kullanıcı/ofis sahibi kararıyla
+> kabul edildi (adım-adım form yürütülmedi); bilinen P0/P1 yok. İçerik: scroll P1 + P2 UX +
+> bilgi rozetleri (behavior 1501). Final dağıtım ofis kullanım onayına bağlıdır; gerçek
+> kullanımdan önce Ayarlar'dan gerçek çalışma klasörü seçilmelidir. Aşağıdaki eski paketler
+> geçersizdir.
+
+> **(ARŞİV) Scroll/P2 rebuild paketi:** `release/HasarBotu-RC1-After-Scroll-P2-20260706/` — scroll P1
+> fix'i + bağlam-önizlemesi P2 netleştirmesini İÇERİR (behavior 1497). Etiket: **"RC1 build
+> artifact after scroll/P2 fixes — final office approval pending"**. Aşağıdaki eski paket
+> (`HasarBotu-RC1-20260706/`, fix ÖNCESİ build) bu rebuild ile GEÇERSİZ KILINMIŞTIR — final
+> release DEĞİLDİR; gerçek smoke test hâlâ bekliyor. Smoke testten ÖNCE kullanıcı Ayarlar'dan
+> gerçek çalışma klasörünü seçmeli (`.fixtures\2026` kullanılmamalı). Ayrıntı: yeni paketin
+> `RELEASE_MANIFEST.md` dosyası.
+
+---
+
+## (ARŞİV) İlk RC1 paketi — scroll fix ÖNCESİ (geçersiz)
+
 > Paket etiketi: **RC1 build artifact — final office approval pending** (smoke test formu boş).
 > Çıktılar YEREL: `release/HasarBotu-RC1-20260706/`. Hiçbir şey yüklenmedi/yayınlanmadı.
 

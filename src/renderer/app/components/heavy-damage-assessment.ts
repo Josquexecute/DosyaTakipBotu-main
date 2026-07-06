@@ -12,6 +12,7 @@ import {
 } from '../../../shared/heavy-damage-rules';
 import { escapeHtml } from '../validation';
 import { icon } from '../icons';
+import { infoTip } from './info-tip';
 import type { VehicleContext } from '../../../shared/vehicle/vehicle-context';
 import { vehicleContextForAi } from '../../../shared/vehicle/vehicle-context';
 
@@ -52,7 +53,7 @@ export function renderHeavyDamageAssessment(item: CaseIndexItem, state: UiState)
         <label>Hasar tutarı
           <input id="heavy-damage-repair-cost" type="number" min="0" step="100" value="${escapeHtml(state.heavyDamageRepairCost)}" placeholder="TL" />
         </label>
-        <label>Rayiç bedel
+        <label>Rayiç bedel${infoTip('Aracın hasar öncesi 2. el piyasa değeri (TL). Emsal ilan/kasko değer listesinden belirlenir; hasar/rayiç oranını etkiler.')}
           <input id="heavy-damage-market-value" type="number" min="0" step="100" value="${escapeHtml(state.heavyDamageMarketValue)}" placeholder="TL" />
         </label>
       </div>
@@ -144,7 +145,7 @@ function renderFilters(state: UiState, assessment: HeavyDamageAssessmentRecord):
 function renderAssessmentRow(row: HeavyDamageAssessmentRow): string {
   const guideOptions = heavyDamageGuideOptions().map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === row.guideCategory ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('');
   const structuralToggle = row.guideCategory === 'firewall' || row.structuralConfirmationRequired
-    ? `<label class="auto-labor-mini-check structural-confirm"><input type="checkbox" data-heavy-row-structural="${escapeHtml(row.id)}" ${row.structuralConfirmed ? 'checked' : ''}/> <small>Yapısal sac/firewall teyit edildi</small></label>`
+    ? `<label class="auto-labor-mini-check structural-confirm"><input type="checkbox" data-heavy-row-structural="${escapeHtml(row.id)}" ${row.structuralConfirmed ? 'checked' : ''}/> <small>Yapısal sac/firewall teyit edildi${infoTip('Ön göğüs/firewall gibi yapısal bölge hasarının fotoğraf/ekspertizle doğrulandığını işaretler; ağır hasar puanını etkiler.')}</small></label>`
     : '';
   return `<div class="heavy-damage-row ${row.needsReview ? 'needs-review' : ''} ${row.confidence === 'Düşük' ? 'low-confidence' : ''} ${row.userEdited ? 'user-edited' : ''}">
     <div><b>${escapeHtml(row.sourcePartName)}</b><small>${escapeHtml(row.normalizedPartName)} • ${escapeHtml(sourceLabel(row.source))}</small>${row.userEdited ? '<small class="part-ok">kullanıcı tarafından düzeltildi</small>' : ''}</div>

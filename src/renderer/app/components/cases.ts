@@ -5,6 +5,7 @@ import { normalizeSearch } from '../../../shared/turkish';
 import { isDailyOpenCase, matchesDailyWorkFilter, todayLocalDateInput } from '../../../shared/daily-work';
 import { renderQuickFilterStrip } from './dashboard';
 import { icon } from '../icons';
+import { infoTip } from './info-tip';
 
 export const CASE_ROW_HEIGHT = 34;
 const OVERSCAN = 10;
@@ -111,8 +112,8 @@ function renderCaseListHeader(filteredCount: number, modeText: string): string {
   </div>`;
 }
 
-function filterButton(state: UiState, key: string, label: string): string {
-  return `<button class="filter-chip ${state.filter === key ? 'active' : ''}" data-filter="${key}">${escapeHtml(label)}</button>`;
+function filterButton(state: UiState, key: string, label: string, tip?: string): string {
+  return `<button class="filter-chip ${state.filter === key ? 'active' : ''}" data-filter="${key}" ${tip ? `title="${escapeHtml(tip)}"` : ''}>${escapeHtml(label)}${tip ? infoTip(tip) : ''}</button>`;
 }
 
 /**
@@ -134,10 +135,10 @@ function renderFilterButtons(state: UiState): string {
     ${filterButton(state, 'overdue', 'Geciken')}
     ${filterButton(state, 'today', 'Bugün')}
     ${filterButton(state, 'week', 'Bu Hafta')}
-    ${filterButton(state, 'risk', 'Riskli')}
-    ${filterButton(state, 'unassigned', 'Sahipsiz')}
-    ${filterButton(state, 'stale', 'Durgun')}
-    ${filterButton(state, 'quality', 'Veri Kalitesi')}
+    ${filterButton(state, 'risk', 'Riskli', 'Takip veya veri riski uyarısı olan dosyalar (geciken takip, eksik kritik evrak vb.).')}
+    ${filterButton(state, 'unassigned', 'Sahipsiz', 'Sorumlu uzman atanmamış dosyalar.')}
+    ${filterButton(state, 'stale', 'Durgun', 'Uzun süredir işlem/not girilmemiş, hareketsiz kalmış dosyalar.')}
+    ${filterButton(state, 'quality', 'Veri Kalitesi', 'Eksik veya tutarsız veri alanı tespit edilen dosyalar (plaka/tarih/tutar vb.).')}
     ${filterButton(state, 'open', 'Açık Dosyalar')}
     ${filterButton(state, 'closed', 'Kapalı Dosyalar')}
     ${filterButton(state, 'missing-docs', 'Eksik Evrak')}

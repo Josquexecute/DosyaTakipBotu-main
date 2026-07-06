@@ -1,0 +1,50 @@
+# Bağımlılıklar
+node_modules/
+
+# Build çıktıları
+dist/
+dist-ui/
+dist-electron/
+release/
+out/
+build/
+
+# Yerel ayarlar ve gizli dosyalar
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+ia-screenshots
+
+# Editör / işletim sistemi
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# HasarBotu yerel çalışma/cache çıktıları
+# Kökten ankrajlıdır; src/main/local-cache kaynak kod klasörü repo'ya girmelidir.
+/local-cache/
+/thumbnails/
+/logs/
+*.tmp
+*.bak
+*.backup
+*.corrupt-*.bak
+*.error.txt
+
+# Yanlışlıkla oluşmuş geçici repo deneme dosyası
+.hasarbotu_repo_update_probe.tmp
+
+# Windows pilot kabul logları
+/pilot-logs/
+
+# Final freeze: sentetik QA fixture'ları, yerel ayar dosyaları ve büyük QA ekran görüntüleri
+/.fixtures/
+*.local
+settings.local.json
+qa/**/screenshots/
+desktop.ini

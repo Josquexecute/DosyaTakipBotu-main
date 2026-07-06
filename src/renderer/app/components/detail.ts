@@ -11,6 +11,7 @@ import { renderAiModeApplyButton } from './ai-mode-part-code-apply-modal';
 import { partCanonicalSuggestions, partCanonicalGroups } from '../../../shared/parca-sozlugu';
 import { IS_NOTLARI } from '../../../shared/is-notlari';
 import { icon } from '../icons';
+import { infoTip } from './info-tip';
 import {
   AUTO_LABOR_CATEGORIES,
   AUTO_LABOR_DEFAULT_PAGE_SIZE,
@@ -177,11 +178,11 @@ function renderSummary(item: CaseIndexItem): string {
     ${alertBox(item)}
     <div class="info-card identity-card">
       <h3>Dosya Künyesi</h3>
-      <dl class="dense-dl"><dt>Plaka</dt><dd>${escapeHtml(item.plate)}</dd><dt>Dosya No</dt><dd>${escapeHtml(item.officeFileNo || item.dosyaNo || '-')}</dd><dt>İhbar No</dt><dd>${escapeHtml(item.claimNoticeNo || '-')}</dd><dt>Servis</dt><dd>${escapeHtml(item.serviceName || '-')}</dd><dt>Revizyon</dt><dd>${item.revision}</dd></dl>
+      <dl class="dense-dl"><dt>Plaka</dt><dd>${escapeHtml(item.plate)}</dd><dt>Dosya No</dt><dd>${escapeHtml(item.officeFileNo || item.dosyaNo || '-')}</dd><dt>İhbar No</dt><dd>${escapeHtml(item.claimNoticeNo || '-')}</dd><dt>Servis</dt><dd>${escapeHtml(item.serviceName || '-')}</dd><dt>Revizyon${infoTip('Kayıt sürüm sayacı: her kaydetmede artar ve iki bilgisayarın birbirinin kaydını ezmesini önler.')}</dt><dd>${item.revision}</dd></dl>
     </div>
     <div class="info-card identity-card">
       <h3>Operasyon</h3>
-      <dl class="dense-dl"><dt>Sorumlu Uzman</dt><dd>${escapeHtml(item.sorumlu || 'Atanmadı')}</dd><dt>Öncelik Seviyesi</dt><dd>${escapeHtml(item.oncelik)}</dd><dt>Dosya Durumu</dt><dd>${escapeHtml(item.workflowStatus)}</dd><dt>Takip Tarihi</dt><dd>${escapeHtml(item.takipTarihi || '-')}</dd><dt>Son İşlem</dt><dd>${escapeHtml(formatDate(item.tracking.assignment.sonIslemTarihi || item.updatedAt))}</dd></dl>
+      <dl class="dense-dl"><dt>Sorumlu Uzman</dt><dd>${escapeHtml(item.sorumlu || 'Atanmadı')}</dd><dt>Öncelik Seviyesi</dt><dd>${escapeHtml(item.oncelik)}</dd><dt>Dosya Durumu</dt><dd>${escapeHtml(item.workflowStatus)}</dd><dt>Takip Tarihi${infoTip('Dosyanın yeniden kontrol edileceği hatırlatma tarihi; liste ve panodaki gecikme uyarılarını besler.')}</dt><dd>${escapeHtml(item.takipTarihi || '-')}</dd><dt>Son İşlem</dt><dd>${escapeHtml(formatDate(item.tracking.assignment.sonIslemTarihi || item.updatedAt))}</dd></dl>
     </div>
     <div class="info-card progress-card">
       <h3>Portal Durumu</h3>
@@ -275,9 +276,9 @@ function renderLabor(item: CaseIndexItem, state: UiState): string {
     <div class="section-heading compact"><div><h2>Excel & Parça Veri Merkezi</h2><p>Parça listesi fotoğrafını AI ile okuyun, Excel verilerini güvenle aktarın ve işçiliği dağıtın.</p></div></div>
     ${renderPartsPhotoCard(state)}
     <div class="form-grid compact-form">
-      <label class="switch"><input type="checkbox" data-field="labor.parcaListesiIstendi" ${item.tracking.labor.parcaListesiIstendi ? 'checked' : ''}/> Parça listesi istendi</label>
-      <label class="switch"><input type="checkbox" data-field="labor.parcaKodlariIstendi" ${item.tracking.labor.parcaKodlariIstendi ? 'checked' : ''}/> Parça kodları istendi</label>
-      <label class="switch"><input type="checkbox" data-field="labor.parcaIscilikGirildi" ${item.tracking.labor.parcaIscilikGirildi ? 'checked' : ''}/> Parça/işçilik girildi</label>
+      <label class="switch"><input type="checkbox" data-field="labor.parcaListesiIstendi" ${item.tracking.labor.parcaListesiIstendi ? 'checked' : ''}/> Parça listesi istendi${infoTip('Servisten parça listesinin istendiğini elle işaretler; yalnız bu dosyanın takip kaydına yazılır (hatırlatma amaçlı).')}</label>
+      <label class="switch"><input type="checkbox" data-field="labor.parcaKodlariIstendi" ${item.tracking.labor.parcaKodlariIstendi ? 'checked' : ''}/> Parça kodları istendi${infoTip('Parça (OEM) kodlarının servisten istendiğini işaretler.')}</label>
+      <label class="switch"><input type="checkbox" data-field="labor.parcaIscilikGirildi" ${item.tracking.labor.parcaIscilikGirildi ? 'checked' : ''}/> Parça/işçilik girildi${infoTip('Parça ve işçilik bilgilerinin portal/Excel tarafına girildiğini işaretler.')}</label>
       <label class="wide">Not<textarea data-field="labor.not">${escapeHtml(item.tracking.labor.not)}</textarea></label>
     </div>
     <div class="info-card wide labor-excel-card" hidden aria-hidden="true">
@@ -461,7 +462,7 @@ function renderAutoLaborPreview(state: UiState, preview: AutoLaborPreview): stri
   const filterButtons = AUTO_LABOR_FILTERS
     .map((filter) => `<button class="auto-labor-filter-button ${filter === activeFilter ? 'active' : ''}" data-action="auto-labor-filter" data-auto-labor-filter="${filter}" aria-pressed="${filter === activeFilter ? 'true' : 'false'}" title="${escapeHtml(AUTO_LABOR_FILTER_LABELS[filter])} satırlarını göster"><span>${escapeHtml(AUTO_LABOR_FILTER_LABELS[filter])}</span><b>${filterCounts[filter]}</b></button>`)
     .join('');
-  const header = `<div><b>Satır</b><b>Grup (B)</b><b>Parça (C)</b><b>Kod (D)</b><b>İşçilik</b>${preview.columns.map((c) => `<b title="${escapeHtml(c.category)} sütunu">${escapeHtml(c.column)}·${escapeHtml(c.category)}</b>`).join('')}<b>Güven</b><b>Kontrol</b><b>Öğren</b><b>Gerekçe</b></div>`;
+  const header = `<div><b>Satır</b><b>Grup (B)</b><b>Parça (C)</b><b>Kod (D)</b><b>İşçilik</b>${preview.columns.map((c) => `<b title="${escapeHtml(c.category)} sütunu">${escapeHtml(c.column)}·${escapeHtml(c.category)}</b>`).join('')}<b>Güven${infoTip('Satır önerisinin eşleşme güveni (Yüksek/Orta/Düşük). Düşük güvenli satırları kaydetmeden önce elle kontrol edin.')}</b><b>Kontrol</b><b>Öğren</b><b>Gerekçe</b></div>`;
   const rows = visibleRows.length
     ? visibleRows.map((row) => renderAutoLaborRow(state, preview, row)).join('')
     : '<div class="auto-labor-empty-row"><span>Bu filtrede gösterilecek satır yok.</span></div>';
@@ -585,7 +586,7 @@ function renderPartsAnalysis(analysis: PartsPhotoAnalysis): string {
 }
 
 function renderRucu(item: CaseIndexItem): string {
-  return `<div class="form-grid compact-form"><label class="switch"><input type="checkbox" data-field="rucu.varMi" ${item.tracking.rucu.varMi ? 'checked' : ''}/> Rücu var</label><label class="switch"><input type="checkbox" data-field="rucu.potansiyel" ${item.tracking.rucu.potansiyel ? 'checked' : ''}/> Rücu potansiyeli</label><label>Durum<input data-field="rucu.durum" value="${escapeHtml(item.tracking.rucu.durum)}" /></label><label class="wide">Not<textarea data-field="rucu.not">${escapeHtml(item.tracking.rucu.not)}</textarea></label>${item.documentAnalysis.counterpartyPolicyCandidate ? '<div class="app-alert info"><span>Karşı taraf poliçesi olabilecek belge tespit edildi. Kullanıcı doğrulamalı.</span></div>' : ''}</div>`;
+  return `<div class="form-grid compact-form"><label class="switch"><input type="checkbox" data-field="rucu.varMi" ${item.tracking.rucu.varMi ? 'checked' : ''}/> Rücu var${infoTip('Rücu: ödenen hasarın kusurlu karşı taraftan veya sigortacısından geri istenmesi.')}</label><label class="switch"><input type="checkbox" data-field="rucu.potansiyel" ${item.tracking.rucu.potansiyel ? 'checked' : ''}/> Rücu potansiyeli${infoTip('Kesinleşmemiş ama rücu ihtimali görülen dosyayı işaretler; yalnız takip amaçlıdır.')}</label><label>Durum<input data-field="rucu.durum" value="${escapeHtml(item.tracking.rucu.durum)}" /></label><label class="wide">Not<textarea data-field="rucu.not">${escapeHtml(item.tracking.rucu.not)}</textarea></label>${item.documentAnalysis.counterpartyPolicyCandidate ? '<div class="app-alert info"><span>Karşı taraf poliçesi olabilecek belge tespit edildi. Kullanıcı doğrulamalı.</span></div>' : ''}</div>`;
 }
 
 function renderKtt(item: CaseIndexItem): string {

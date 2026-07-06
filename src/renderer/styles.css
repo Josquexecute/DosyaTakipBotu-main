@@ -5874,6 +5874,36 @@ html.dark .case-virtual-row.selected {
 .vl-hist-status.fresh-warn { color: #8a5a00; }
 .vl-hist-status.fresh-muted { color: var(--on-surface-variant, #777); }
 
+/* v0.6.4 UX: kompakt bilgi rozeti (ⓘ) — etiket yanı ipucu; yerleşik title tooltip ile */
+.info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  border: 1px solid var(--outline-variant, #cbd5e1);
+  background: var(--surface-container-high, #eef1f6);
+  color: var(--on-surface-variant, #667085);
+  font-size: 9px;
+  font-weight: 800;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1;
+  cursor: help;
+  user-select: none;
+  vertical-align: middle;
+}
+.info-tip:hover {
+  background: var(--primary-container, #dbe4f5);
+  color: var(--on-surface, #1d2433);
+  border-color: var(--primary, #3b5bdb);
+  outline: none;
+}
+html.dark .info-tip { background: var(--surface-container-high, #2a3040); border-color: var(--outline-variant, #444c5e); }
+
 /* v0.6.x v10: ofis-hazır sadeleştirme — güncel/geçmiş durum satırlarını görsel olarak ayır, yoğunluğu topla */
 .vl-snap-fresh { padding-left: 6px; border-left: 3px solid var(--outline-variant, #ddd); }
 .vl-snap-fresh.fresh-ok { border-left-color: var(--success, #2f8f4e); }

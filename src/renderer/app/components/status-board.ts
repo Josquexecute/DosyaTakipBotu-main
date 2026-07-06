@@ -5,6 +5,7 @@ import { normalizeSearch } from '../../../shared/turkish';
 import { WORKFLOW_STATUSES } from '../../../shared/workflow';
 import { isClosedCase } from '../../../shared/data-quality';
 import { icon } from '../icons';
+import { infoTip } from './info-tip';
 
 export const STATUS_BOARD_PAGE_SIZE = 50;
 
@@ -108,8 +109,8 @@ function isFilterActive(state: UiState): boolean {
 function renderAdvancedFilters(state: UiState): string {
   return `<div class="status-advanced-filters">
     <label>Sorumlu<select data-status-responsible="board">${responsibleFilterOptions(state)}</select></label>
-    <label class="check"><input type="checkbox" data-status-toggle="show-closed" ${state.statusBoardShowClosed ? 'checked' : ''}/> Kapalı dosyaları da göster</label>
-    <label class="check"><input type="checkbox" data-status-toggle="missing-only" ${state.statusBoardMissingOnly ? 'checked' : ''}/> Sadece eksik/risk içerenler</label>
+    <label class="check"><input type="checkbox" data-status-toggle="show-closed" ${state.statusBoardShowClosed ? 'checked' : ''}/> Kapalı dosyaları da göster${infoTip('KAPALI ay klasörüne taşınmış (işi tamamlanmış) dosyaları da listeye dahil eder.')}</label>
+    <label class="check"><input type="checkbox" data-status-toggle="missing-only" ${state.statusBoardMissingOnly ? 'checked' : ''}/> Sadece eksik/risk içerenler${infoTip('Yalnız eksik evrak/fotoğraf veya takip riski uyarısı bulunan dosyaları gösterir.')}</label>
     <label class="check"><input type="checkbox" data-status-toggle="open-todo-only" ${state.statusBoardOpenTodoOnly ? 'checked' : ''}/> Sadece açık görevi olanlar</label>
   </div>`;
 }

@@ -4132,6 +4132,22 @@ assert(p2HelpersSrc.includes('previewOnly: !state.hasManualWorkingFolderSelectio
 assert(rc1LayoutSrc.includes('işlem yapılacak dosyayı seçin') && rc1LayoutSrc.includes('otomatik bağlam önizlemesi işlem seçimi sayılmaz'), 'RC1-P2 kilit uyarisi: Dosyalar\'dan gercek secim ister + onizlemenin secim SAYILMADIGINI soyler', '');
 assert(/selected && !state\.hasManualWorkingFolderSelection \? 'Önizleme: '/.test(rc1LayoutSrc), 'RC1-P2 topbar: manuel secim oncesi dosya rozeti "Önizleme:" on ekiyle gosterilir (secim mantigi degismedi)', '');
 
+// === UX: kompakt bilgi rozeti (infoTip) — jargonlu kontrollerin yaninda aciklama ===
+const uxTipSrc = await fs.readFile('src/renderer/app/components/info-tip.ts', 'utf-8');
+assert(uxTipSrc.includes("class=\"info-tip\"") && uxTipSrc.includes('escapeHtml(text)') && !/data-action|ipcRenderer|\.invoke\(|\bfetch\b/.test(uxTipSrc) && uxTipSrc.split(/\r?\n/).length <= 40, 'UX infoTip: saf/kompakt bilesen — escapeHtml zorunlu, aksiyon/IPC/ag tasimaz, 40 satir alti', `${uxTipSrc.split(/\r?\n/).length} satir`);
+const uxCss = await fs.readFile('src/renderer/styles.css', 'utf-8');
+const uxTipCss = uxCss.match(/\.info-tip \{[\s\S]*?\}/);
+assert(uxTipCss !== null && uxTipCss[0].includes('width: 14px') && uxTipCss[0].includes('border-radius: 50%') && uxCss.includes('html.dark .info-tip'), 'UX infoTip: 14px kompakt daire stili + koyu tema varyanti', '');
+const uxFiles = ['src/renderer/app/components/cases.ts', 'src/renderer/app/components/detail.ts', 'src/renderer/app/components/status-board.ts', 'src/renderer/app/components/heavy-damage-assessment.ts', 'src/renderer/app/components/ai-case-context-card.ts', 'src/renderer/app/components/value-loss-context-form.ts'];
+let uxCount = 0;
+for (const f of uxFiles) {
+  const t = await fs.readFile(f, 'utf-8');
+  uxCount += (t.match(/infoTip\(/g) ?? []).length + (t.match(/tip: '/g) ?? []).length;
+}
+assert(uxCount >= 15, 'UX infoTip: en az 15 jargonlu kontrole bilgi rozeti yerlestirildi (Riskli/Durgun/Takip Tarihi/Revizyon/Rucu/Guven/Rayic/SBM/arac grubu vb.)', `${uxCount} yerlesim`);
+const uxVlForm = await fs.readFile('src/renderer/app/components/value-loss-context-form.ts', 'utf-8');
+assert(uxVlForm.includes("tip: 'SBM (Sigorta Bilgi Merkezi)") && uxVlForm.includes('field.tip ? infoTip(field.tip)'), 'UX infoTip: deger-kaybi formu alan-tanimindan (FieldDef.tip) kosullu rozet uretir', '');
+
 const failed = checks.filter((item) => !item.ok);
 if (failed.length) {
   console.error(`Davranış regresyon testleri başarısız: ${failed.length} hata.`);

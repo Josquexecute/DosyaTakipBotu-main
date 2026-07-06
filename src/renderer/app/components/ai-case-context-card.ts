@@ -1,5 +1,6 @@
 import { escapeHtml } from '../validation';
 import { icon } from '../icons';
+import { infoTip } from './info-tip';
 import type { AiCaseContext } from '../selectors/ai-case-context';
 
 // v0.6.x: "Seçili Dosya Bağlamı" kartı — SALT-OKUNUR. AiCaseContext'i özetler; yazma yok.
@@ -46,7 +47,7 @@ export function renderAiCaseContextCard(ctx: AiCaseContext | null, options: { pr
     ? `<p class="muted aih-context-preview-note">Bu alan otomatik bağlam önerisidir. İşlem yapmak için Dosyalar ekranından dosyayı seçin.</p>`
     : '';
   return `<div class="aih-context-card">
-    <div class="aih-context-head">${icon('folder')}<b>${headTitle}</b><span class="aih-conf aih-conf-${escapeHtml(ctx.sourceConfidence)}">Güven: ${escapeHtml(CONF_LABEL[ctx.sourceConfidence] ?? ctx.sourceConfidence)}</span></div>
+    <div class="aih-context-head">${icon('folder')}<b>${headTitle}</b><span class="aih-conf aih-conf-${escapeHtml(ctx.sourceConfidence)}">Güven: ${escapeHtml(CONF_LABEL[ctx.sourceConfidence] ?? ctx.sourceConfidence)}</span>${infoTip('Bilgilerin dosyadan otomatik çözümlenme güveni. Düşükse alanları "Dosya Ek Bilgileri" ile doğrulayıp tamamlayın.')}</div>
     ${previewNote}
     <div class="aih-context-grid">
       ${cells.map(([k, v]) => `<div class="aih-context-cell"><small>${escapeHtml(k)}</small><span>${escapeHtml(v)}</span></div>`).join('')}

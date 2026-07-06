@@ -6,6 +6,7 @@
  */
 import type { UiState, ValueLossForm } from '../state';
 import { escapeHtml } from '../validation';
+import { infoTip } from './info-tip';
 import { renderValueLossContextPreview } from './value-loss-context-preview';
 import { renderValueLossPartsForm } from './value-loss-parts-form';
 
@@ -16,6 +17,8 @@ interface FieldDef {
   label: string;
   kind: FieldKind;
   placeholder?: string;
+  /** Kafa karıştırabilecek alanlar için kompakt ⓘ açıklaması (yalnız görsel; davranış yok). */
+  tip?: string;
 }
 
 interface SectionDef {
@@ -39,9 +42,9 @@ const SECTIONS: readonly SectionDef[] = [
       { key: 'modelYear', label: 'Model yılı', kind: 'text', placeholder: 'örn. 2021' },
       { key: 'mileageKm', label: 'Kilometre', kind: 'text', placeholder: 'örn. 75.000' },
       { key: 'workingHours', label: 'Çalışma saati (iş makinesi)', kind: 'text' },
-      { key: 'marketValue', label: 'Rayiç bedel (TL)', kind: 'text', placeholder: 'örn. 850.000' },
-      { key: 'vehicleGroup', label: 'Araç grubu', kind: 'group' },
-      { key: 'vehicleType', label: 'Araç türü', kind: 'vehicleType' },
+      { key: 'marketValue', label: 'Rayiç bedel (TL)', kind: 'text', placeholder: 'örn. 850.000', tip: 'Aracın hasar öncesi 2. el piyasa değeri; emsal ilan/kasko değer listesinden belirlenir. Ön hesabın ana çarpanıdır.' },
+      { key: 'vehicleGroup', label: 'Araç grubu', kind: 'group', tip: 'SEİK tablosundaki A–F araç grubu (otomobil, minibüs/otobüs, kamyon vb.). Grup çarpanını belirler; ruhsattaki araç cinsinden bulunur.' },
+      { key: 'vehicleType', label: 'Araç türü', kind: 'vehicleType', tip: 'Grubun içindeki tür ayrımı; bazı türler özel çarpan uygular (örn. B grubunda OTOBÜS 0,5).' },
       { key: 'commercialOrRental', label: 'Ticari/kiralık mı?', kind: 'tri' },
       { key: 'foreignPlate', label: 'Yabancı plakalı mı?', kind: 'tri' },
       { key: 'antiqueOrCollectible', label: 'Antika/koleksiyon mu?', kind: 'tri' },
@@ -51,7 +54,7 @@ const SECTIONS: readonly SectionDef[] = [
   {
     title: 'Geçmiş',
     fields: [
-      { key: 'sbmPastDamageCount', label: 'SBM geçmiş hasar adedi', kind: 'text', placeholder: 'örn. 0' },
+      { key: 'sbmPastDamageCount', label: 'SBM geçmiş hasar adedi', kind: 'text', placeholder: 'örn. 0', tip: 'SBM (Sigorta Bilgi Merkezi) sorgusunda görünen geçmiş hasar kaydı sayısı; geçmiş hasar katsayısını etkiler.' },
       { key: 'hasPriorHeavyDamage', label: 'Kaza öncesi ağır hasar var mı?', kind: 'tri' },
       { key: 'hasPriorSamePartDamage', label: 'Aynı parçada önceki hasar/onarım var mı?', kind: 'tri' },
       { key: 'historyNotes', label: 'Geçmiş notu', kind: 'textarea' }
@@ -138,7 +141,7 @@ function renderField(form: ValueLossForm, field: FieldDef): string {
     default:
       control = `<input type="text" data-aih="vlForm.${field.key}" value="${escapeHtml(value)}" placeholder="${escapeHtml(field.placeholder ?? '')}">`;
   }
-  return `<label class="aih-field ${field.kind === 'textarea' ? 'aih-field-wide' : ''}"><span>${escapeHtml(field.label)}</span>${control}</label>`;
+  return `<label class="aih-field ${field.kind === 'textarea' ? 'aih-field-wide' : ''}"><span>${escapeHtml(field.label)}${field.tip ? infoTip(field.tip) : ''}</span>${control}</label>`;
 }
 
 /** Değer Kaybı Ek Bilgi Formu bölümünü döner (katlanabilir; kaydetme yalnız önizleme+onay ile). */
