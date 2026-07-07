@@ -29,6 +29,8 @@ import type { ValueLossContextInput } from './value-loss/value-loss-context-type
 export type { ValueLossContextInput } from './value-loss/value-loss-context-types';
 import type { ReportInvoiceAiTestResult, ReportInvoiceComplianceArgs, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from './report-invoice/report-invoice-types';
 export type { ReportInvoiceAiTestResult, ReportInvoiceComplianceArgs, ReportInvoiceComplianceResult, ReportInvoicePdfPick } from './report-invoice/report-invoice-types';
+import type { ClosingFeeScanResult } from './reports/closing-fee-scan-types';
+export type { ClosingFeeRecord, ClosingFeeScanResult } from './reports/closing-fee-scan-types';
 import type { UserPartTerm } from './parca-sozlugu';
 import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from './labor-learning-dictionary';
 import type { HeavyDamageAssessmentPreview, HeavyDamageAssessmentRecord, HeavyDamageClearArgs, HeavyDamageGenerateNoteArgs, HeavyDamageGetArgs, HeavyDamagePreviewArgs, HeavyDamageSaveArgs } from './heavy-damage-types';
@@ -104,6 +106,7 @@ export const IPC_INVOKE_CHANNELS = {
   reportInvoiceChoosePdf: 'report-invoice:choose-pdf',
   reportInvoiceCompliance: 'report-invoice:compliance',
   reportInvoiceTestAi: 'report-invoice:test-ai',
+  reportsGetClosingFees: 'reports:get-closing-fees',
   heavyDamagePreview: 'heavy-damage:preview',
   heavyDamageGet: 'heavy-damage:get',
   heavyDamageSave: 'heavy-damage:save',
@@ -273,6 +276,8 @@ export interface HasarbotuApi {
   analyzePartsPhoto<T = PartsPhotoAnalysis>(args?: PartsAnalyzePhotoArgs): Promise<ApiResult<T>>;
   chooseReportInvoicePdf<T = ReportInvoicePdfPick>(): Promise<ApiResult<T>>;
   checkReportInvoiceCompliance<T = ReportInvoiceComplianceResult>(args: ReportInvoiceComplianceArgs): Promise<ApiResult<T>>;
+  /** Kapanma ücreti: rapor kökünü SALT-OKUNUR tarar (yazma yok); force=true önbelleği atlar. */
+  getClosingFees<T = ClosingFeeScanResult>(force?: boolean): Promise<ApiResult<T>>;
   testReportInvoiceAi<T = ReportInvoiceAiTestResult>(): Promise<ApiResult<T>>;
   autoLaborPreview<T = AutoLaborPreview>(vehicle?: LaborVehicleContext): Promise<ApiResult<T>>;
   autoLaborSave<T = AutoLaborSaveResult>(args: LaborAutoSaveArgs): Promise<ApiResult<T>>;

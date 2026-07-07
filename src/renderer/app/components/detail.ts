@@ -12,6 +12,7 @@ import { partCanonicalSuggestions, partCanonicalGroups } from '../../../shared/p
 import { IS_NOTLARI } from '../../../shared/is-notlari';
 import { icon } from '../icons';
 import { infoTip } from './info-tip';
+import { renderClosingFeeRow } from './closing-fee-row';
 import {
   AUTO_LABOR_CATEGORIES,
   AUTO_LABOR_DEFAULT_PAGE_SIZE,
@@ -178,7 +179,7 @@ function renderSummary(item: CaseIndexItem): string {
     ${alertBox(item)}
     <div class="info-card identity-card">
       <h3>Dosya Künyesi</h3>
-      <dl class="dense-dl"><dt>Plaka</dt><dd>${escapeHtml(item.plate)}</dd><dt>Dosya No</dt><dd>${escapeHtml(item.officeFileNo || item.dosyaNo || '-')}</dd><dt>İhbar No</dt><dd>${escapeHtml(item.claimNoticeNo || '-')}</dd><dt>Servis</dt><dd>${escapeHtml(item.serviceName || '-')}</dd><dt>Revizyon${infoTip('Kayıt sürüm sayacı: her kaydetmede artar ve iki bilgisayarın birbirinin kaydını ezmesini önler.')}</dt><dd>${item.revision}</dd></dl>
+      <dl class="dense-dl"><dt>Plaka</dt><dd>${escapeHtml(item.plate)}</dd><dt>Dosya No</dt><dd>${escapeHtml(item.officeFileNo || item.dosyaNo || '-')}</dd><dt>İhbar No</dt><dd>${escapeHtml(item.claimNoticeNo || '-')}</dd><dt>Servis</dt><dd>${escapeHtml(item.serviceName || '-')}</dd><dt>Revizyon${infoTip('Kayıt sürüm sayacı: her kaydetmede artar ve iki bilgisayarın birbirinin kaydını ezmesini önler.')}</dt><dd>${item.revision}</dd>${renderClosingFeeRow(item)}</dl>
     </div>
     <div class="info-card identity-card">
       <h3>Operasyon</h3>

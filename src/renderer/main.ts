@@ -21,7 +21,7 @@ import type {
   TrackingWriteResult,
   UiFilterPreferences
 } from '../shared/types';
-import type { LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from '../shared/ipc-contract';
+import type { ClosingFeeRecord, ClosingFeeScanResult, LaborLearningAdminKey, LaborLearningEntry, LaborLearningExportResult, LaborLearningImportResult, LaborLearningUpdateInput } from '../shared/ipc-contract';
 import type { ExpertLearningApproveResult, ExpertLearningPreviewResponse, ExpertLearningStoreState } from '../shared/labor/expert-approved-learning-types';
 import { applyExpertPreview, applyExpertStore, clearExpertLearning, collectSelectedExpertEntries, findExpertPreviewItem, selectSafeExpertRows, toggleExpertRow } from './app/actions/expert-learning-actions';
 import { caseVehicleToLaborContext } from '../shared/labor/labor-vehicle-context-extractor';
@@ -157,8 +157,29 @@ async function loadSettings(): Promise<void> {
   if (result.ok) {
     state.settings = result.data;
     applyUiPreferences(result.data.uiPreferences);
+    void loadClosingFees(false);
   }
   else state.error = result.error.message;
+}
+
+/**
+ * Kapanma ücretlerini SALT-OKUNUR yükler (rapor kökü ayarlıysa). Arka planda çalışır;
+ * hata durumunda sessizce kayıt listesi boş kalır ve künyede "rapor bulunamadı" görünür.
+ * Hiçbir dosyaya yazılmaz; sonuç yalnız görüntülenir.
+ */
+async function loadClosingFees(force: boolean): Promise<void> {
+  if (!state.settings?.reportsRootPath) { state.closingFees = null; return; }
+  state.closingFees = { loading: true, scannedAt: '', records: {}, errors: [] };
+  const result = await window.hasarbotu.getClosingFees<ClosingFeeScanResult>(force);
+  if (!result.ok) {
+    state.closingFees = { loading: false, scannedAt: '', records: {}, errors: [result.error.message] };
+    render();
+    return;
+  }
+  const records: Record<string, ClosingFeeRecord> = {};
+  for (const record of result.data.records) records[record.plateKey] = record;
+  state.closingFees = { loading: false, scannedAt: result.data.scannedAt, records, errors: result.data.errors };
+  render();
 }
 
 
@@ -3182,6 +3203,8 @@ async function saveSettingsFromPage(): Promise<void> {
   if (!state.settings) return;
   const rootInput = document.getElementById('settings-root-path') as HTMLInputElement | null;
   if (rootInput) state.settings.rootPath = rootInput.value.trim();
+  const reportsRootInput = document.getElementById('settings-reports-root') as HTMLInputElement | null;
+  if (reportsRootInput) state.settings.reportsRootPath = reportsRootInput.value.trim();
   if (!state.settings.rootPath) {
     state.error = 'Ana klasör yolu boş olamaz.';
     render();
@@ -3198,6 +3221,7 @@ async function saveSettingsFromPage(): Promise<void> {
   await loadDeploymentStatus();
   await reloadCache();
   await scanNow();
+  void loadClosingFees(true);
 }
 
 async function addUserFromPage(): Promise<void> {

@@ -442,6 +442,8 @@ export interface AppSettings {
   geminiApiKey?: string;
   /** v0.6.0 P1-B: Yalnizca AppData ayarlarinda tutulan UI filtre tercihleri; takip.json semasina yazilmaz. */
   uiPreferences?: UiFilterPreferences;
+  /** Kapanma ücreti için Ekspertiz Raporları kökü (ör. P:\...\EKSPERTİZ RAPORLARI\2026). SALT-OKUNUR tarama yüzeyi; boş = özellik kapalı. */
+  reportsRootPath?: string;
 }
 
 export interface AnalyzedPartRow {

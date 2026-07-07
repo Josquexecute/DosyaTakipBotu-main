@@ -1,13 +1,13 @@
 # Bağımlılıklar
 node_modules/
 
-# Build çıktıları
-dist/
-dist-ui/
-dist-electron/
-release/
-out/
-build/
+# Build çıktıları (köke ankrajlı — docs/release gibi kaynak klasörleri DEĞİL)
+/dist/
+/dist-ui/
+/dist-electron/
+/release/
+/out/
+/build/
 
 # Yerel ayarlar ve gizli dosyalar
 .env

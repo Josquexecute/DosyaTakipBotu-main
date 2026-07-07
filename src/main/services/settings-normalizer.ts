@@ -44,7 +44,8 @@ export function normalizeUsers(input: unknown, activeUser: string): string[] {
 
 /** Uygulama ayarlarını güvenli varsayılanlara normalize eder (Gemini anahtarı yalnızca doluysa korunur). */
 export function normalizeSettings(input: AppSettings): AppSettings {
-  const { geminiApiKey: rawGeminiKey, ...rest } = input;
+  const { geminiApiKey: rawGeminiKey, reportsRootPath: rawReportsRoot, ...rest } = input;
+  const reportsRootPath = typeof rawReportsRoot === 'string' ? rawReportsRoot.trim().slice(0, 260) : '';
   const rootPath = String(rest.rootPath || DEFAULT_PCLOUD_ROOT).trim();
   if (!rootPath) throw new Error('Ana klasör yolu boş olamaz.');
   const activeUser = safeFileDisplayName(rest.activeUser || 'Sistem') || 'Sistem';
@@ -63,7 +64,8 @@ export function normalizeSettings(input: AppSettings): AppSettings {
       fullYearLightMs: clampInterval(rest.scanIntervals?.fullYearLightMs, 300000, 3600000, 300000)
     },
     uiPreferences: normalizeUiPreferences(rest.uiPreferences),
-    ...(geminiApiKey ? { geminiApiKey } : {})
+    ...(geminiApiKey ? { geminiApiKey } : {}),
+    ...(reportsRootPath ? { reportsRootPath } : {})
   };
 }
 

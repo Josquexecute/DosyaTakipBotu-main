@@ -6,6 +6,8 @@ import { WORKFLOW_STATUSES } from '../../../shared/workflow';
 import { isClosedCase } from '../../../shared/data-quality';
 import { icon } from '../icons';
 import { infoTip } from './info-tip';
+import { state as uiState } from '../state';
+import { normalizePlateKey } from '../../../shared/reports/closing-fee-extract';
 
 export const STATUS_BOARD_PAGE_SIZE = 50;
 
@@ -142,13 +144,23 @@ function statusRow(item: CaseIndexItem, rowNumber: number, active: boolean): str
   const severity = missing > 0 ? 'warning' : 'ok';
   return `<tr class="status-row ${active ? 'selected' : ''}" data-action="status-open-case" data-folder="${escapeHtml(item.folderPath)}" title="${escapeHtml(item.plate)} dosyasını aç">
     <td><span class="mono-cell">#${rowNumber} ${escapeHtml(item.officeFileNo || item.dosyaNo || '-')}</span><small>${escapeHtml(item.plate)}</small></td>
-    <td><span class="status-chip ${workflowTone(item.workflowStatus)}">${escapeHtml(item.workflowStatus)}</span><small>${escapeHtml(item.dosyaDurumu || '-')}</small></td>
+    <td><span class="status-chip ${workflowTone(item.workflowStatus)}">${escapeHtml(item.workflowStatus)}</span><small>${escapeHtml(item.dosyaDurumu || '-')}${closingFeeChip(item)}</small></td>
     <td><div class="progress-cell"><div class="progress-bar"><span style="width:${progress}%"></span></div><small>${progress}% ${missing > 0 ? `· <b class="miss-${severity}">Eksik ${missing}</b>` : '· Tam'}</small></div></td>
     <td>${escapeHtml(item.sorumlu || 'Atanmadı')}<small>${escapeHtml(item.eksper || '-')} · Takip: ${escapeHtml(item.takipTarihi || '-')}</small></td>
     <td>${escapeHtml(formatDate(item.updatedAt || item.tracking.metadata.updatedAt))}<small>${escapeHtml(daysAgoLabel(item.updatedAt || item.tracking.metadata.updatedAt))}</small></td>
     <td class="note-cell">${lastNoteText ? `${escapeHtml(truncate(lastNoteText, 90))}<small>${escapeHtml(lastNoteBy)}</small>` : '<span class="muted">—</span>'}</td>
     <td class="todo-cell">${topTodo ? `${escapeHtml(truncate(topTodo.title, 70))}${extraTodos > 0 ? `<small>+${extraTodos} görev daha</small>` : ''}` : '<span class="muted">Yok</span>'}</td>
   </tr>`;
+}
+
+/** Kapalı dosya satırında kapanma ücreti rozeti (salt görüntüleme; rapordan okunur). */
+function closingFeeChip(item: CaseIndexItem): string {
+  if (!isClosedCase(item)) return '';
+  const cf = uiState.closingFees;
+  if (!cf || cf.loading) return '';
+  const record = cf.records[normalizePlateKey(item.plate)];
+  if (!record || record.status !== 'ok' || typeof record.feeTl !== 'number') return '';
+  return ` · <b class="closing-fee-chip" title="Kapanma ücreti (${escapeHtml(record.fileName)})">${escapeHtml(record.feeTl.toLocaleString('tr-TR'))} TL</b>`;
 }
 
 function renderPager(page: number, pageCount: number, total: number, start: number, shown: number): string {

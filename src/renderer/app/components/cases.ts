@@ -6,6 +6,7 @@ import { isDailyOpenCase, matchesDailyWorkFilter, todayLocalDateInput } from '..
 import { renderQuickFilterStrip } from './dashboard';
 import { icon } from '../icons';
 import { infoTip } from './info-tip';
+import { renderClosingFeeRow } from './closing-fee-row';
 
 export const CASE_ROW_HEIGHT = 34;
 const OVERSCAN = 10;
@@ -321,6 +322,7 @@ function renderSelectedCaseSummary(item: CaseIndexItem | null): string {
       <dt>Sorumlu</dt><dd>${escapeHtml(item.sorumlu || 'Atanmadı')}</dd>
       <dt>Durum</dt><dd>${escapeHtml(item.workflowStatus)}</dd>
       <dt>Takip</dt><dd>${escapeHtml(item.takipTarihi || '-')}</dd>
+      ${renderClosingFeeRow(item)}
     </dl>
     <div class="summary-status-lines">
       <div class="summary-line ${missing > 0 ? 'warning' : 'ok'}">

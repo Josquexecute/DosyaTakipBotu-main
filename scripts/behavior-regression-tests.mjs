@@ -4148,6 +4148,48 @@ assert(uxCount >= 15, 'UX infoTip: en az 15 jargonlu kontrole bilgi rozeti yerle
 const uxVlForm = await fs.readFile('src/renderer/app/components/value-loss-context-form.ts', 'utf-8');
 assert(uxVlForm.includes("tip: 'SBM (Sigorta Bilgi Merkezi)") && uxVlForm.includes('field.tip ? infoTip(field.tip)'), 'UX infoTip: deger-kaybi formu alan-tanimindan (FieldDef.tip) kosullu rozet uretir', '');
 
+// === Kapanma (Ekspertiz) Ücreti v1: saf çıkarım motoru (28 gerçek raporla öğrenildi) ===
+const { normalizePlateKey, parseReportFileName, parseTurkishAmount, extractClosingFeeFromText, looksUnreadableReportText } = await import('../dist-electron/shared/reports/closing-fee-extract.js');
+assert(normalizePlateKey('34 mpd 222') === '34MPD222' && normalizePlateKey('06-DSZ-557') === '06DSZ557' && normalizePlateKey('34kzz710') === '34KZZ710', 'KU motor: plaka anahtari normalize (bosluk/tire/kucuk harf/Turkce i)', '');
+assert(parseReportFileName('34MPB328 EKSPERTİZ RAPORU.pdf').plateKey === '34MPB328' && parseReportFileName('06DSZ557 EKSPERT~Z RAPORU.pdf').plateKey === '06DSZ557' && parseReportFileName('NOT_BIR_RAPOR.pdf').plateKey === null, 'KU motor: rapor dosya adi cozumu (bozuk Turkce karakter toleransli)', '');
+assert(parseTurkishAmount('1600') === 1600 && parseTurkishAmount('6125.4') === 6125.4 && parseTurkishAmount('2417.41') === 2417.41 && parseTurkishAmount('1.600,00') === 1600 && parseTurkishAmount('1.600') === 1600 && parseTurkishAmount('2.400,50') === 2400.5 && parseTurkishAmount('abc') === null && parseTurkishAmount('0') === null, 'KU motor: TR/EN tutar bicimleri (ogrenme setindeki tum varyantlar) dogru cozulur', '');
+const kuText = ['Kesin Ekspertiz Raporu - Dosya No: 49/18309901', 'Rapor No : 2026/53', 'Dosya No : 49/18309901', 'Plaka Numarası : 34TEST123', 'Rapor/Kayıt Tarihi : 15.06.2026 13.02 / 23.06.2026 16.18', 'Ekspertiz Türü : UzaktanEkspertiz', 'Ekspertiz Ücreti : 2417.41', 'GENEL TOPLAM 72.594,91'].join('\n');
+const kuR = extractClosingFeeFromText(kuText);
+assert(kuR.status === 'ok' && kuR.feeTl === 2417.41 && kuR.dosyaNo === '49/18309901' && kuR.raporNo === '2026/53' && kuR.ekspertizTuru === 'UzaktanEkspertiz' && kuR.kayitTarihi === '23.06.2026' && normalizePlateKey(kuR.plateInText) === '34TEST123', 'KU motor: ucret + dosyaNo + raporNo + tur + kayit tarihi + plaka tek gecişte cikar', JSON.stringify(kuR));
+assert(kuR.feeTl !== 72594.91, 'KU motor: GENEL TOPLAM (hasar tutari) ucretle KARISTIRILMAZ', '');
+const kuMissing = extractClosingFeeFromText(kuText.replace(/Ekspertiz Ücreti.*\n?/, ''));
+assert(kuMissing.status === 'fee_missing' && kuMissing.dosyaNo === '49/18309901' && kuMissing.warnings.length > 0, 'KU motor: ucret alani yoksa fee_missing + eslestirme alanlari yine doner', '');
+assert(extractClosingFeeFromText('D • ← ş t ← ▼ ● a G G a ' + 'x'.repeat(300)).status === 'unreadable' && looksUnreadableReportText('kisa'), 'KU motor: ozel-glif/cop metin unreadable olarak isaretlenir (2/28 vaka)', '');
+const kuSrc = await fs.readFile('src/shared/reports/closing-fee-extract.ts', 'utf-8');
+assert(!/\bfetch\b|axios|XMLHttpRequest|WebSocket|ipcRenderer|ipcMain|require\(['"]fs|from ['"]fs|electron/i.test(kuSrc) && kuSrc.split(/\r?\n/).length <= 400, 'KU guard: cikarim motoru SAF (ag/dosya/IPC/electron yok) + 400 satir alti', `${kuSrc.split(/\r?\n/).length} satir`);
+const kuDoc = await fs.readFile('docs/dev/KAPANMA_UCRETI_RAPOR_TASARIMI.md', 'utf-8');
+assert(kuDoc.includes('Ekspertiz Ücreti') && kuDoc.includes('26/28') && kuDoc.includes('unreadable') && kuDoc.includes('SALT-OKUNUR') && kuDoc.includes('onayla'), 'KU dokuman: ogrenilen yapi + basari orani + okunamayan vaka + salt-okunur/onay kurallari belgeli', '');
+
+// === Kapanma Ücreti v1 KABLOLAMA: ayar + servis + IPC (87) + UI (salt-okunur) ===
+const kuSvcSrc = await fs.readFile('src/main/services/closing-fee-service.ts', 'utf-8');
+assert(!/atomicWrite|writeFile|\.mutate\(|TrackingFileService|takip\.json|xlsx|nodemailer|\bfetch\b/i.test(kuSvcSrc) && kuSvcSrc.includes('extractPdfText') && kuSvcSrc.includes('extractClosingFeeFromText') && kuSvcSrc.includes('MAX_PDF_COUNT'), 'KU servis: SALT-OKUNUR tarayici (yazma/mutate/Excel/ag YOK) + mevcut pdf-text + saf motor + guvenlik siniri', '');
+assert(kuSvcSrc.includes('fileCache') && kuSvcSrc.includes('mtimeMs') && !/require\(['"]electron|from ['"]electron/.test(kuSvcSrc), 'KU servis: oturum-ici bellek onbellegi (mtime+boyut imzali); electron import yok (Node-testlenebilir)', '');
+const kuContractSrc = await fs.readFile('src/shared/ipc-contract.ts', 'utf-8');
+const kuPreloadSrc = await fs.readFile('src/preload/preload.ts', 'utf-8');
+const kuIpcSrc = await fs.readFile('src/main/ipc.ts', 'utf-8');
+assert(kuContractSrc.includes("reportsGetClosingFees: 'reports:get-closing-fees'") && kuContractSrc.includes('getClosingFees<T = ClosingFeeScanResult>') && kuPreloadSrc.includes('IPC.reportsGetClosingFees') && kuIpcSrc.includes('IPC.reportsGetClosingFees'), 'KU IPC: kontrat + preload + handler uclusu birlikte (yeni salt-okunur kanal)', '');
+assert(/reportsGetClosingFees[\s\S]{0,300}getSettings\(\)[\s\S]{0,200}closingFees\.scan/.test(kuIpcSrc), 'KU IPC: handler ayarlardaki rapor kokunu kullanir; baska yol kabul etmez', '');
+const kuNormSrc = await fs.readFile('src/main/services/settings-normalizer.ts', 'utf-8');
+const kuTypesSrc = await fs.readFile('src/shared/types.ts', 'utf-8');
+assert(kuTypesSrc.includes('reportsRootPath?: string') && kuNormSrc.includes('rawReportsRoot') && kuNormSrc.includes('.slice(0, 260)'), 'KU ayar: reportsRootPath opsiyonel + normalize edici temizler/sinirlar', '');
+const kuSettingsUi = await fs.readFile('src/renderer/app/components/settings.ts', 'utf-8');
+assert(kuSettingsUi.includes('settings-reports-root') && kuSettingsUi.includes('SALT-OKUNUR') && kuSettingsUi.includes('Boş bırakılırsa özellik kapalıdır'), 'KU ayar UI: rapor koku girisi + salt-okunur ve opsiyonellik aciklamasi', '');
+const kuRowSrc = await fs.readFile('src/renderer/app/components/closing-fee-row.ts', 'utf-8');
+const kuDetailSrc = await fs.readFile('src/renderer/app/components/detail.ts', 'utf-8');
+const kuCasesSrc = await fs.readFile('src/renderer/app/components/cases.ts', 'utf-8');
+assert(kuRowSrc.includes('caseIsClosed(item)') && kuRowSrc.includes('Kapanma Ücreti') && kuRowSrc.includes('Rapor okunamadı — elle kontrol edin') && kuRowSrc.includes('Rapor bulunamadı'), 'KU UI satir: yalniz KAPALI dosyada ucret satiri + okunamadi/bulunamadi durumlari (ortak bilesen)', '');
+assert(kuDetailSrc.includes('renderClosingFeeRow(item)') && kuCasesSrc.includes('renderClosingFeeRow(item)'), 'KU UI: ucret satiri hem Dosyalar kompakt panelinde hem Kunye kartinda kullanilir', '');
+const kuBoardSrc = await fs.readFile('src/renderer/app/components/status-board.ts', 'utf-8');
+assert(kuBoardSrc.includes('closingFeeChip') && /if \(!isClosedCase\(item\)\) return '';/.test(kuBoardSrc), 'KU UI pano: kapanma rozeti yalniz kapali dosya satirinda', '');
+const kuMainRSrc = await fs.readFile('src/renderer/main.ts', 'utf-8');
+assert(kuMainRSrc.includes('loadClosingFees') && kuMainRSrc.includes('state.settings?.reportsRootPath') && kuMainRSrc.includes('getClosingFees<ClosingFeeScanResult>'), 'KU UI yukleme: rapor koku ayarliysa arka planda salt-okunur yukleme', '');
+assert(!/data-action="[^"]*(closing-fee-(save|write|apply))/i.test(kuDetailSrc + kuBoardSrc), 'KU guvenlik: ucret icin kaydet/yaz/uygula aksiyonu YOK (v1 salt goruntuleme)', '');
+
 const failed = checks.filter((item) => !item.ok);
 if (failed.length) {
   console.error(`Davranış regresyon testleri başarısız: ${failed.length} hata.`);

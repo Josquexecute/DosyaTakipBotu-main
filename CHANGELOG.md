@@ -2,6 +2,31 @@
 
 Tüm önemli değişiklikler bu dosyada tutulur. Sürümleme [SemVer](https://semver.org/lang/tr/) yaklaşımına yakındır.
 
+## [0.6.5] — 2026-07-07
+
+### Eklendi — Kapanma Ücreti (Ekspertiz Raporlarından, salt-okunur)
+- **Kapanma ücreti gösterimi:** Ayarlar'a opsiyonel "Ekspertiz Raporları klasörü" alanı eklendi
+  (ör. `P:\...\EKSPERTİZ RAPORLARI\2026`). Kapalı dosyalarda kesin ekspertiz raporundaki
+  "Ekspertiz Ücreti" değeri Dosyalar sağ panelinde, Dosya Künyesi'nde ve Durum Panosu satır
+  rozetinde gösterilir. Tarama TAMAMEN SALT-OKUNURDUR: rapor klasörüne, takip.json'a, Excel'e
+  hiçbir yazma yapılmaz; sonuçlar yalnız oturum-içi bellekte önbellenir.
+- Saf çıkarım motoru `src/shared/reports/` (plaka anahtarı, TR/EN tutar çözümleyici, dosya adı
+  çözümü) 28 gerçek raporla doğrulandı (26 metin tabanlı çıkarım + 2 özel-glif fontlu rapor
+  "okunamadı — elle kontrol" olarak işaretlenir). Yeni salt-okunur IPC kanalı
+  `reports:get-closing-fees` (86→87 invoke). Yeni bağımlılık YOK (mevcut pdf2json kullanılır).
+
+### Düzeltildi / İyileştirildi — RC1 saha bulguları
+- **Sayfa kaydırma (P1):** sol menü sayfaları içerik ekrana sığmadığında sayfa düzeyinde dikey
+  kayar; alt içerik kırpılmaz (`.workspace.workspace-page` CSS düzeltmesi).
+- **Bağlam önizlemesi netliği (P2):** manuel dosya seçimi öncesi üst bar ve bağlam kartı
+  "Önizleme" olarak etiketlenir; kilit uyarısı önizlemenin seçim sayılmadığını açıkça söyler.
+- **Kompakt bilgi rozetleri (ⓘ):** 19 jargonlu kontrole hover açıklaması eklendi (Riskli/
+  Durgun/Takip Tarihi/Revizyon/Rücu/Güven/Rayiç/SBM/araç grubu vb.).
+
+### Değişmedi
+- `takip.json` şeması ve atomic write / revision / writeId davranışı; AI İşçilik, Ağır Hasar,
+  AI Değer Kaybı motorları; Excel iş akışları; ücretli/harici servis politikası (yok).
+
 ## [0.6.0] — 2026-06-21
 
 ### Düzeltildi — Sürüm damgası hizalaması (hotfix)

@@ -1,6 +1,6 @@
 {
   "name": "hasarbotu-baran-ekspertiz",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Baran Global Ekspertiz için Türkçe hasar dosyası takip ve ekspertiz asistanı uygulaması (Electron). v0.6.0: AI İşçilik Dağıtıcı v2, profesyonel önizleme/kaydetme akışı ve Ağır Hasar AI yapısal ön göğüs/firewall değerlendirmesi.",
   "main": "dist-electron/main/main.js",
   "author": "Baran Global Ekspertiz",

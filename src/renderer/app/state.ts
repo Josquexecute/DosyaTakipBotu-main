@@ -63,8 +63,18 @@ export interface ExpertLearningUiState {
   error: string | null;
 }
 
+/** Kapanma ücreti tarama sonucu UI durumu (salt görüntüleme; kayıt plaka anahtarıyla aranır). */
+export interface ClosingFeesUiState {
+  loading: boolean;
+  scannedAt: string;
+  records: Record<string, import('../../shared/reports/closing-fee-scan-types').ClosingFeeRecord>;
+  errors: string[];
+}
+
 export interface UiState {
   settings: AppSettings | null;
+  /** Kapanma ücreti verisi; null = henüz yüklenmedi / özellik kapalı. */
+  closingFees: ClosingFeesUiState | null;
   dashboard: DashboardSummary | null;
   cases: CaseIndexItem[];
   selectedFolderPath: string;
@@ -382,6 +392,7 @@ export interface AutoLaborReportSnapshot {
 
 export const state: UiState = {
   settings: null,
+  closingFees: null,
   dashboard: null,
   cases: [],
   selectedFolderPath: '',
