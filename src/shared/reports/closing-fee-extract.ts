@@ -2,16 +2,18 @@
  * v0.6.x — Kapanma (Ekspertiz) Ücreti çıkarımı (SAF).
  *
  * "EKSPERTİZ RAPORLARI/<yıl>/<AY YIL>/<PLAKA> EKSPERTİZ RAPORU.pdf" düzenindeki kesin
- * ekspertiz raporu METNİNDEN ücret ve eşleştirme alanlarını çıkarır. PDF'i BU MODÜL OKUMAZ
- * (ağ/dosya/IPC yok); metin, main tarafındaki mevcut pdf2json tabanlı okuyucudan gelir.
- * 28 gerçek raporluk öğrenme setiyle doğrulanmıştır (26 metin tabanlı + 2 özel-glif fontlu).
+ * ekspertiz raporu METNİNDEN kapanma tutarını (**GENEL TOPLAM** = KDV dahil nihai tutar) ve
+ * eşleştirme alanlarını çıkarır. PDF'i BU MODÜL OKUMAZ (ağ/dosya/IPC yok); metin, main
+ * tarafındaki mevcut pdf2json tabanlı okuyucudan gelir. 28 gerçek raporla doğrulanmıştır:
+ * 25 GENEL TOPLAM (pozitif) + 1 sıfır (reddedilen dosya) + 2 özel-glif fontlu (okunamaz).
+ * NOT: "Ekspertiz Ücreti" (küçük hizmet bedeli) DEĞİL, GENEL TOPLAM baz alınır.
  */
 
 export type ClosingFeeStatus = 'ok' | 'fee_missing' | 'unreadable';
 
 export interface ClosingFeeExtraction {
   status: ClosingFeeStatus;
-  /** Normalize edilmiş ücret (TL). Yalnız status 'ok' iken tanımlı. */
+  /** Rapordaki GENEL TOPLAM (KDV dahil nihai kapanma tutarı, TL). Yalnız status 'ok' iken tanımlı. */
   feeTl?: number;
   feeRaw?: string;
   /** Sigorta şirketi hasar dosya no (ör. "11/18517538") — ofis dosya no ile eşleşebilir. */
@@ -51,7 +53,7 @@ export function parseReportFileName(fileName: string): { plateKey: string | null
  * "1600", "6125.4", "2417.41", "3352.5"; olası TR biçimleri: "1.600,00", "2.400".
  * Tek nokta yalnız "1.600" gibi binlik desenindeyse binlik sayılır; aksi halde ondalıktır.
  */
-export function parseTurkishAmount(raw: string): number | null {
+export function parseTurkishAmount(raw: string, allowZero = false): number | null {
   const s = (raw ?? '').trim().replace(/\s|TL$/gi, '');
   if (!/^[0-9][0-9.,]*$/.test(s)) return null;
   let normalized: string;
@@ -67,7 +69,8 @@ export function parseTurkishAmount(raw: string): number | null {
     normalized = s;
   }
   const value = Number(normalized);
-  if (!Number.isFinite(value) || value <= 0 || value > 10_000_000) return null;
+  if (!Number.isFinite(value) || value < 0 || value > 50_000_000) return null;
+  if (value === 0 && !allowZero) return null;
   return Math.round(value * 100) / 100;
 }
 
@@ -84,16 +87,17 @@ export function looksUnreadableReportText(text: string): boolean {
 }
 
 /**
- * Kesin ekspertiz raporu metninden kapanma ücretini ve eşleştirme alanlarını çıkarır.
- * Ücret çapası: "Ekspertiz Ücreti : <tutar>" (Ekspertiz Bilgileri bölümü). Bulunamazsa
- * 'fee_missing'; metin özel-glif çöpüyse 'unreadable' döner. Hiçbir yere yazmaz.
+ * Kesin ekspertiz raporu metninden KAPANMA TUTARINI (GENEL TOPLAM = KDV dahil nihai tutar) ve
+ * eşleştirme alanlarını çıkarır. Çapa: "GENEL TOPLAM <tutar>" (Hesap Özeti bölümü; metinde iki
+ * temsille tekrarlanabilir, ilk eşleşme alınır — değerler özdeştir). 0,00 geçerlidir (reddedilen
+ * dosya). Bulunamazsa 'fee_missing'; metin özel-glif çöpüyse 'unreadable'. Hiçbir yere yazmaz.
  */
 export function extractClosingFeeFromText(text: string): ClosingFeeExtraction {
   const warnings: string[] = [];
   if (looksUnreadableReportText(text)) {
     return {
       status: 'unreadable',
-      warnings: ['Rapor metni okunamadı (muhtemelen özel-glif fontlu PDF); ücret elle girilmeli veya OCR ile okunmalıdır.']
+      warnings: ['Rapor metni okunamadı (muhtemelen özel-glif fontlu PDF); GENEL TOPLAM elle girilmeli veya OCR ile okunmalıdır.']
     };
   }
   const dosyaNo = grab(text, /Dosya No\s*:?\s*([0-9]{1,3}\s*\/\s*[0-9]{5,12})/i)?.replace(/\s+/g, '');
@@ -111,18 +115,18 @@ export function extractClosingFeeFromText(text: string): ClosingFeeExtraction {
     ...(kayitTarihi ? { kayitTarihi } : {}),
     ...(plateInText ? { plateInText } : {})
   };
-  const feeRaw = grab(text, /Ekspertiz Ücreti\s*:?\s*([0-9][0-9.,]*)/i);
+  const feeRaw = grab(text, /GENEL TOPLAM\s*:?\s*([0-9][0-9.,]*)/i);
   if (!feeRaw) {
-    warnings.push('Raporda "Ekspertiz Ücreti" alanı bulunamadı; ücret elle kontrol edilmelidir.');
+    warnings.push('Raporda "GENEL TOPLAM" alanı bulunamadı; kapanma tutarı elle kontrol edilmelidir.');
     return { status: 'fee_missing', ...fields, warnings };
   }
-  const feeTl = parseTurkishAmount(feeRaw);
+  const feeTl = parseTurkishAmount(feeRaw, true);
   if (feeTl === null) {
-    warnings.push(`Ücret değeri çözümlenemedi: "${feeRaw}".`);
+    warnings.push(`GENEL TOPLAM değeri çözümlenemedi: "${feeRaw}".`);
     return { status: 'fee_missing', feeRaw, ...fields, warnings };
   }
-  if (feeTl < 100 || feeTl > 500_000) {
-    warnings.push('Ücret olağan aralık dışında görünüyor; elle doğrulanması önerilir.');
+  if (feeTl === 0) {
+    warnings.push('GENEL TOPLAM 0,00 (ör. reddedilen/iptal dosya); elle doğrulanması önerilir.');
   }
   return { status: 'ok', feeTl, feeRaw, ...fields, warnings };
 }

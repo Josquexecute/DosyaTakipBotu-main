@@ -605,7 +605,7 @@ function restoreScrollPositions(positions: Map<string, number>): void {
 // diğer operasyonel ekranlar (Operasyon, Özet, Evrak, Excel, Rücu, KTT, Ağır Hasar, Klasörler, Ana Sayfa) kilitlidir.
 // Durum Panosu da daima açıktır; oradan dosya seçimi (openCaseFromBoard) aktif seçim sayılır ve kilidi açar.
 // Otomatik son-klasör yükleme/geri-yükleme bu kilidi AÇMAZ; yalnız manuel seçim açar.
-const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'rapor-fatura', 'ai-yardimcilari', 'settings'];
+const TABS_ALLOWED_WHILE_FOLDER_LOCKED: DetailTab[] = ['dosyalar', 'durum', 'kapanan', 'rapor-fatura', 'ai-yardimcilari', 'settings'];
 
 function isTabAllowedNow(tab: DetailTab): boolean {
   return state.hasManualWorkingFolderSelection || TABS_ALLOWED_WHILE_FOLDER_LOCKED.includes(tab);
@@ -881,6 +881,11 @@ function wireEvents(): void {
     if (target.id === 'status-board-search') {
       state.statusBoardSearch = target.value;
       state.statusBoardPage = 1;
+      render();
+      return;
+    }
+    if (target.dataset.closedMonth) {
+      state.closedCasesMonthFilter = target.value || 'all';
       render();
       return;
     }

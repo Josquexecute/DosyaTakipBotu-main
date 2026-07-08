@@ -75,6 +75,8 @@ export interface UiState {
   settings: AppSettings | null;
   /** Kapanma ücreti verisi; null = henüz yüklenmedi / özellik kapalı. */
   closingFees: ClosingFeesUiState | null;
+  /** Kapanan Dosyalar sekmesi ay filtresi ('all' = tüm aylar). */
+  closedCasesMonthFilter: string;
   dashboard: DashboardSummary | null;
   cases: CaseIndexItem[];
   selectedFolderPath: string;
@@ -247,7 +249,7 @@ export type CaseSortMode = 'plate-az' | 'plate-za' | 'office-az' | 'notice-az' |
  * 'klasorler' (yalnızca-okunur klasör gezgini) yeni sayfalardır. 'ozet' yalnızca detay
  * özet görünümünde kullanılır.
  */
-export type DetailTab = 'home' | 'dosyalar' | 'klasorler' | 'durum' | 'ozet' | 'issues' | 'operasyon' | 'evrak' | 'portal' | 'labor' | 'rucu' | 'ktt' | 'heavy' | 'ai' | 'rapor-fatura' | 'ai-yardimcilari' | 'settings';
+export type DetailTab = 'home' | 'dosyalar' | 'klasorler' | 'durum' | 'kapanan' | 'ozet' | 'issues' | 'operasyon' | 'evrak' | 'portal' | 'labor' | 'rucu' | 'ktt' | 'heavy' | 'ai' | 'rapor-fatura' | 'ai-yardimcilari' | 'settings';
 
 /** v0.6.x: "AI Yardımcıları" alanındaki alt araç anahtarı. */
 export type AiHelperTool = 'mevzuat' | 'sablon' | 'ucret' | 'sure' | 'deger-kaybi';
@@ -393,6 +395,7 @@ export interface AutoLaborReportSnapshot {
 export const state: UiState = {
   settings: null,
   closingFees: null,
+  closedCasesMonthFilter: 'all',
   dashboard: null,
   cases: [],
   selectedFolderPath: '',

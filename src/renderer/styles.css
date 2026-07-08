@@ -5907,6 +5907,15 @@ html.dark .info-tip { background: var(--surface-container-high, #2a3040); border
 /* v0.6.x kapanma ücreti rozeti (Durum Panosu kapalı dosya satırı; salt görüntüleme) */
 .closing-fee-chip { color: var(--success, #2f8f4e); font-weight: 800; white-space: nowrap; }
 
+/* v0.6.x Kapanan Dosyalar sekmesi (salt-okunur liste + toplamlar) */
+.closed-cases-page { display: flex; flex-direction: column; gap: var(--space-sm); }
+.closed-cases-page .section-heading label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+.closed-month-totals { font-size: 12px; color: var(--on-surface-variant, #667085); padding: 2px 4px; }
+.closed-month-total b { color: var(--on-surface, #1d2433); }
+.closed-fee-cell.ok b { color: var(--success, #2f8f4e); }
+.closed-fee-cell.warn b, .closed-status-cell.warn { color: #8a5a00; }
+.closed-fee-cell.muted b, .closed-status-cell.muted { color: var(--on-surface-variant, #777); font-weight: 500; }
+
 /* v0.6.x v10: ofis-hazır sadeleştirme — güncel/geçmiş durum satırlarını görsel olarak ayır, yoğunluğu topla */
 .vl-snap-fresh { padding-left: 6px; border-left: 3px solid var(--outline-variant, #ddd); }
 .vl-snap-fresh.fresh-ok { border-left-color: var(--success, #2f8f4e); }

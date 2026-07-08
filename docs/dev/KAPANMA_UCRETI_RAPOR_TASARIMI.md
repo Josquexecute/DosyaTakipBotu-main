@@ -17,14 +17,18 @@ Kapatılan dosyalarda, kesin ekspertiz raporundaki **"Ekspertiz Ücreti"** değe
 - **Eşleştirme anahtarları:** (1) dosya adındaki PLAKA — vaka klasör adları da plakayla
   başladığı için birincil anahtar; (2) rapor içindeki `Dosya No : NN/NNNNNNNN` (sigorta hasar
   dosya no) — takip kaydındaki dosya no ile çapraz doğrulama.
-- **Ücret çapası:** `Ekspertiz Ücreti : <tutar>` — "Ekspertiz Bilgileri" bölümünde.
-  Görülen biçimler: `1600`, `2400`, `6125.4`, `2417.41`, `3352.5`, `8063.38` (nokta ondalık);
-  TR binlik biçimi (`1.600,00`) için de çözümleyici hazır.
+- **Kapanma tutarı çapası (v0.6.7 DÜZELTME):** `GENEL TOPLAM <tutar>` — "Hesap Özeti" bölümünde,
+  KDV DAHİL nihai tutar (ör. `72.594,91`, `173.354,16`). Kullanıcı isteğiyle: küçük hizmet bedeli
+  olan "Ekspertiz Ücreti" DEĞİL, GENEL TOPLAM baz alınır. TR biçimi (`72.594,91` = nokta binlik,
+  virgül ondalık) çözümlenir. NOT: GENEL TOPLAM (KDV dahil) ≠ TOPLAM TUTAR (KDVsiz ara toplam);
+  bazı raporlarda GENEL TOPLAM ile Ödemeler bölümündeki "KDV'Lİ TUTAR" da farklı olabilir —
+  yalnız GENEL TOPLAM alınır. PDF okuyucu metni iki temsille birleştirdiğinden GENEL TOPLAM
+  genelde iki kez geçer; ilk (özdeş) eşleşme alınır.
 - **Ek alanlar:** `Rapor No : 2026/NN`, `Ekspertiz Türü : Uzaktan/YerindeEkspertiz`,
   `Rapor/Kayıt Tarihi`, `Plaka Numarası`, kasko/trafik ayrımı.
-- **Başarı oranı:** 26/28 metin tabanlı ve çapa %100 tuttu. **2/28 özel-glif (Type3) fontlu**
-  (farklı portal çıktısı): metin katmanı çöp semboller → çıkarım İMKÂNSIZ; durum `unreadable`
-  olarak işaretlenir (elle giriş veya mevcut opsiyonel Tesseract OCR yolu ile okunabilir).
+- **Başarı oranı (28 gerçek rapor):** **25 GENEL TOPLAM (pozitif)** + **1 sıfır** (42BHY26 —
+  reddedilen/iptal dosya, `0,00` geçerli sayılır) + **2 özel-glif (Type3) fontlu** (34CKG245,
+  34MPA764 — çöp metin, `unreadable`; elle giriş veya opsiyonel Tesseract OCR ile okunabilir).
 - PDF'ler küçük (ort. 84KB) ve mevcut `pdf2json` bağımlılığıyla okunur — YENİ dependency yok.
 
 ## 3. Saf çıkarım motoru (HAZIR)

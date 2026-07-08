@@ -2,6 +2,29 @@
 
 Tüm önemli değişiklikler bu dosyada tutulur. Sürümleme [SemVer](https://semver.org/lang/tr/) yaklaşımına yakındır.
 
+## [0.6.7] — 2026-07-08
+
+### Düzeltildi — Kapanma tutarı artık "GENEL TOPLAM" (KDV dahil nihai tutar)
+- Kapanan Dosyalar sekmesi ve dosya künyesi, kapanma tutarı olarak raporun küçük **"Ekspertiz
+  Ücreti"** (hizmet bedeli) değerini gösteriyordu; kullanıcı geri bildirimiyle bu, raporun
+  **"GENEL TOPLAM"** (KDV dahil nihai tutar) satırına düzeltildi. 28 gerçek raporla doğrulandı:
+  25 pozitif GENEL TOPLAM, 1 sıfır (reddedilen dosya — 0,00 geçerli sayılır), 2 özel-fontlu
+  (okunamaz). Örn. 06DSZ557 artık 1.600 TL yerine 72.594,91 TL gösterir.
+- GENEL TOPLAM, KDVsiz "TOPLAM TUTAR" veya Ödemeler bölümündeki "KDV'Lİ TUTAR" ile
+  karıştırılmaz; yalnız "GENEL TOPLAM" satırı baz alınır (kimi raporda bunlar farklıdır).
+
+## [0.6.6] — 2026-07-07
+
+### Eklendi — "Kapanan Dosyalar" sekmesi (salt-okunur)
+- Sol menü Kontrol grubuna **Kapanan Dosyalar** sekmesi eklendi: yalnız kapalı dosyaların
+  listesi (Ay · Plaka/Dosya No · Durum/Sorumlu · **Kapanma Ücreti** · Rapor Durumu), ay
+  filtresi, görünüm toplamı ve "Tümü" seçiliyken ay bazlı toplam dökümü. Ücretler v0.6.5'teki
+  salt-okunur ekspertiz raporu taramasından gelir; okunamayan/bulunamayan raporlar açıkça
+  işaretlenir. Satıra tıklamak dosyayı Dosyalar ekranında açar. Sekme, dosya seçimi kilidinden
+  muaftır (Durum Panosu gibi). Hiçbir yere yazma yapılmaz; yeni IPC/bağımlılık yoktur.
+- Canlı doğrulama: gerçek ofis kökünde 48 kapalı dosya, 26 ücret raporlardan okundu; ay
+  filtresi ve toplamlar üretim verisiyle test edildi.
+
 ## [0.6.5] — 2026-07-07
 
 ### Eklendi — Kapanma Ücreti (Ekspertiz Raporlarından, salt-okunur)

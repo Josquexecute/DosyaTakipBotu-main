@@ -1,7 +1,7 @@
 /**
  * v0.6.x — Kapanma Ücreti dt/dd satırı (SALT görüntüleme; ortak bileşen).
  * Yalnız KAPALI dosyalarda ve rapor kökü ayarlıyken render olur. Kaynak: kesin ekspertiz
- * raporundaki "Ekspertiz Ücreti" alanı. Hiçbir yere yazılmaz; elle giriş/aksiyon yoktur.
+ * raporundaki "GENEL TOPLAM" (KDV dahil nihai tutar). Hiçbir yere yazılmaz; elle giriş/aksiyon yoktur.
  */
 import type { CaseIndexItem } from '../../../shared/types';
 import { escapeHtml } from '../validation';
@@ -18,7 +18,7 @@ export function renderClosingFeeRow(item: CaseIndexItem): string {
   if (!caseIsClosed(item)) return '';
   const cf = state.closingFees;
   if (!cf) return '';
-  const tip = infoTip('Kesin ekspertiz raporundaki "Ekspertiz Ücreti" alanından salt-okunur alınır; hiçbir dosyaya yazılmaz. Kaynak: Ayarlar > Ekspertiz Raporları klasörü.');
+  const tip = infoTip('Kesin ekspertiz raporundaki "GENEL TOPLAM" (KDV dahil nihai tutar) salt-okunur alınır; hiçbir dosyaya yazılmaz. Kaynak: Ayarlar > Ekspertiz Raporları klasörü.');
   if (cf.loading) return `<dt>Kapanma Ücreti${tip}</dt><dd class="muted">yükleniyor…</dd>`;
   const record = cf.records[normalizePlateKey(item.plate)];
   if (!record) return `<dt>Kapanma Ücreti${tip}</dt><dd class="muted">Rapor bulunamadı</dd>`;

@@ -7,6 +7,7 @@ import { renderSettingsPage } from './settings';
 import { renderHome } from './home';
 import { renderFolders } from './folders';
 import { renderStatusBoard } from './status-board';
+import { renderClosedCasesPage } from './closed-cases';
 import { renderReportInvoicePanel } from './report-invoice';
 import { renderAiHelpers } from './ai-helpers';
 import { APP_VERSION } from '../../../shared/constants';
@@ -53,6 +54,7 @@ export function renderApp(state: UiState): string {
       ${navItem('warning', 'Ağır Hasar', 'heavy', activePage === 'heavy', folderLocked)}
       <div class="nav-section-label">Kontrol</div>
       ${navItem('board', 'Durum Panosu', 'durum', activePage === 'durum', false)}
+      ${navItem('check', 'Kapanan Dosyalar', 'kapanan', activePage === 'kapanan', false)}
       ${navItem('settings', 'Ayarlar', 'settings', activePage === 'settings', false)}
     </div>
     <div class="side-footer">
@@ -103,6 +105,7 @@ function renderPage(state: UiState, page: DetailTab): string {
     case 'dosyalar': return renderCaseList(state);
     case 'klasorler': return renderFolders(state);
     case 'durum': return renderStatusBoard(state);
+    case 'kapanan': return renderClosedCasesPage(state);
     case 'rapor-fatura': return renderReportInvoicePanel(state);
     case 'ai-yardimcilari': return renderAiHelpers(state);
     case 'issues': return renderIssuesPage(state);
