@@ -47,7 +47,7 @@ assert(
   'Dev Harness v1: AGENTS.md ajan anayasasi kritik guvenlik kurallarini ve politika ifadelerini icerir',
   `AGENTS.md length=${agentsGuide.length}`
 );
-assert(pkg.version === '0.6.7', 'Paket sürümü v0.6.7 olarak sabitlendi', `version=${pkg.version}`);
+assert(pkg.version === '0.6.8', 'Paket sürümü v0.6.8 olarak sabitlendi', `version=${pkg.version}`);
 assert(APP_VERSION === pkg.version, 'APP_VERSION package.json ile uyumlu', `APP_VERSION=${APP_VERSION}, package=${pkg.version}`);
 assert(Boolean(pkg.scripts?.['live:version-check']) && Boolean(pkg.scripts?.['release:hash']) && Boolean(pkg.scripts?.['release:notes']), 'v0.3.14 Windows rollout scriptleri package.json içinde mevcut', JSON.stringify(pkg.scripts));
 assert(Boolean(pkg.scripts?.['test:behavior']) && String(pkg.scripts?.ci || '').includes('test:behavior'), 'v0.3.18 davranış regresyon testleri CI zincirine bağlı', JSON.stringify(pkg.scripts));

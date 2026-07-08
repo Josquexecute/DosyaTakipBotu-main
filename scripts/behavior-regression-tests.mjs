@@ -4174,7 +4174,21 @@ assert(!/\bfetch\b|axios|XMLHttpRequest|WebSocket|ipcRenderer|ipcMain|require\([
 const kuDoc = await fs.readFile('docs/dev/KAPANMA_UCRETI_RAPOR_TASARIMI.md', 'utf-8');
 assert(kuDoc.includes('GENEL TOPLAM') && kuDoc.includes('unreadable') && kuDoc.includes('SALT-OKUNUR') && kuDoc.includes('onayla'), 'KU dokuman: GENEL TOPLAM capasi + okunamayan vaka + salt-okunur/onay kurallari belgeli', '');
 
-// === Kapanma Ücreti v1 KABLOLAMA: ayar + servis + IPC (87) + UI (salt-okunur) ===
+// -- Rapor klasörü türetme (yıl-bazlı kardeş EKSPERTİZ RAPORLARI) --
+const { deriveReportsRootFromWorkingRoot } = await import('../dist-electron/main/services/settings-service.js');
+const kdDerive = deriveReportsRootFromWorkingRoot('P:\\\\BARAN GLOBAL EKSPERTİZ\\\\2026');
+assert(typeof kdDerive === 'string' && kdDerive.includes('EKSPERTİZ RAPORLARI') && kdDerive.endsWith('2026') && deriveReportsRootFromWorkingRoot('P:\\\\X\\\\Y') === null && deriveReportsRootFromWorkingRoot('') === null, 'KU türetme: yil klasoru (...\\<yil>) -> kardes EKSPERTİZ RAPORLARI\\<yil>; yil degilse null', String(kdDerive));
+const kdChooseSrc = await fs.readFile('src/main/services/settings-service.ts', 'utf-8');
+const kdContractSrc = await fs.readFile('src/shared/ipc-contract.ts', 'utf-8');
+const kdPreloadSrc2 = await fs.readFile('src/preload/preload.ts', 'utf-8');
+const kdIpcSrc2 = await fs.readFile('src/main/ipc.ts', 'utf-8');
+const kdSettingsUi2 = await fs.readFile('src/renderer/app/components/settings.ts', 'utf-8');
+const kdMainR2 = await fs.readFile('src/renderer/main.ts', 'utf-8');
+assert(kdContractSrc.includes("settingsChooseReportsRoot: 'settings:choose-reports-root'") && kdPreloadSrc2.includes('IPC.settingsChooseReportsRoot') && kdIpcSrc2.includes('IPC.settingsChooseReportsRoot') && kdChooseSrc.includes('chooseReportsRoot'), 'KU picker: rapor klasoru secici IPC uclusu (kontrat+preload+handler+servis)', '');
+assert(kdSettingsUi2.includes('data-action="choose-reports-root"') && kdMainR2.includes("case 'choose-reports-root'") && kdMainR2.includes('chooseReportsRootPath') && kdMainR2.includes('loadClosingFees(true)'), 'KU picker: Ayarlar "Seç" butonu + handler + secince ucret yenileme', '');
+assert(/properties: \['openDirectory'\]/.test(kdChooseSrc) && !/reportsRootPath.*writeFile|writeFile.*reportsRootPath/s.test(kdChooseSrc), 'KU picker: yalniz klasor SECER (openDirectory); rapor klasorune yazma yok', '');
+
+// === Kapanma Ücreti v1 KABLOLAMA: ayar + servis + IPC (88) + UI (salt-okunur) ===
 const kuSvcSrc = await fs.readFile('src/main/services/closing-fee-service.ts', 'utf-8');
 assert(!/atomicWrite|writeFile|\.mutate\(|TrackingFileService|takip\.json|xlsx|nodemailer|\bfetch\b/i.test(kuSvcSrc) && kuSvcSrc.includes('extractPdfText') && kuSvcSrc.includes('extractClosingFeeFromText') && kuSvcSrc.includes('MAX_PDF_COUNT'), 'KU servis: SALT-OKUNUR tarayici (yazma/mutate/Excel/ag YOK) + mevcut pdf-text + saf motor + guvenlik siniri', '');
 assert(kuSvcSrc.includes('fileCache') && kuSvcSrc.includes('mtimeMs') && !/require\(['"]electron|from ['"]electron/.test(kuSvcSrc), 'KU servis: oturum-ici bellek onbellegi (mtime+boyut imzali); electron import yok (Node-testlenebilir)', '');

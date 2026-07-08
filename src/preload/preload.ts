@@ -54,6 +54,7 @@ const api: HasarbotuApi = {
   getSettings: <T>() => invoke<T>(IPC.settingsGet),
   saveSettings: <T>(settings: AppSettings) => invoke<T>(IPC.settingsSave, settings),
   chooseRoot: <T>() => invoke<T>(IPC.settingsChooseRoot),
+  chooseReportsRoot: <T>() => invoke<T>(IPC.settingsChooseReportsRoot),
   getDashboard: <T>() => invoke<T>(IPC.dashboardGet),
   listCases: <T>() => invoke<T>(IPC.casesList),
   getCase: <T>(folderPath: string) => invoke<T>(IPC.casesGet, folderPath),

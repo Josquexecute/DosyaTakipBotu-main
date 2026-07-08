@@ -149,6 +149,7 @@ export class IpcController {
     ipcMain.handle(IPC.settingsGet, () => this.safe(() => this.settings.get()));
     ipcMain.handle(IPC.settingsSave, (_event, settings: AppSettings) => this.safe(() => this.settings.save(settings)));
     ipcMain.handle(IPC.settingsChooseRoot, () => this.safe(() => this.settings.chooseRoot()));
+    ipcMain.handle(IPC.settingsChooseReportsRoot, () => this.safe(() => this.settings.chooseReportsRoot()));
 
     ipcMain.handle(IPC.dashboardGet, () => this.safe(() => this.cases.dashboard()));
     ipcMain.handle(IPC.casesList, () => this.safe(() => this.cases.list()));

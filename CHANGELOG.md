@@ -2,6 +2,17 @@
 
 Tüm önemli değişiklikler bu dosyada tutulur. Sürümleme [SemVer](https://semver.org/lang/tr/) yaklaşımına yakındır.
 
+## [0.6.8] — 2026-07-08
+
+### Eklendi — Ekspertiz Raporları klasörü için "Seç" (klasör seçici) butonu
+- Ayarlar'daki "Ekspertiz Raporları klasörü" alanına, ana klasördeki gibi **"Seç"** klasör
+  seçici butonu eklendi (yeni IPC `settings:choose-reports-root`, 88 invoke). Kullanıcı yıl
+  klasörünü (ör. `...\EKSPERTİZ RAPORLARI\2026`) seçince ücretler otomatik yüklenir.
+- Seçici, çalışma kökünün komşusundaki `EKSPERTİZ RAPORLARI\<yıl>` klasörünü (varsa) varsayılan
+  olarak açar; böylece doğru konuma tek tıkla ulaşılır. Klasör SALT-OKUNUR taranır (yazma yok).
+- Not: Kapanan Dosyalar sekmesi bu klasör seçilmeden de kapalı dosyaları listeler; klasör yalnız
+  kapanma tutarı (GENEL TOPLAM) sütununu doldurmak içindir.
+
 ## [0.6.7] — 2026-07-08
 
 ### Düzeltildi — Kapanma tutarı artık "GENEL TOPLAM" (KDV dahil nihai tutar)

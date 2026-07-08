@@ -1340,6 +1340,7 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'refresh-deployment-status': await refreshDeploymentStatus(); break;
     case 'register-deployment-client': await registerDeploymentClient(); break;
     case 'choose-root': await chooseRootPath(); break;
+    case 'choose-reports-root': await chooseReportsRootPath(); break;
     case 'save-settings': await saveSettingsFromPage(); break;
     case 'add-user': await addUserFromPage(); break;
     case 'remove-user': await removeUserFromButton(element); break;
@@ -3181,6 +3182,21 @@ async function handleSettingsInputChange(target: HTMLInputElement | HTMLTextArea
   }
   const renameIndex = target.dataset.userRename;
   if (renameIndex !== undefined) await renameUser(Number(renameIndex), target.value);
+}
+
+/** Ekspertiz Raporları klasörünü klasör seçiciyle belirler; seçilirse kapanma ücretlerini yeniler. */
+async function chooseReportsRootPath(): Promise<void> {
+  const result = await window.hasarbotu.chooseReportsRoot<AppSettings>();
+  if (!result.ok) {
+    state.error = result.error.message;
+    render();
+    return;
+  }
+  state.settings = result.data;
+  state.error = '';
+  setToast(result.data.reportsRootPath ? 'Ekspertiz Raporları klasörü seçildi.' : 'Klasör seçimi iptal edildi.', result.data.reportsRootPath ? 'success' : 'info');
+  render();
+  if (result.data.reportsRootPath) void loadClosingFees(true);
 }
 
 async function chooseRootPath(): Promise<void> {

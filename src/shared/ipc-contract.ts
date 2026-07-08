@@ -65,6 +65,7 @@ export const IPC_INVOKE_CHANNELS = {
   settingsGet: 'settings:get',
   settingsSave: 'settings:save',
   settingsChooseRoot: 'settings:choose-root',
+  settingsChooseReportsRoot: 'settings:choose-reports-root',
   dashboardGet: 'dashboard:get',
   casesList: 'cases:list',
   casesGet: 'cases:get',
@@ -262,6 +263,8 @@ export interface HasarbotuApi {
   getSettings<T = AppSettings>(): Promise<ApiResult<T>>;
   saveSettings<T = AppSettings>(settings: AppSettings): Promise<ApiResult<T>>;
   chooseRoot<T = AppSettings>(): Promise<ApiResult<T>>;
+  /** Ekspertiz Raporları (yıl) klasörünü seçtirir; SALT-OKUNUR tarama yüzeyi. */
+  chooseReportsRoot<T = AppSettings>(): Promise<ApiResult<T>>;
   getDashboard<T = DashboardSummary>(): Promise<ApiResult<T>>;
   listCases<T = CaseIndexItem[]>(): Promise<ApiResult<T>>;
   getCase<T = CaseIndexItem | null>(folderPath: string): Promise<ApiResult<T>>;

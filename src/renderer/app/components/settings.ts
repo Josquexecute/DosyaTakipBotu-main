@@ -48,8 +48,11 @@ export function renderSettingsPage(state: UiState): string {
             <small class="settings-help inline">İlk kurulumda 2026 ana klasörünü siz seçin. Ay klasörü seçilirse program o ayın dosyalarını da okuyabilir.</small>
           </label>
           <label class="wide">Ekspertiz Raporları klasörü (kapanma ücreti)
-            <input id="settings-reports-root" value="${escapeHtml(settings.reportsRootPath ?? '')}" placeholder="P:\\BARAN GLOBAL EKSPERTİZ\\EKSPERTİZ RAPORLARI\\2026" />
-            <small class="settings-help inline">Kapalı dosyalarda kapanma ücreti bu klasördeki "PLAKA EKSPERTİZ RAPORU.pdf" dosyalarından SALT-OKUNUR alınır; klasöre hiçbir şey yazılmaz. Boş bırakılırsa özellik kapalıdır.</small>
+            <div class="path-picker-row">
+              <input id="settings-reports-root" value="${escapeHtml(settings.reportsRootPath ?? '')}" placeholder="P:\\BARAN GLOBAL EKSPERTİZ\\EKSPERTİZ RAPORLARI\\2026" />
+              <button class="secondary" data-action="choose-reports-root" type="button">Seç</button>
+            </div>
+            <small class="settings-help inline">Raporların bulunduğu YIL klasörünü seçin (ör. ...\\EKSPERTİZ RAPORLARI\\2026). Kapalı dosyalarda kapanma tutarı (GENEL TOPLAM) bu klasördeki "PLAKA EKSPERTİZ RAPORU.pdf" dosyalarından SALT-OKUNUR alınır; klasöre hiçbir şey yazılmaz. Boş bırakılırsa özellik kapalıdır.</small>
           </label>
           <label>Aktif kullanıcı
             <select data-setting="activeUser">
