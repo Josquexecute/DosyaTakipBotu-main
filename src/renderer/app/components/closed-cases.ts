@@ -34,15 +34,48 @@ function tl(value: number): string {
   return `${value.toLocaleString('tr-TR')} TL`;
 }
 
+/**
+ * Kapanan Dosyalar sekmesi için görüntülenecek durum. Bu sekmedeki her satır KAPALI olduğundan,
+ * iş akışı durumu güncellenmemiş (ör. "Yeni Dosya") dosyalarda "Kapalı" gösterilir; zaten kapanış
+ * ailesi (Kapalı/Kapanış Kontrolü) durumlar korunur. Kaynak veri değişmez — yalnız görüntü.
+ */
+function closedStatusLabel(item: CaseIndexItem): string {
+  const ws = (item.workflowStatus || '').trim();
+  return /kapa/i.test(ws) ? ws : 'Kapalı';
+}
+
 /** Rapor durumu hücresi: okundu → tutar; diğer durumlar açıklayıcı rozet. */
 function feeCell(record: ClosingFeeRecord | null, loading: boolean): { fee: string; status: string; cls: string } {
   if (loading) return { fee: '—', status: 'yükleniyor…', cls: 'muted' };
   if (!record) return { fee: '—', status: 'Rapor bulunamadı', cls: 'muted' };
   if (record.status === 'ok' && typeof record.feeTl === 'number') {
+    if (record.manual) return { fee: tl(record.feeTl), status: 'Elle girildi', cls: 'ok' };
+    if (record.ocrUsed) return { fee: tl(record.feeTl), status: 'OCR ile okundu — kontrol edin', cls: 'warn' };
     return { fee: tl(record.feeTl), status: 'Rapordan okundu', cls: 'ok' };
   }
-  if (record.status === 'unreadable') return { fee: '—', status: 'Rapor okunamadı — elle kontrol', cls: 'warn' };
-  return { fee: '—', status: 'Raporda ücret alanı yok', cls: 'warn' };
+  if (record.status === 'unreadable') return { fee: '—', status: 'Rapor okunamadı — elle girin', cls: 'warn' };
+  return { fee: '—', status: 'Raporda tutar yok — elle girin', cls: 'warn' };
+}
+
+/** Ücret hücresi içeriği: değer + "düzelt" ya da (düzenleme modunda) giriş kutusu + Kaydet/Sil. */
+function feeCellHtml(r: ClosedRow, cell: { fee: string; cls: string }, editing: boolean): string {
+  const plate = normalizePlateKey(r.item.plate);
+  const hasValue = r.record?.status === 'ok' && typeof r.record.feeTl === 'number';
+  const isManual = r.record?.manual === true;
+  const needsEntry = !hasValue; // rapor bulunamadı / okunamadı / tutar yok
+  if (editing) {
+    const cur = hasValue ? String(r.record?.feeTl ?? '') : '';
+    return `<td class="closed-fee-cell" data-action="closing-fee-noop">
+      <input type="text" class="closed-fee-input" data-closing-fee-input="${escapeHtml(plate)}" value="${escapeHtml(cur)}" placeholder="ör. 72.594,91" />
+      <button class="primary compact" data-action="closing-fee-save" data-plate="${escapeHtml(plate)}">Kaydet</button>
+      <button class="secondary compact" data-action="closing-fee-cancel" data-plate="${escapeHtml(plate)}">Vazgeç</button>
+      ${isManual ? `<button class="secondary compact danger" data-action="closing-fee-clear" data-plate="${escapeHtml(plate)}">Sil</button>` : ''}
+    </td>`;
+  }
+  return `<td class="closed-fee-cell ${cell.cls}" data-action="closing-fee-noop">
+    <b>${escapeHtml(cell.fee)}</b>
+    <button class="link-button closed-fee-edit" data-action="closing-fee-edit" data-plate="${escapeHtml(plate)}">${needsEntry ? 'Gir' : 'düzelt'}</button>
+  </td>`;
 }
 
 /** Kapanan Dosyalar sayfasını döner (sol menü sekmesi; dosya seçimi gerektirmez). */
@@ -71,15 +104,16 @@ export function renderClosedCasesPage(ui: UiState): string {
       }).join(' · ')
     : '';
 
+  const editPlate = ui.closingFeeEditPlate;
   const rowsHtml = visible.map((r) => {
     const cell = feeCell(r.record, loading);
-    const src = r.record?.status === 'ok' ? `${r.record.fileName}${r.record.kayitTarihi ? ` • ${r.record.kayitTarihi}` : ''}` : '';
-    return `<tr class="status-row" data-action="status-open-case" data-folder="${escapeHtml(r.item.folderPath)}" title="${escapeHtml(r.item.plate)} dosyasını aç">
-      <td>${escapeHtml(monthOf(r.item))}</td>
-      <td><b>${escapeHtml(r.item.plate)}</b><small>${escapeHtml(r.item.officeFileNo || r.item.dosyaNo || '-')}</small></td>
-      <td>${escapeHtml(r.item.workflowStatus)}<small>${escapeHtml(r.item.sorumlu || 'Atanmadı')}</small></td>
-      <td class="closed-fee-cell ${cell.cls}" ${src ? `title="${escapeHtml(src)}"` : ''}><b>${escapeHtml(cell.fee)}</b></td>
-      <td class="closed-status-cell ${cell.cls}">${escapeHtml(cell.status)}</td>
+    const editing = editPlate !== '' && editPlate === normalizePlateKey(r.item.plate);
+    return `<tr class="status-row">
+      <td data-action="status-open-case" data-folder="${escapeHtml(r.item.folderPath)}" title="${escapeHtml(r.item.plate)} dosyasını aç">${escapeHtml(monthOf(r.item))}</td>
+      <td data-action="status-open-case" data-folder="${escapeHtml(r.item.folderPath)}"><b>${escapeHtml(r.item.plate)}</b><small>${escapeHtml(r.item.officeFileNo || r.item.dosyaNo || '-')}</small></td>
+      <td data-action="status-open-case" data-folder="${escapeHtml(r.item.folderPath)}">${escapeHtml(closedStatusLabel(r.item))}<small>${escapeHtml(r.item.sorumlu || 'Atanmadı')}</small></td>
+      ${feeCellHtml(r, cell, editing)}
+      <td class="closed-status-cell ${cell.cls}">${escapeHtml(feeCell(r.record, loading).status)}</td>
     </tr>`;
   }).join('');
 

@@ -108,6 +108,7 @@ export const IPC_INVOKE_CHANNELS = {
   reportInvoiceCompliance: 'report-invoice:compliance',
   reportInvoiceTestAi: 'report-invoice:test-ai',
   reportsGetClosingFees: 'reports:get-closing-fees',
+  reportsSetClosingFee: 'reports:set-closing-fee',
   heavyDamagePreview: 'heavy-damage:preview',
   heavyDamageGet: 'heavy-damage:get',
   heavyDamageSave: 'heavy-damage:save',
@@ -281,6 +282,8 @@ export interface HasarbotuApi {
   checkReportInvoiceCompliance<T = ReportInvoiceComplianceResult>(args: ReportInvoiceComplianceArgs): Promise<ApiResult<T>>;
   /** Kapanma ücreti: rapor kökünü SALT-OKUNUR tarar (yazma yok); force=true önbelleği atlar. */
   getClosingFees<T = ClosingFeeScanResult>(force?: boolean): Promise<ApiResult<T>>;
+  /** Bir plaka için elle kapanma tutarı yazar/siler (local-cache override; feeTl=null siler). */
+  setClosingFee<T = ClosingFeeScanResult>(args: { plate: string; feeTl: number | null }): Promise<ApiResult<T>>;
   testReportInvoiceAi<T = ReportInvoiceAiTestResult>(): Promise<ApiResult<T>>;
   autoLaborPreview<T = AutoLaborPreview>(vehicle?: LaborVehicleContext): Promise<ApiResult<T>>;
   autoLaborSave<T = AutoLaborSaveResult>(args: LaborAutoSaveArgs): Promise<ApiResult<T>>;

@@ -142,7 +142,7 @@ export class IpcController {
     this.knowledge = new KnowledgeSearchService();
     this.heavyDamage = new HeavyDamageAssessmentService(this.context, this.cases);
     this.deployment = new DeploymentService(this.context);
-    this.closingFees = new ClosingFeeService();
+    this.closingFees = new ClosingFeeService(this.cache.cacheRoot);
   }
 
   register(): void {
@@ -219,6 +219,13 @@ export class IpcController {
     ipcMain.handle(IPC.reportsGetClosingFees, (_event, force?: boolean) => this.safe(async () => {
       const settings = await this.context.getSettings();
       return this.closingFees.scan(settings.reportsRootPath ?? '', force === true);
+    }));
+    // Kapanma ücreti ELLE girişi: yalnız local-cache override dosyasına yazar (kullanıcı onaylı).
+    ipcMain.handle(IPC.reportsSetClosingFee, (_event, args: { plate: string; feeTl: number | null }) => this.safe(async () => {
+      const settings = await this.context.getSettings();
+      const res = await this.closingFees.setOverride(args?.plate ?? '', args?.feeTl ?? null, settings.activeUser);
+      if (!res.ok) throw new Error(res.message ?? 'Elle tutar kaydedilemedi.');
+      return this.closingFees.scan(settings.reportsRootPath ?? '', true);
     }));
     ipcMain.handle(IPC.heavyDamagePreview, (_event, args: HeavyDamagePreviewArgs) => this.safe(() => this.heavyDamage.preview(args)));
     ipcMain.handle(IPC.heavyDamageGet, (_event, args: HeavyDamageGetArgs) => this.safe(() => this.heavyDamage.get(args)));

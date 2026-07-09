@@ -71,6 +71,7 @@ const api: HasarbotuApi = {
   checkReportInvoiceCompliance: <T>(args: ReportInvoiceComplianceArgs) => invoke<T>(IPC.reportInvoiceCompliance, args),
   testReportInvoiceAi: <T>() => invoke<T>(IPC.reportInvoiceTestAi),
   getClosingFees: <T>(force?: boolean) => invoke<T>(IPC.reportsGetClosingFees, force),
+  setClosingFee: <T>(args: { plate: string; feeTl: number | null }) => invoke<T>(IPC.reportsSetClosingFee, args),
   autoLaborPreview: <T>(vehicle?: LaborVehicleContext) => invoke<T>(IPC.laborAutoPreview, vehicle),
   autoLaborSave: <T>(args: LaborAutoSaveArgs) => invoke<T>(IPC.laborAutoSave, args),
   laborLearningList: <T>() => invoke<T>(IPC.laborLearningList),

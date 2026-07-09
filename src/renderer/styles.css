@@ -5915,6 +5915,10 @@ html.dark .info-tip { background: var(--surface-container-high, #2a3040); border
 .closed-fee-cell.ok b { color: var(--success, #2f8f4e); }
 .closed-fee-cell.warn b, .closed-status-cell.warn { color: #8a5a00; }
 .closed-fee-cell.muted b, .closed-status-cell.muted { color: var(--on-surface-variant, #777); font-weight: 500; }
+.closed-fee-cell { white-space: nowrap; }
+.closed-fee-input { width: 110px; height: 26px; padding: 0 6px; }
+.closed-fee-edit.link-button, .closed-cases-page .link-button { background: transparent; color: var(--primary, #3b5bdb); font-size: 11px; padding: 0 4px; margin-left: 6px; text-decoration: underline; }
+.closed-fee-cell .compact { margin-left: 4px; }
 
 /* v0.6.x v10: ofis-hazır sadeleştirme — güncel/geçmiş durum satırlarını görsel olarak ayır, yoğunluğu topla */
 .vl-snap-fresh { padding-left: 6px; border-left: 3px solid var(--outline-variant, #ddd); }

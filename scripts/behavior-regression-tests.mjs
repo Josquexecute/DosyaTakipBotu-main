@@ -4190,7 +4190,8 @@ assert(/properties: \['openDirectory'\]/.test(kdChooseSrc) && !/reportsRootPath.
 
 // === Kapanma Ücreti v1 KABLOLAMA: ayar + servis + IPC (88) + UI (salt-okunur) ===
 const kuSvcSrc = await fs.readFile('src/main/services/closing-fee-service.ts', 'utf-8');
-assert(!/atomicWrite|writeFile|\.mutate\(|TrackingFileService|takip\.json|xlsx|nodemailer|\bfetch\b/i.test(kuSvcSrc) && kuSvcSrc.includes('extractPdfText') && kuSvcSrc.includes('extractClosingFeeFromText') && kuSvcSrc.includes('MAX_PDF_COUNT'), 'KU servis: SALT-OKUNUR tarayici (yazma/mutate/Excel/ag YOK) + mevcut pdf-text + saf motor + guvenlik siniri', '');
+// v0.6.10: servis artik override'i local-cache'e atomik yazar (rapor klasorune/takip.json'a DEGIL).
+assert(!/\.tracking\.mutate\(|TrackingFileService|writeFile\(|xlsx|nodemailer|\bfetch\(/i.test(kuSvcSrc) && kuSvcSrc.includes('extractPdfText') && kuSvcSrc.includes('extractClosingFeeFromText') && kuSvcSrc.includes('MAX_PDF_COUNT'), 'KU servis: rapor klasoru SALT-OKUNUR (Excel/mail/ag/takip-mutate YOK) + mevcut pdf-text + saf motor + guvenlik siniri', '');
 assert(kuSvcSrc.includes('fileCache') && kuSvcSrc.includes('mtimeMs') && !/require\(['"]electron|from ['"]electron/.test(kuSvcSrc), 'KU servis: oturum-ici bellek onbellegi (mtime+boyut imzali); electron import yok (Node-testlenebilir)', '');
 const kuContractSrc = await fs.readFile('src/shared/ipc-contract.ts', 'utf-8');
 const kuPreloadSrc = await fs.readFile('src/preload/preload.ts', 'utf-8');
@@ -4221,9 +4222,41 @@ const kdMain = await fs.readFile('src/renderer/main.ts', 'utf-8');
 assert(kdLayout.includes("'Kapanan Dosyalar', 'kapanan'") && kdLayout.includes("case 'kapanan': return renderClosedCasesPage(state);") && kdState.includes("| 'kapanan' |"), 'KD sekme: sol menu + sayfa yonlendirme + DetailTab tipi birlikte', '');
 assert(kdMain.includes("'kapanan', 'rapor-fatura'") && kdMain.includes('dataset.closedMonth'), 'KD sekme: klasor kilidi acikken erisilebilir + ay filtresi handler bagli', '');
 assert(kdSrc.includes('isClosedCase(item)') && kdSrc.includes('normalizePlateKey') && kdSrc.includes('closedCasesMonthFilter') && kdSrc.includes('Görünüm toplamı'), 'KD icerik: yalniz kapali dosyalar + ucret eslesmesi + ay filtresi + gorunum toplami', '');
-assert(kdSrc.includes('Rapor okunamadı — elle kontrol') && kdSrc.includes('Rapor bulunamadı') && kdSrc.includes('Ekspertiz Raporları klasörü'), 'KD durumlar: okunamadi/bulunamadi rozetleri + ozellik-kapali yonlendirmesi', '');
-assert(kdSrc.includes('data-action="status-open-case"') && !/data-action="(?!status-open-case)[a-z-]*(save|write|delete|apply|export)/i.test(kdSrc), 'KD guvenlik: satir tiklamasi mevcut ac-aksiyonunu kullanir; kaydet/sil/yaz/export aksiyonu YOK', '');
+assert(kdSrc.includes('Rapor okunamadı — elle girin') && kdSrc.includes('Rapor bulunamadı') && kdSrc.includes('Ekspertiz Raporları klasörü'), 'KD durumlar: okunamadi/bulunamadi rozetleri + ozellik-kapali yonlendirmesi', '');
+// v0.6.10: closing-fee-save/clear onaylı elle giriş aksiyonlarıdır (takip.json'a yazmaz); yasak olan takip/Excel yazma aksiyonlarıdır.
+assert(kdSrc.includes('data-action="status-open-case"') && !/data-action="(?!status-open-case|closing-fee-)[a-z-]*(write|delete|apply|export|tracking)/i.test(kdSrc), 'KD guvenlik: satir tiklamasi ac-aksiyonu; yalniz closing-fee elle-giris aksiyonlari eklendi (takip/Excel yazma yok)', '');
 assert(!/\bfetch\b|ipcRenderer|\.invoke\(|writeFile|xlsx/i.test(kdSrc) && kdSrc.split(/\r?\n/).length <= 400, 'KD guard: bilesen saf render (ag/IPC/yazma yok) + 400 satir alti', `${kdSrc.split(/\r?\n/).length} satir`);
+// Durum sutunu: kapali dosyalarda guncellenmemis is akisi ("Yeni Dosya") yerine "Kapalı" gosterir.
+assert(kdSrc.includes('closedStatusLabel') && /\/kapa\/i\.test\(ws\) \? ws : 'Kapalı'/.test(kdSrc) && kdSrc.includes('closedStatusLabel(r.item)') && !/escapeHtml\(r\.item\.workflowStatus\)/.test(kdSrc), 'KD durum: kapali dosyada durum "Kapalı" gosterilir (guncellenmemis Yeni Dosya degil); kapanis-ailesi korunur', '');
+
+// === OCR fallback + Manuel kapanma tutarı override (v0.6.10) ===
+const { ClosingFeeService } = await import('../dist-electron/main/services/closing-fee-service.js');
+const osMod = await import('node:os');
+const cfTmp = await fs.mkdtemp(osMod.tmpdir() + '/cf-ovr-');
+const cfSvc = new ClosingFeeService(cfTmp);
+const cfSet = await cfSvc.setOverride('34 TEST 99', 12345.67, 'Tester');
+const cfR1 = await cfSvc.scan('', true);
+const cfRec = cfR1.records.find((x) => x.plateKey === '34TEST99');
+assert(cfSet.ok === true && cfRec && cfRec.status === 'ok' && cfRec.feeTl === 12345.67 && cfRec.manual === true, 'KU override: elle tutar manual=true ok kaydi uretir (raporsuz plakada bile)', JSON.stringify(cfRec));
+assert((await cfSvc.setOverride('34TEST99', -5, 'x')).ok === false && (await cfSvc.setOverride('', 100, 'x')).ok === false, 'KU override: negatif tutar + bos plaka reddedilir', '');
+await cfSvc.setOverride('34TEST99', null, 'x');
+const cfR2 = await cfSvc.scan('', true);
+assert(!cfR2.records.find((x) => x.plateKey === '34TEST99'), 'KU override: null ile silme kaydi kaldirir', '');
+await fs.rm(cfTmp, { recursive: true, force: true });
+const kuSvc2 = await fs.readFile('src/main/services/closing-fee-service.ts', 'utf-8');
+assert(kuSvc2.includes('ocrPdfAllPages') && kuSvc2.includes("status === 'unreadable' && ocrAvailable") && kuSvc2.includes('ocrUsed'), 'KU servis: metin okunamayinca OCR (cok-sayfa) fallback denenir + ocrUsed isaretlenir', '');
+assert(kuSvc2.includes('atomicWriteJson(this.overridesPath') && !/\.tracking\.mutate\(|new TrackingFileService/.test(kuSvc2), 'KU servis: override yalniz local-cache dosyasina atomik yazar; takip mutate YOK', '');
+const kuOcr = await fs.readFile('src/main/import/ocr.ts', 'utf-8');
+assert(kuOcr.includes('ocrPdfAllPages') && kuOcr.includes('NAPS2') && /'-f', '1', '-l', String\(maxPages\)/.test(kuOcr), 'KU OCR: cok-sayfa PDF OCR fonksiyonu + NAPS2 tesseract yolu', '');
+const kuContract2 = await fs.readFile('src/shared/ipc-contract.ts', 'utf-8');
+const kuPreload3 = await fs.readFile('src/preload/preload.ts', 'utf-8');
+const kuIpc3 = await fs.readFile('src/main/ipc.ts', 'utf-8');
+assert(kuContract2.includes("reportsSetClosingFee: 'reports:set-closing-fee'") && kuPreload3.includes('IPC.reportsSetClosingFee') && kuIpc3.includes('IPC.reportsSetClosingFee') && kuIpc3.includes('closingFees.setOverride'), 'KU override IPC: kontrat+preload+handler uclusu (setOverride)', '');
+const kdSrc2 = await fs.readFile('src/renderer/app/components/closed-cases.ts', 'utf-8');
+const kdMain3 = await fs.readFile('src/renderer/main.ts', 'utf-8');
+assert(kdSrc2.includes('data-action="closing-fee-save"') && kdSrc2.includes('data-action="closing-fee-edit"') && kdSrc2.includes('data-closing-fee-input') && kdSrc2.includes('data-action="closing-fee-noop"'), 'KU override UI: satirda Gir/düzelt + giris kutusu + Kaydet; hucre no-op (dosya acmayi tetiklemez)', '');
+assert(/saveClosingFeeManual[\s\S]{0,500}confirmDialog[\s\S]{0,600}setClosingFee/.test(kdMain3) && kdMain3.includes("case 'closing-fee-noop': break"), 'KU override UI: kaydetme confirmDialog onayindan gecer + noop aksiyonu bagli', '');
+assert(kdSrc2.includes("status: 'Elle girildi'") && kdSrc2.includes("status: 'OCR ile okundu — kontrol edin'"), 'KU override UI: manual "Elle girildi" + ocrUsed "OCR — kontrol edin" durumlari gosterilir', '');
 
 const failed = checks.filter((item) => !item.ok);
 if (failed.length) {

@@ -18,6 +18,10 @@ export interface ClosingFeeRecord {
   raporNo?: string;
   ekspertizTuru?: string;
   kayitTarihi?: string;
+  /** Değer OCR (görüntüden okuma) ile elde edildiyse true — kontrol edilmesi önerilir. */
+  ocrUsed?: boolean;
+  /** Değer kullanıcı tarafından elle girildiyse true (rapordan okumaya göre önceliklidir). */
+  manual?: boolean;
   warnings: string[];
 }
 

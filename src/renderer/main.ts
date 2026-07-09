@@ -889,6 +889,7 @@ function wireEvents(): void {
       render();
       return;
     }
+    if (target.dataset.closingFeeInput) return; // serbest yazım; kaydetmede okunur
     if (target.dataset.statusFilter === 'board') {
       state.statusBoardStatusFilter = target.value || 'all';
       state.statusBoardPage = 1;
@@ -1341,6 +1342,11 @@ async function handleAction(action: string, element?: HTMLElement): Promise<void
     case 'register-deployment-client': await registerDeploymentClient(); break;
     case 'choose-root': await chooseRootPath(); break;
     case 'choose-reports-root': await chooseReportsRootPath(); break;
+    case 'closing-fee-noop': break; // ücret hücresine tıklama dosya açmayı tetiklemesin
+    case 'closing-fee-edit': state.closingFeeEditPlate = element?.dataset.plate ?? ''; render(); break;
+    case 'closing-fee-cancel': state.closingFeeEditPlate = ''; render(); break;
+    case 'closing-fee-save': await saveClosingFeeManual(element?.dataset.plate ?? ''); break;
+    case 'closing-fee-clear': await clearClosingFeeManual(element?.dataset.plate ?? ''); break;
     case 'save-settings': await saveSettingsFromPage(); break;
     case 'add-user': await addUserFromPage(); break;
     case 'remove-user': await removeUserFromButton(element); break;
@@ -3182,6 +3188,51 @@ async function handleSettingsInputChange(target: HTMLInputElement | HTMLTextArea
   }
   const renameIndex = target.dataset.userRename;
   if (renameIndex !== undefined) await renameUser(Number(renameIndex), target.value);
+}
+
+/** Türkçe/serbest yazılmış tutarı sayıya çevirir (ör. "72.594,91" veya "72594,91" veya "72594.91"). */
+function parseUserAmount(raw: string): number | null {
+  const s = (raw ?? '').trim().replace(/\s|tl/gi, '');
+  if (!s) return null;
+  const normalized = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s;
+  const v = Number(normalized);
+  return Number.isFinite(v) && v >= 0 && v <= 50_000_000 ? Math.round(v * 100) / 100 : null;
+}
+
+/** Elle kapanma tutarı kaydı (onaylı; local-cache override'a yazar, takip.json'a dokunmaz). */
+async function saveClosingFeeManual(plate: string): Promise<void> {
+  if (!plate) return;
+  const input = document.querySelector<HTMLInputElement>(`[data-closing-fee-input="${plate}"]`);
+  const value = parseUserAmount(input?.value ?? '');
+  if (value === null) { setToast('Geçerli bir tutar girin (ör. 72.594,91).', 'warning'); return; }
+  const ok = await confirmDialog(`${plate} için kapanma tutarı elle kaydedilecek:\n\n${value.toLocaleString('tr-TR')} TL\n\nBu değer rapordan okumaya göre öncelikli olur ve yalnız yerel önbelleğe yazılır (takip.json değişmez). Devam edilsin mi?`, { title: 'Elle Kapanma Tutarı', confirmLabel: 'Kaydet', cancelLabel: 'Vazgeç' });
+  if (!ok) return;
+  const result = await window.hasarbotu.setClosingFee<ClosingFeeScanResult>({ plate, feeTl: value });
+  if (!result.ok) { state.error = result.error.message; render(); return; }
+  applyClosingFeeScan(result.data);
+  state.closingFeeEditPlate = '';
+  setToast('Kapanma tutarı elle kaydedildi.', 'success');
+  render();
+}
+
+/** Elle girilmiş kapanma tutarını siler (onaylı). */
+async function clearClosingFeeManual(plate: string): Promise<void> {
+  if (!plate) return;
+  const ok = await confirmDialog(`${plate} için elle girilen kapanma tutarı silinecek; varsa rapordan okunan değere dönülür. Devam edilsin mi?`, { title: 'Elle Tutarı Sil', confirmLabel: 'Sil', cancelLabel: 'Vazgeç', danger: true });
+  if (!ok) return;
+  const result = await window.hasarbotu.setClosingFee<ClosingFeeScanResult>({ plate, feeTl: null });
+  if (!result.ok) { state.error = result.error.message; render(); return; }
+  applyClosingFeeScan(result.data);
+  state.closingFeeEditPlate = '';
+  setToast('Elle tutar silindi.', 'info');
+  render();
+}
+
+/** Tarama sonucunu state.closingFees'e yansıtır (plaka anahtarlı harita). */
+function applyClosingFeeScan(data: ClosingFeeScanResult): void {
+  const records: Record<string, ClosingFeeRecord> = {};
+  for (const record of data.records) records[record.plateKey] = record;
+  state.closingFees = { loading: false, scannedAt: data.scannedAt, records, errors: data.errors };
 }
 
 /** Ekspertiz Raporları klasörünü klasör seçiciyle belirler; seçilirse kapanma ücretlerini yeniler. */

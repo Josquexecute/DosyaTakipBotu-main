@@ -2,6 +2,30 @@
 
 Tüm önemli değişiklikler bu dosyada tutulur. Sürümleme [SemVer](https://semver.org/lang/tr/) yaklaşımına yakındır.
 
+## [0.6.10] — 2026-07-08
+
+### Eklendi — Okunamayan raporlar için OCR fallback + elle tutar girişi
+- **Metin-korumalı (özel-fontlu) raporlar:** Bazı portal çıktıları harfleri kopyalanamayan
+  özel fontla üretiliyor; metin çıkarımı çalışmıyordu. Artık metin okunamazsa **OCR
+  (görüntüden okuma)** denenir; OCR ile okunan tutar "OCR ile okundu — kontrol edin" olarak
+  işaretlenir. OCR için Tesseract + poppler gerekir (Tesseract, kuruluysa NAPS2 sürümü de
+  tanınır; poppler `npm run install:ocr` ile kurulur).
+- **Elle tutar girişi:** Kapanan Dosyalar sekmesinde her satırda "Gir/düzelt" ile kapanma
+  tutarını elle girebilirsiniz (onaylı). Elle değer rapordan okumaya göre önceliklidir ve
+  yalnız yerel önbelleğe (`closing-fee-overrides.json`) yazılır — takip.json'a dokunulmaz.
+  Yeni salt-okunur/override IPC `reports:set-closing-fee` (89 invoke).
+
+## [0.6.9] — 2026-07-08
+
+### Düzeltildi — Kapanan Dosyalar'da durum "Kapalı" gösterilir
+- KAPALI ay klasörüne taşınmış ama uygulama içi iş akışı durumu güncellenmemiş dosyalar,
+  Kapanan Dosyalar sekmesinde yanlışlıkla **"Yeni Dosya"** olarak görünüyordu. Bu sekmedeki
+  her satır zaten kapalı olduğundan, durum sütunu artık **"Kapalı"** gösterir; "Kapanış
+  Kontrolü" gibi kapanış-ailesi durumlar korunur. Yalnız görüntü düzeltmesi — kaynak veri
+  (takip.json) değişmez.
+- Not: "Rapor bulunamadı" satırları doğru davranıştır: o plakaya ait ekspertiz raporu PDF'i
+  henüz rapor klasöründe bulunmayan kapalı dosyaları gösterir (eşleştirme hatası değildir).
+
 ## [0.6.8] — 2026-07-08
 
 ### Eklendi — Ekspertiz Raporları klasörü için "Seç" (klasör seçici) butonu

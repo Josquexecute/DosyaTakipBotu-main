@@ -62,6 +62,42 @@ export async function ocrPdfFirstPage(filePath: string): Promise<OcrTextResult> 
   }
 }
 
+/**
+ * PDF'in TÜM sayfalarını (güvenli üst sınırla) görüntüye çevirip OCR'lar ve metni birleştirir.
+ * Kapanma ücreti gibi "GENEL TOPLAM" son sayfada olduğundan ilk-sayfa OCR'ı yetmez.
+ * Metin-korumalı (özel-glif) raporlarda kullanılır; salt-okuma, hiçbir yere yazmaz.
+ */
+export async function ocrPdfAllPages(filePath: string, maxPages = 6): Promise<OcrTextResult> {
+  const tools = await detectOcrTools();
+  if (!tools.pdfAvailable) {
+    return { ok: false, text: '', reason: tools.warnings.join(' ') || 'PDF OCR araçları bulunamadı.', tools };
+  }
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hasarbotu-ocrall-'));
+  try {
+    const outputPrefix = path.join(tempDir, 'page');
+    await execFile(tools.pdftoppmPath, ['-f', '1', '-l', String(maxPages), '-r', '200', '-png', filePath, outputPrefix], {
+      timeout: OCR_TIMEOUT_MS * 3,
+      maxBuffer: OCR_MAX_BUFFER,
+      windowsHide: true
+    });
+    const pages = (await fs.readdir(tempDir))
+      .filter((name) => /^page-\d+\.png$/i.test(name))
+      .sort((a, b) => a.localeCompare(b, 'tr'));
+    if (pages.length === 0) return { ok: false, text: '', reason: 'PDF OCR için sayfa görüntüsü üretilemedi.', tools };
+    const texts: string[] = [];
+    for (const page of pages) {
+      const res = await ocrImageFile(path.join(tempDir, page), tools);
+      if (res.ok && res.text) texts.push(res.text);
+    }
+    if (texts.length === 0) return { ok: false, text: '', reason: 'OCR metin üretemedi.', tools };
+    return { ok: true, text: texts.join('\n'), tools };
+  } catch (error) {
+    return { ok: false, text: '', reason: error instanceof Error ? error.message : 'PDF OCR başarısız oldu.', tools };
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export async function ocrImageFile(filePath: string, existingTools?: OcrToolStatus): Promise<OcrTextResult> {
   const tools = existingTools ?? await detectOcrTools();
   if (!tools.available) {
@@ -78,7 +114,10 @@ async function detectOcrToolsInternal(): Promise<OcrToolStatus> {
   const tesseractPath = await findExecutable('tesseract.exe', [
     process.env.TESSERACT_PATH,
     'C:\\Program Files\\Tesseract-OCR\\tesseract.exe',
-    'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe'
+    'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe',
+    // NAPS2 tarayıcı yazılımı Tesseract'ı birlikte getirir; kuruluysa yeniden kurulum gerekmez.
+    'C:\\Program Files\\NAPS2\\lib\\_win64\\tesseract.exe',
+    'C:\\Program Files (x86)\\NAPS2\\lib\\_win64\\tesseract.exe'
   ]);
   const pdftoppmPath = await findExecutable('pdftoppm.exe', [
     process.env.PDFTOPPM_PATH,

@@ -77,6 +77,8 @@ export interface UiState {
   closingFees: ClosingFeesUiState | null;
   /** Kapanan Dosyalar sekmesi ay filtresi ('all' = tüm aylar). */
   closedCasesMonthFilter: string;
+  /** Kapanma ücreti elle giriş kutusunun açık olduğu plaka anahtarı ('' = kapalı). */
+  closingFeeEditPlate: string;
   dashboard: DashboardSummary | null;
   cases: CaseIndexItem[];
   selectedFolderPath: string;
@@ -396,6 +398,7 @@ export const state: UiState = {
   settings: null,
   closingFees: null,
   closedCasesMonthFilter: 'all',
+  closingFeeEditPlate: '',
   dashboard: null,
   cases: [],
   selectedFolderPath: '',
